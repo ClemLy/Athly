@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#8B5CF6" />
+    <meta
+      name="description"
+      content="Application de fitness gamifiée — XP, streaks, quêtes quotidiennes"
+    />
+    <!-- Expo injecte ici le manifest.json, les balises og:, les icônes PWA, etc. -->
+    %%METADATA%%
+    <title>Athly</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: #080910; height: 100%; }
+      #root { display: flex; flex: 1; min-height: 100vh; }
+    </style>
+  </head>
+  <body>
+    <noscript>
+      <p style="color:#fff;font-family:sans-serif;text-align:center;padding:40px">
+        Athly nécessite JavaScript pour fonctionner.
+      </p>
+    </noscript>
+    <div id="root"></div>
+
+    <script>
+      // Enregistrement du Service Worker (offline + installabilité PWA)
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker
+            .register('/sw.js')
+            .then(function (reg) {
+              console.log('[SW] Enregistré :', reg.scope);
+            })
+            .catch(function (err) {
+              // Silencieux en dev (sw.js absent du serveur expo start)
+              if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                console.warn('[SW] Échec :', err);
+              }
+            });
+        });
+      }
+    </script>
+  </body>
+</html>

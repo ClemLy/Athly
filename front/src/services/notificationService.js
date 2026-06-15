@@ -26,17 +26,20 @@ const MESSAGES_VIOLET = [
   { title: "Le canapé a gagné ? 🛋️", body: "Demain, revanche. Mais il reste ce soir." },
 ];
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldShowBanner: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+// expo-notifications n'existe pas sur web — on n'enregistre le handler que sur mobile
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+}
 
 export async function setupNotificationChannels() {
-  if (Platform.OS !== 'android') return;
+  if (Platform.OS === 'web' || Platform.OS !== 'android') return;
   await Promise.all([
     Notifications.setNotificationChannelAsync(CHANNEL_ORANGE_ID, {
       name: 'Rappels Motivation',
@@ -54,6 +57,7 @@ export async function setupNotificationChannels() {
 }
 
 export async function requestNotificationPermissions() {
+  if (Platform.OS === 'web') return false;
   const { status } = await Notifications.requestPermissionsAsync();
   return status === 'granted';
 }
@@ -63,6 +67,7 @@ function pickRandom(arr) {
 }
 
 export async function fireTestNotification(type) {
+  if (Platform.OS === 'web') return;
   const isOrange = type === 'orange';
   const msg = pickRandom(isOrange ? MESSAGES_ORANGE : MESSAGES_VIOLET);
   await Notifications.scheduleNotificationAsync({
@@ -82,6 +87,7 @@ export async function fireTestNotification(type) {
 }
 
 export async function scheduleDailyReminder(hour = 18, minute = 0) {
+  if (Platform.OS === 'web') return null;
   await cancelDailyReminder();
   const useOrange = Math.random() < 0.5;
   const msg = pickRandom(useOrange ? MESSAGES_ORANGE : MESSAGES_VIOLET);
@@ -105,6 +111,7 @@ export async function scheduleDailyReminder(hour = 18, minute = 0) {
 }
 
 export async function cancelDailyReminder() {
+  if (Platform.OS === 'web') return;
   try {
     const id = await AsyncStorage.getItem(DAILY_NOTIF_ID_KEY);
     if (id) {

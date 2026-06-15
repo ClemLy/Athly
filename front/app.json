@@ -23,7 +23,18 @@
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png",
+      "icon": "./assets/favicon.png",
+      "name": "Athly — Mobile Fitness Gamification",
+      "shortName": "Athly",
+      "description": "Application de fitness gamifiée — XP, streaks, quêtes quotidiennes",
+      "backgroundColor": "#080910",
+      "themeColor": "#8B5CF6",
+      "display": "standalone",
+      "orientation": "portrait",
+      "startUrl": "/",
+      "lang": "fr"
     },
     "plugins": [
       "expo-secure-store",
