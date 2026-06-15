@@ -221,8 +221,8 @@ handleTerminate()
 
 ```bash
 # 1. Cloner le dépôt
-git clone https://github.com/zkerkeb-class/front-projet-final-ClemLy.git
-cd front-projet-final-ClemLy/athly-app
+git clone https://github.com/ClemLy/Athly.git
+cd Athly/front
 
 # 2. Installer les dépendances
 npm install

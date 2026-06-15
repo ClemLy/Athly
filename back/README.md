@@ -88,8 +88,8 @@ L'API Athly est un backend **Node.js + Express + MongoDB** indispensable au fonc
 
 ```bash
 # 1. Cloner le dépôt
-git clone https://github.com/votre-org/athly-back.git
-cd athly-back
+git clone https://github.com/ClemLy/Athly.git
+cd Athly/back
 
 # 2. Installer les dépendances
 npm install
