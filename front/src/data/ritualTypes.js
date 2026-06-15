@@ -1,0 +1,61 @@
+export const RITUAL_TYPES = [
+  {
+    id: 'mobility',
+    name: 'Mobilité & Souplesse',
+    subtitle: 'La décompression',
+    description: '5 min d\'étirements légers : ouverture des hanches, bas du dos, mobilité globale.',
+    icon: 'body-outline',
+    color: '#22C55E',
+    durationSeconds: 300,
+    timerLabel: '5 min',
+    xpEarned: 20,
+  },
+  {
+    id: 'walking',
+    name: 'Marche Quotidienne',
+    subtitle: 'Le cap des pas',
+    description: 'Une marche de 15 min pour brûler des calories sans impacter ta récupération nerveuse.',
+    icon: 'walk-outline',
+    color: '#FE7439',
+    durationSeconds: 900,
+    timerLabel: '15 min',
+    xpEarned: 100,
+  },
+  {
+    id: 'breathing',
+    name: 'Respiration & Mental',
+    subtitle: 'Vide la tête',
+    description: '5 min de cohérence cardiaque pour calmer le système nerveux et améliorer ton sommeil.',
+    icon: 'heart-outline',
+    color: '#6E6AF0',
+    durationSeconds: 300,
+    timerLabel: '5 min',
+    xpEarned: 20,
+  },
+  {
+    id: 'foam_rolling',
+    name: 'Automassage',
+    subtitle: 'Le kiné à la maison',
+    description: '5 min de massage ciblé : 5 zones × 1 min pour réduire courbatures et améliorer la circulation.',
+    icon: 'fitness-outline',
+    color: '#F59E0B',
+    durationSeconds: 300,
+    timerLabel: '5 min',
+    xpEarned: 20,
+  },
+  {
+    id: 'focus',
+    name: 'Focus & Culture',
+    subtitle: 'Muscle ton esprit',
+    description: 'Lis un mini-article sur l\'entraînement, la nutrition ou la récupération.',
+    icon: 'book-outline',
+    color: '#A855F7',
+    durationSeconds: 300,
+    timerLabel: '5 min de lecture',
+    xpEarned: 20,
+  },
+];
+
+export function getRitualById(id) {
+  return RITUAL_TYPES.find((r) => r.id === id) || null;
+}

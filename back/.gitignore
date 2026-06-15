@@ -1,0 +1,89 @@
+# ==========================================================
+#   ATHLY – Backend Project
+# ==========================================================
+
+# ------------------------------
+# Node / NPM
+# ------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ------------------------------
+# Env / Secrets
+# ------------------------------
+.env
+.env.*.local
+
+# ------------------------------
+# Logs
+# ------------------------------
+logs/
+*.log
+*.log.*
+npm-debug.log
+debug.log
+error.log
+
+# PM2 logs
+.pids
+*.pid
+*.seed
+
+# ------------------------------
+# Build / Cache
+# ------------------------------
+dist/
+tmp/
+temp/
+.cache/
+.cache-loader/
+coverage/
+
+# TypeScript (si jamais tu l'ajoutes)
+*.tsbuildinfo
+
+# ------------------------------
+# OS files
+# ------------------------------
+.DS_Store
+Thumbs.db
+
+# ------------------------------
+# IDE / Editors
+# ------------------------------
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ------------------------------
+# Outils de développement IA
+# ------------------------------
+.claude/
+*.claude
+.cursor/
+.aider*
+
+# ------------------------------
+# Certificates / Security
+# ------------------------------
+*.pem
+*.key
+*.crt
+*.cert
+*.pfx
+
+# ------------------------------
+# Tests (si Jest ou supertest)
+# ------------------------------
+/coverage
+/.nyc_output
+
+# ------------------------------
+# MongoDB local dump
+# ------------------------------
+/dump/

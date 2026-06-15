@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Athly",
+    "slug": "athly-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/favicon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/favicon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0D1018"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.clementin.athly"
+    },
+    "android": {
+      "package": "com.clementin.athly",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/favicon.png",
+        "backgroundColor": "#0D1018"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-notifications"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "77fe42fb-95cc-4e79-a150-84228c79e672"
+      }
+    },
+    "owner": "clemly"
+  }
+}
