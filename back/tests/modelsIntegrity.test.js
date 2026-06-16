@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Les 3 modèles réels
 // ─────────────────────────────────────────────────────────────────────────────
-describe('Import des 3 modèles réels', () => {
+describe('Import des 5 modèles réels', () => {
   it('User s\'importe sans erreur', () => {
     expect(() => require('../models/User')).not.toThrow();
   });
@@ -19,6 +19,14 @@ describe('Import des 3 modèles réels', () => {
 
   it('ExerciseRecord s\'importe sans erreur', () => {
     expect(() => require('../models/ExerciseRecord')).not.toThrow();
+  });
+
+  it('Friendship s\'importe sans erreur', () => {
+    expect(() => require('../models/Friendship')).not.toThrow();
+  });
+
+  it('StreakGroup s\'importe sans erreur', () => {
+    expect(() => require('../models/StreakGroup')).not.toThrow();
   });
 });
 
@@ -44,7 +52,7 @@ describe('Absence des modèles fantômes', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Schéma User — champs obligatoires
+// Schéma User — champs V1 + V2
 // ─────────────────────────────────────────────────────────────────────────────
 describe('Schéma User', () => {
   let User;
@@ -58,9 +66,13 @@ describe('Schéma User', () => {
     expect(User.schema).toBeDefined();
   });
 
-  const REQUIRED_PATHS = ['email', 'password', 'xp', 'level', 'isVerified'];
+  const V1_PATHS = ['email', 'password', 'xp', 'level', 'isVerified'];
+  test.each(V1_PATHS)('champ V1 "%s" présent', (field) => {
+    expect(Object.keys(User.schema.paths)).toContain(field);
+  });
 
-  test.each(REQUIRED_PATHS)('le champ "%s" est présent dans le schéma', (field) => {
+  const V2_PATHS = ['birthdate', 'isBirthdateSet', 'rank', 'streakGels', 'totalWorkoutMinutes', 'referralCode', 'referredBy'];
+  test.each(V2_PATHS)('champ V2 "%s" présent', (field) => {
     expect(Object.keys(User.schema.paths)).toContain(field);
   });
 
@@ -74,6 +86,82 @@ describe('Schéma User', () => {
 
   it('level a une valeur par défaut de 1', () => {
     expect(User.schema.path('level').defaultValue).toBe(1);
+  });
+
+  it('rank a "Novice" comme valeur par défaut', () => {
+    expect(User.schema.path('rank').defaultValue).toBe('Novice');
+  });
+
+  it('isBirthdateSet a false comme valeur par défaut', () => {
+    expect(User.schema.path('isBirthdateSet').defaultValue).toBe(false);
+  });
+
+  it('streakGels est limité à 3 maximum', () => {
+    expect(User.schema.path('streakGels').options.max).toBe(3);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Schéma Friendship — V2
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Schéma Friendship', () => {
+  let Friendship;
+
+  beforeAll(() => {
+    Friendship = require('../models/Friendship');
+  });
+
+  it('exporte un modèle Mongoose', () => {
+    expect(Friendship).toBeDefined();
+    expect(Friendship.schema).toBeDefined();
+  });
+
+  const REQUIRED_PATHS = ['requester', 'recipient', 'status', 'friendshipXp', 'friendshipLevel'];
+  test.each(REQUIRED_PATHS)('le champ "%s" est présent', (field) => {
+    expect(Object.keys(Friendship.schema.paths)).toContain(field);
+  });
+
+  it('status est restreint à pending / accepted / rejected', () => {
+    const values = Friendship.schema.path('status').enumValues;
+    expect(values).toEqual(expect.arrayContaining(['pending', 'accepted', 'rejected']));
+  });
+
+  it('status a "pending" comme valeur par défaut', () => {
+    expect(Friendship.schema.path('status').defaultValue).toBe('pending');
+  });
+
+  it('friendshipLevel est limité à 5 maximum', () => {
+    expect(Friendship.schema.path('friendshipLevel').options.max).toBe(5);
+  });
+
+  it('requester et recipient sont des ObjectId (ref User)', () => {
+    expect(Friendship.schema.path('requester').options.ref).toBe('User');
+    expect(Friendship.schema.path('recipient').options.ref).toBe('User');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Schéma StreakGroup — V2
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Schéma StreakGroup', () => {
+  let StreakGroup;
+
+  beforeAll(() => {
+    StreakGroup = require('../models/StreakGroup');
+  });
+
+  it('exporte un modèle Mongoose', () => {
+    expect(StreakGroup).toBeDefined();
+    expect(StreakGroup.schema).toBeDefined();
+  });
+
+  const REQUIRED_PATHS = ['members', 'currentStreak', 'lastValidatedDate'];
+  test.each(REQUIRED_PATHS)('le champ "%s" est présent', (field) => {
+    expect(Object.keys(StreakGroup.schema.paths)).toContain(field);
+  });
+
+  it('currentStreak a 0 comme valeur par défaut', () => {
+    expect(StreakGroup.schema.path('currentStreak').defaultValue).toBe(0);
   });
 });
 
