@@ -6,7 +6,8 @@ const authRoutes     = require("./routes/auth.routes");
 const userRoutes     = require("./routes/user.routes");
 const workoutRoutes  = require("./routes/workout.routes");
 const exerciseRoutes = require("./routes/exercise.routes");
-const friendRoutes   = require("./routes/friend.routes");
+const friendRoutes     = require("./routes/friend.routes");
+const inventoryRoutes  = require("./routes/inventory.routes");
 
 // --- Importation des middlewares ---
 const errorMiddleware = require("./middleware/error.middleware");
@@ -29,7 +30,8 @@ app.use("/api/auth",      authRoutes);
 app.use("/api/users",     userRoutes);
 app.use("/api/workouts",  workoutRoutes);
 app.use("/api/exercises", exerciseRoutes);
-app.use("/api/friends",   friendRoutes);
+app.use("/api/friends",    friendRoutes);
+app.use("/api/inventory",  inventoryRoutes);
 
 // --- Gestion des erreurs ---
 // Route 404
