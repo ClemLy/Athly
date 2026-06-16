@@ -7,7 +7,8 @@ const userRoutes     = require("./routes/user.routes");
 const workoutRoutes  = require("./routes/workout.routes");
 const exerciseRoutes = require("./routes/exercise.routes");
 const friendRoutes     = require("./routes/friend.routes");
-const inventoryRoutes  = require("./routes/inventory.routes");
+const inventoryRoutes    = require("./routes/inventory.routes");
+const groupStreakRoutes   = require("./routes/groupStreak.routes");
 
 // --- Importation des middlewares ---
 const errorMiddleware = require("./middleware/error.middleware");
@@ -32,6 +33,7 @@ app.use("/api/workouts",  workoutRoutes);
 app.use("/api/exercises", exerciseRoutes);
 app.use("/api/friends",    friendRoutes);
 app.use("/api/inventory",  inventoryRoutes);
+app.use("/api/groups",     groupStreakRoutes);
 
 // --- Gestion des erreurs ---
 // Route 404
