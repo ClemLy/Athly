@@ -422,7 +422,7 @@ export default function SettingsScreen({ navigation }) {
               <View style={styles.rowLabelWrap}>
                 <Text style={styles.rowLabel}>Version</Text>
               </View>
-              <Text style={styles.valueText}>1.0.0</Text>
+              <Text style={styles.valueText}>2.0.0</Text>
             </View>
           </TouchableOpacity>
         </SettingsGroup>
