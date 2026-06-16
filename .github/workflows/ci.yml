@@ -1,0 +1,138 @@
+name: CI — Athly
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch: # permet aussi un déclenchement manuel depuis l'UI GitHub
+
+# Si un nouveau commit arrive sur la même branche pendant un run,
+# annule l'ancien run pour ne pas gaspiller les minutes GitHub Actions.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # JOB 0 — Détection des chemins modifiés
+  # Les jobs backend et frontend ne tournent QUE si leur dossier a changé.
+  # Économie : un push purement back ne build pas le front (et vice-versa).
+  # ────────────────────────────────────────────────────────────────────────────
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      backend:  ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'back/**'
+            frontend:
+              - 'front/**'
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # JOB 1 — Backend  (Node.js / Express)
+  # Lint ESLint + vérification syntaxique + suite de tests Jest/Supertest
+  # ────────────────────────────────────────────────────────────────────────────
+  backend-validation:
+    name: "Backend — Lint & Tests"
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Base de données disponible pendant tous les steps du job
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand({ ping: 1 })' --quiet"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --health-start-period 20s
+
+    # Tous les `run:` s'exécutent dans back/ par défaut
+    defaults:
+      run:
+        working-directory: back
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: back/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ── Qualité statique ──────────────────────────────────────────────────
+      - name: Lint — ESLint
+        run: npm run lint
+
+      # Vérifie la syntaxe de l'entrée sans exécuter le code (pas de connexion DB)
+      - name: Syntax check — node --check
+        run: node --check server.js
+
+      # ── Tests ─────────────────────────────────────────────────────────────
+      - name: Run test suite
+        run: npm test
+        env:
+          NODE_ENV: test
+          PORT: 5000
+          MONGODB_URI: mongodb://localhost:27017/athly-ci
+          # Utilise le secret GitHub si configuré, sinon une valeur de repli CI-only
+          JWT_SECRET: ${{ secrets.JWT_SECRET || 'ci-test-secret-do-not-use-in-prod' }}
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # JOB 2 — Frontend PWA  (React Native / Expo)
+  # --legacy-peer-deps OBLIGATOIRE : React 19 casse les peer deps de certains
+  # packages Expo qui attendent React 18.
+  # Le build lance expo export --platform web + copy-sw.js.
+  # Si un composant natif non-polyfillé ou un import Lottie broken crashe
+  # la compilation web, ce job le détecte immédiatement.
+  # ────────────────────────────────────────────────────────────────────────────
+  frontend-pwa-validation:
+    name: "Frontend — PWA Build"
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: front
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: front/package-lock.json
+
+      - name: Install dependencies (--legacy-peer-deps)
+        run: npm ci --legacy-peer-deps
+
+      - name: Build PWA — expo export --platform web
+        run: npm run build:web
+        env:
+          NODE_ENV: production
+          EXPO_NO_TELEMETRY: 1 # désactive la télémétrie Expo pour accélérer le build
