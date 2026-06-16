@@ -95,7 +95,8 @@ export default function EmailVerificationScreen({ navigation, route }) {
   const { signIn } = useAuth();
 
   const { width: windowWidth } = useWindowDimensions();
-  const boxW = Math.floor((windowWidth - H_PAD - BOX_GAP * (CODE_LENGTH - 1)) / CODE_LENGTH);
+  const cappedW = Platform.OS === 'web' ? Math.min(430, windowWidth) : windowWidth;
+  const boxW = Math.floor((cappedW - H_PAD - BOX_GAP * (CODE_LENGTH - 1)) / CODE_LENGTH);
   const boxH = Math.round(boxW * 1.26);
 
   const [code,      setCode]      = useState('');

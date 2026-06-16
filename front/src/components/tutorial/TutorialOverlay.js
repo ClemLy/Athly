@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity,
-  Animated, useWindowDimensions,
+  Animated, useWindowDimensions, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTutorial } from '../../context/TutorialContext';
@@ -79,7 +79,11 @@ export default function TutorialOverlay({ navigation }) {
     isLastStep, targets, nextStep, dismiss,
   } = useTutorial();
 
-  const { height: H } = useWindowDimensions();
+  const { width: W, height: H } = useWindowDimensions();
+  // Sur web desktop, le portail Modal est recadré à 430 px centré (CSS dans index.js).
+  // Les coordonnées renvoyées par measure() sont en coords viewport, donc on soustrait
+  // l'offset gauche du conteneur pour obtenir des coordonnées locales au portail.
+  const modalLeft = Platform.OS === 'web' && W > 430 ? (W - 430) / 2 : 0;
 
   const slideY  = useRef(new Animated.Value(24)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -104,7 +108,7 @@ export default function TutorialOverlay({ navigation }) {
   const hasSpot    = !!targetRect;
 
   const sp = hasSpot ? {
-    x: targetRect.x - SPOTLIGHT_PADDING,
+    x: (targetRect.x - modalLeft) - SPOTLIGHT_PADDING,
     y: targetRect.y - SPOTLIGHT_PADDING,
     w: targetRect.width  + SPOTLIGHT_PADDING * 2,
     h: targetRect.height + SPOTLIGHT_PADDING * 2,

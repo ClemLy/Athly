@@ -15,9 +15,69 @@
     %%METADATA%%
     <title>Athly</title>
     <style>
-      * { box-sizing: border-box; }
-      html, body { margin: 0; padding: 0; background: #080910; height: 100%; }
-      #root { display: flex; flex: 1; min-height: 100vh; }
+      /* ── Reset & touch fixes ─────────────────────────────────────────────── */
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent; /* supprime le flash bleu au tap */
+      }
+
+      html {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        /* Empêche iOS de grossir les polices en paysage */
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #030406; /* fond visible sur desktop autour du conteneur */
+        /* Bloque le rubber-band / pull-to-refresh sur le body (RN gère son propre scroll) */
+        overscroll-behavior: none;
+        /* Feeling "app" : pas de sélection de texte accidentelle */
+        -webkit-user-select: none;
+        user-select: none;
+      }
+
+      /* ── Conteneur racine ─────────────────────────────────────────────────── */
+      #root {
+        display: flex;
+        flex: 1;
+        height: 100%;
+        width: 100%;
+        background: #080910;
+
+        /* ── Desktop : recentrage façon app mobile ── */
+        max-width: 430px;   /* largeur iPhone Pro Max ≈ référence mobile */
+        margin: 0 auto;
+        position: relative;
+        overflow: hidden;   /* évite le scroll parasite sur le conteneur lui-même */
+      }
+
+      /* ── Décoration desktop ────────────────────────────────────────────────── */
+      @media (min-width: 768px) {
+        body {
+          /* Fond légèrement différent pour délimiter l'app */
+          background: #010103;
+        }
+        #root {
+          /* Bordure subtile + halo violet pour marquer les contours */
+          box-shadow:
+            inset 0 0 0 1px rgba(110, 106, 240, 0.18),
+            0 0 80px rgba(0, 0, 0, 0.9);
+        }
+      }
+
+      /* ── Mobile : pleine largeur (annule le max-width si écran < 430 px) ── */
+      @media (max-width: 430px) {
+        #root {
+          max-width: 100%;
+          box-shadow: none;
+        }
+      }
     </style>
   </head>
   <body>

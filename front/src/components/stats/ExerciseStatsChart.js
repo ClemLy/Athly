@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, Dimensions, StyleSheet } from 'react-native';
+import { View, Text, Dimensions, Platform, StyleSheet } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { Colors } from '../../constants/theme';
 
@@ -19,7 +19,8 @@ function formatDate(iso) {
 }
 
 export default function ExerciseStatsChart({ points = [], metric = 'maxWeight', height = 200 }) {
-  const screenW = Dimensions.get('window').width;
+  const rawW = Dimensions.get('window').width;
+  const screenW = Platform.OS === 'web' ? Math.min(430, rawW) : rawW;
   const chartW = Math.max(220, screenW - 72);
 
   const { labels, data, hasData } = useMemo(() => {

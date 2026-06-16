@@ -16,7 +16,8 @@ import { useAuth } from '../../context/AuthContext';
 const LOGO_ORANGE      = require('../../../assets/logo-orange.png');
 const LOGO_ICON_ORANGE = require('../../../assets/minimalist-logo-orange.png');
 
-const { width: W } = Dimensions.get('window');
+const { width: _rawW } = Dimensions.get('window');
+const W = Platform.OS === 'web' ? Math.min(430, _rawW) : _rawW;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function FadeLoader() {

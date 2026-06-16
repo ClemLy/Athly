@@ -213,6 +213,13 @@ export default function SettingsScreen({ navigation }) {
     }
   }, []);
 
+  // ─── God Mode console handlers ────────────────────────────────────────────
+
+  const showFeedback = useCallback((msg) => {
+    setSimFeedback(msg);
+    setTimeout(() => setSimFeedback(''), 2500);
+  }, []);
+
   const runNotifTest = useCallback(async (type) => {
     try {
       setSimLoading(true);
@@ -236,13 +243,6 @@ export default function SettingsScreen({ navigation }) {
       { text: 'Déconnexion', style: 'destructive', onPress: signOut },
     ]);
   };
-
-  // ─── God Mode console handlers ────────────────────────────────────────────
-
-  const showFeedback = useCallback((msg) => {
-    setSimFeedback(msg);
-    setTimeout(() => setSimFeedback(''), 2500);
-  }, []);
 
   const runSim = useCallback(async (fn, successMsg) => {
     try {

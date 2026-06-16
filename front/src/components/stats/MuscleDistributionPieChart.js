@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, Dimensions, StyleSheet } from 'react-native';
+import { View, Text, Dimensions, Platform, StyleSheet } from 'react-native';
 import { PieChart } from 'react-native-chart-kit';
 import { Colors, MUSCLE_GROUP_COLORS } from '../../constants/theme';
 import { findMuscleGroup } from '../../constants/exerciseFilters';
@@ -25,7 +25,8 @@ export default function MuscleDistributionPieChart({ distribution = {}, height =
       });
   }, [distribution]);
 
-  const screenW = Dimensions.get('window').width;
+  const rawW = Dimensions.get('window').width;
+  const screenW = Platform.OS === 'web' ? Math.min(430, rawW) : rawW;
   const chartW = Math.max(200, screenW - 104);
 
   if (data.length === 0) {

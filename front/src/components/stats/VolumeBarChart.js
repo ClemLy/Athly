@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, Dimensions, StyleSheet } from 'react-native';
+import { View, Text, Dimensions, Platform, StyleSheet } from 'react-native';
 import { BarChart } from 'react-native-chart-kit';
 import { Colors } from '../../constants/theme';
 
@@ -19,7 +19,8 @@ export default function VolumeBarChart({ timeline = [], height = 200 }) {
     };
   }, [timeline]);
 
-  const screenW = Dimensions.get('window').width;
+  const rawW = Dimensions.get('window').width;
+  const screenW = Platform.OS === 'web' ? Math.min(430, rawW) : rawW;
   // Le chart prend la largeur du container parent (en évitant le padding global
   // de l'écran : 20 paddingHorizontal × 2 = 40, plus la card padding 16 × 2 = 32 → -72).
   const chartW = Math.max(220, screenW - 72);
