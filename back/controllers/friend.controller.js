@@ -121,7 +121,7 @@ exports.acceptFriendRequest = async (req, res, next) => {
     }
 
     if (friendship.status !== 'pending') {
-      return next(createError(`Impossible d\'accepter une demande au statut "${friendship.status}".`, 422));
+      return next(createError(`Impossible d'accepter une demande au statut "${friendship.status}".`, 422));
     }
 
     friendship.status = 'accepted';
