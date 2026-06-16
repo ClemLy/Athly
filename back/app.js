@@ -2,10 +2,11 @@ const express = require("express");
 const cors = require("cors");
 
 // --- Importation des routes ---
-const authRoutes = require("./routes/auth.routes");
-const userRoutes = require("./routes/user.routes");
-const workoutRoutes = require("./routes/workout.routes");
+const authRoutes     = require("./routes/auth.routes");
+const userRoutes     = require("./routes/user.routes");
+const workoutRoutes  = require("./routes/workout.routes");
 const exerciseRoutes = require("./routes/exercise.routes");
+const friendRoutes   = require("./routes/friend.routes");
 
 // --- Importation des middlewares ---
 const errorMiddleware = require("./middleware/error.middleware");
@@ -24,10 +25,11 @@ app.get("/health", (req, res) => {
 });
 
 // --- Routes ---
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/workouts", workoutRoutes);
+app.use("/api/auth",      authRoutes);
+app.use("/api/users",     userRoutes);
+app.use("/api/workouts",  workoutRoutes);
 app.use("/api/exercises", exerciseRoutes);
+app.use("/api/friends",   friendRoutes);
 
 // --- Gestion des erreurs ---
 // Route 404
