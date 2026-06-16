@@ -7,7 +7,16 @@ const InventoryItemSchema = new mongoose.Schema(
     itemType: {
       type: String,
       required: true,
-      enum: ["STREAK_FREEZE", "LEVEL_COUPON", "XP_BOOST", "CHEST_KEY"],
+      enum: [
+        "ENERGY_DRINK",        // Boisson Energisante  : +150 XP instantané
+        "STREAK_FREEZE",       // Gel de streak        : charge 1 streakGel
+        "SUPER_STREAK_FREEZE", // Pack de 3 gels       : remplit streakGels à 3
+        "DOUBLE_XP",           // Boost Double XP
+        "TRIPLE_XP",           // Boost Triple XP
+        "QUINTUPLE_XP",        // Boost Quintuple XP
+        "LEVEL_COUPON",        // Coupon de niveau     : +1 level
+        "CHEST_KEY",           // Clé de coffre        : ouvre un coffre
+      ],
     },
     rarity: {
       type: String,
