@@ -1,5 +1,14 @@
 const mongoose = require("mongoose");
 
+// ─── Sous-schéma : trophée / succès débloqué ─────────────────────────────────
+const AchievementEntrySchema = new mongoose.Schema(
+  {
+    achievementId: { type: String, required: true }, // clé du catalogue (ex: "BIRTHDAY_SET")
+    unlockedAt:    { type: Date,   default: Date.now },
+  },
+  { _id: false }
+);
+
 // ─── Sous-schéma : item d'inventaire ─────────────────────────────────────────
 // _id: false → pas d'ObjectId par item (économie de stockage)
 const InventoryItemSchema = new mongoose.Schema(
@@ -111,6 +120,10 @@ const UserSchema = new mongoose.Schema(
 
     // ObjectId du parrain (null si compte non parrainé)
     referredBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+
+    // ── Trophées / Succès V2 ─────────────────────────────────────────────────
+    // Tableau des trophées débloqués. Le catalogue complet vit dans reward.controller.js.
+    achievements: { type: [AchievementEntrySchema], default: [] },
   },
   { timestamps: true }
 );

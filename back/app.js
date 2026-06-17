@@ -9,6 +9,7 @@ const exerciseRoutes = require("./routes/exercise.routes");
 const friendRoutes     = require("./routes/friend.routes");
 const inventoryRoutes    = require("./routes/inventory.routes");
 const groupStreakRoutes   = require("./routes/groupStreak.routes");
+const rewardRoutes        = require("./routes/reward.routes");
 
 // --- Importation des middlewares ---
 const errorMiddleware = require("./middleware/error.middleware");
@@ -34,6 +35,7 @@ app.use("/api/exercises", exerciseRoutes);
 app.use("/api/friends",    friendRoutes);
 app.use("/api/inventory",  inventoryRoutes);
 app.use("/api/groups",     groupStreakRoutes);
+app.use("/api/rewards",    rewardRoutes);
 
 // --- Gestion des erreurs ---
 // Route 404
