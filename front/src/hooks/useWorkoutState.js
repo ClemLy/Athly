@@ -127,11 +127,21 @@ function reducer(state, action) {
     }
 
     case ACTIONS.ADD_EXERCISE: {
-      const { exercise } = action.payload || {};
+      const { exercise, defaultSetsCount } = action.payload || {};
       if (!exercise) return state;
-      const sets = Array.isArray(exercise.sets) && exercise.sets.length > 0
-        ? exercise.sets
-        : [{}, {}, {}, {}];
+      const count = Number.isInteger(defaultSetsCount) && defaultSetsCount >= 1 ? defaultSetsCount : 4;
+      // Les exos du catalogue arrivent avec sets:[{},{},{}] (objets vides, pas de weight/reps).
+      // On ne les utilise que s'ils ont au moins un set avec des données réelles.
+      const hasMeaningfulSets = Array.isArray(exercise.sets) &&
+        exercise.sets.length > 0 &&
+        exercise.sets.some((s) => s && (s.weight !== undefined || s.reps !== undefined));
+      const sets = hasMeaningfulSets
+        ? exercise.sets.map((s) => ({
+            weight: s.weight ?? 0,
+            reps:   s.reps   ?? 0,
+            completed: s.completed ?? false,
+          }))
+        : Array.from({ length: count }, () => ({ weight: 0, reps: 0, completed: false }));
       const exercises = [
         ...state.exercises,
         { ...exercise, sets, notes: exercise.notes || '', groupId: exercise.groupId || null },
@@ -306,8 +316,8 @@ export default function useWorkoutState(initial = {}) {
     debouncedSave();
   }, [debouncedSave]);
 
-  const addExercise = useCallback((exercise) => {
-    dispatch({ type: ACTIONS.ADD_EXERCISE, payload: { exercise } });
+  const addExercise = useCallback((exercise, defaultSetsCount) => {
+    dispatch({ type: ACTIONS.ADD_EXERCISE, payload: { exercise, defaultSetsCount } });
     debouncedSave();
   }, [debouncedSave]);
 

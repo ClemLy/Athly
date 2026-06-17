@@ -8,6 +8,7 @@ import {
   TextInput,
   StatusBar,
 } from 'react-native';
+
 import { Colors } from '../../constants/theme';
 import API from '../../api/api';
 import { useUser } from '../../context/UserContext';
@@ -23,10 +24,16 @@ const SELECTIONS = {
   objectif: ['Prise de masse', 'Perte de poids', 'Entretien', 'Force'],
 };
 
+// L'API stocke objectif en minuscules ("prise de masse"), les chips utilisent des majuscules.
+// Cette fonction trouve la valeur affichable correspondante.
+function normalizeObjectif(val) {
+  if (!val) return '';
+  return SELECTIONS.objectif.find((o) => o.toLowerCase() === val.toLowerCase()) || val;
+}
+
 export default function EditProfileScreen({ navigation }) {
   const { user, refetch: refetchUser } = useUser();
   const { showToast } = useToast();
-
   const [formData, setFormData] = useState({
     name:          user?.name          || '',
     bio:           user?.bio           || '',
@@ -34,7 +41,7 @@ export default function EditProfileScreen({ navigation }) {
     taille:        user?.taille?.toString()     || '',
     poidsCible:    user?.poidsCible?.toString() || '',
     sexe:          user?.sexe          || '',
-    objectif:      user?.objectif      || '',
+    objectif:      normalizeObjectif(user?.objectif),
     niveauSportif: user?.niveauSportif || 'Débutant',
     rythme:        user?.rythme?.toString() || '',
   });
@@ -49,7 +56,7 @@ export default function EditProfileScreen({ navigation }) {
       taille:        user.taille?.toString()     || '',
       poidsCible:    user.poidsCible?.toString() || '',
       sexe:          user.sexe          || 'H',
-      objectif:      user.objectif      || 'Entretien',
+      objectif:      normalizeObjectif(user.objectif) || 'Entretien',
       niveauSportif: user.niveauSportif || 'Débutant',
       rythme:        user.rythme?.toString() || '',
     });
@@ -78,15 +85,24 @@ export default function EditProfileScreen({ navigation }) {
     setErrors({});
     setLoading(true);
 
-    // bio excluded from payload — backend schema doesn't allow it
-    const { bio: _bio, ...restFormData } = formData;
+    // On ne transmet que les champs renseignés : poids/taille/rythme n'ont pas
+    // .allow(null) dans le schema Joi → les envoyer à null déclenche une 400.
+    // objectif : le backend attend les minuscules ("prise de masse"), le front
+    // affiche des majuscules → on normalise avant envoi.
+    const parsedPoids      = parseFloat(formData.poids?.replace(',', '.'))      || null;
+    const parsedTaille     = parseInt(formData.taille, 10)                       || null;
+    const parsedPoidsCible = parseFloat(formData.poidsCible?.replace(',', '.')) || null;
+    const parsedRythme     = parseInt(formData.rythme, 10)                       || null;
+
     const payload = {
-      ...restFormData,
-      name:       nameVal,
-      poids:      parseFloat(formData.poids?.replace(',', '.'))      || null,
-      taille:     parseInt(formData.taille)                          || null,
-      poidsCible: parseFloat(formData.poidsCible?.replace(',', '.')) || null,
-      rythme:     parseInt(formData.rythme)                          || null,
+      name: nameVal,
+      ...(formData.sexe          && { sexe:          formData.sexe }),
+      ...(formData.niveauSportif && { niveauSportif: formData.niveauSportif }),
+      ...(formData.objectif      && { objectif:      formData.objectif.toLowerCase() }),
+      ...(parsedPoids      !== null && { poids:      parsedPoids }),
+      ...(parsedTaille     !== null && { taille:     parsedTaille }),
+      ...(parsedPoidsCible !== null && { poidsCible: parsedPoidsCible }),
+      ...(parsedRythme     !== null && { rythme:     parsedRythme }),
     };
     try {
       const res = await API.put('/users/me', payload);
