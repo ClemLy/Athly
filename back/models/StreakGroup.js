@@ -22,6 +22,9 @@ const StreakGroupSchema = new mongoose.Schema(
     // Tableau des membres (ObjectId → ref User). Max 5 appliqué côté contrôleur.
     members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
 
+    // Invitations en attente (utilisateurs qui n'ont pas encore répondu)
+    pendingInvites: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+
     // Compteur de la streak de groupe (jours consécutifs validés par tous)
     currentStreak: { type: Number, default: 0, min: 0 },
 
