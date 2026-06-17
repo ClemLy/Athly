@@ -18,11 +18,13 @@ import useExerciseSorting, { isFiltering } from '../../hooks/useExerciseSorting'
 import { useWorkoutInProgress } from '../../context/WorkoutInProgressContext';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import { useDevSettings } from '../../hooks/useDevSettings';
+
 import API from '../../api/api';
 
 import SortBar from '../../components/workouts/SortBar';
 import SupersetGroup from '../../components/workouts/SupersetGroup';
 import ExerciseCard from '../../components/cards/ExerciseCard';
+import InlineExerciseBlock from '../../components/workouts/InlineExerciseBlock';
 import AddExerciseSheet from '../../components/workouts/AddExerciseSheet';
 import WorkoutRecapModal from '../../components/workouts/WorkoutRecapModal';
 import ShortSessionWarningModal from '../../components/workouts/ShortSessionWarningModal';
@@ -49,6 +51,7 @@ export default function WorkoutScreen({ route, navigation }) {
   const { state, actions, loadWorkout } = useWorkoutInProgress();
   const { totalXP } = useWorkoutLogs();
   const { bypassAnticheat } = useDevSettings();
+  const [allInOne, setAllInOne] = useState(false);
 
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -298,6 +301,33 @@ export default function WorkoutScreen({ route, navigation }) {
     }
   }, [navigation, actions]);
 
+  // ── Vue globale : un bloc inline par exercice, pas de navigation ──────────
+  const renderItemAllInOne = ({ item }) => {
+    if (item.type === 'superset') {
+      return (
+        <View>
+          {item.exercises.map((ex, idx) => (
+            <InlineExerciseBlock
+              key={(ex && (ex._id || ex.id)) || `ss-inline-${idx}`}
+              exercise={ex}
+              exerciseIndex={item.sourceIndices[idx]}
+              onRemoveExercise={onRemove}
+              onReplaceExercise={openReplaceSheet}
+            />
+          ))}
+        </View>
+      );
+    }
+    return (
+      <InlineExerciseBlock
+        exercise={item.exercise}
+        exerciseIndex={item.sourceIndex}
+        onRemoveExercise={onRemove}
+        onReplaceExercise={openReplaceSheet}
+      />
+    );
+  };
+
   const renderExercise = (ex, sourceIndex, opts = {}) => {
     const isDone = !!(ex && ex.done);
     return (
@@ -373,16 +403,37 @@ export default function WorkoutScreen({ route, navigation }) {
       {/* ── Filtres ── */}
       <SortBar filters={filters} onChange={setFilters} />
 
+      {/* ── Toggle vue globale ── */}
+      {sourceExercises.length > 0 && (
+        <View style={styles.viewToggleBar}>
+          <TouchableOpacity
+            style={[styles.viewToggleBtn, allInOne && styles.viewToggleBtnActive]}
+            onPress={() => setAllInOne((v) => !v)}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={allInOne ? 'list-outline' : 'apps-outline'}
+              size={13}
+              color={allInOne ? Colors.secondaryAccent : Colors.textMuted}
+            />
+            <Text style={[styles.viewToggleText, allInOne && styles.viewToggleTextActive]}>
+              {allInOne ? 'Vue détaillée' : 'Voir tous les exercices'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* ── Liste des exercices — flex:1 pour occuper tout l'espace disponible ── */}
       <View style={styles.listContainer}>
         {displayItems.length > 0 ? (
           <FlatList
             data={displayItems}
             keyExtractor={(item) => item.key}
-            renderItem={renderItem}
+            renderItem={allInOne ? renderItemAllInOne : renderItem}
             ListFooterComponent={renderFooter}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           />
         ) : (
           <View style={styles.empty}>
@@ -591,5 +642,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
     letterSpacing: 1.2,
+  },
+
+  // ── Bascule vue globale ────────────────────────────────────────────────
+  viewToggleBar: {
+    paddingHorizontal: 20,
+    paddingVertical: 6,
+    alignItems: 'flex-end',
+  },
+  viewToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.borderDim,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  viewToggleBtnActive: {
+    borderColor: 'rgba(110,106,240,0.45)',
+    backgroundColor: 'rgba(110,106,240,0.09)',
+  },
+  viewToggleText: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  viewToggleTextActive: {
+    color: Colors.secondaryAccent,
   },
 });

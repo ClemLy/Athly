@@ -74,6 +74,11 @@ export default function ExerciseDetailScreen({ route, navigation }) {
     actions.addSet(exerciseIndex);
   }, [actions, exerciseIndex]);
 
+  const handleRemove = useCallback((i) => {
+    if (exerciseIndex < 0 || sets.length <= 1) return;
+    actions.removeSet(exerciseIndex, i);
+  }, [actions, exerciseIndex, sets.length]);
+
   const handleNotes = useCallback((text) => {
     if (exerciseIndex < 0) return;
     actions.updateExerciseNotes(exerciseIndex, text);
@@ -161,6 +166,7 @@ export default function ExerciseDetailScreen({ route, navigation }) {
             sets={sets}
             onToggle={handleToggle}
             onChange={handleChange}
+            onRemove={handleRemove}
           />
 
           <TouchableOpacity
