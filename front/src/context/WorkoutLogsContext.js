@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { listLogs, addLog, removeLog, totalCumulativeXP, addRitualLog } from '../services/stats.service';
+import { listLogs, addLog, removeLog, totalCumulativeXP, addRitualLog, addBonusXpLog } from '../services/stats.service';
 
 // Context global pour l'historique des séances finalisées (logs).
 // Source de vérité unique pour StatsScreen, ExerciseStatsScreen, ProfileScreen.
@@ -42,15 +42,16 @@ export function WorkoutLogsProvider({ children }) {
 
   const totalXP = useMemo(() => totalCumulativeXP(items), [items]);
 
-  // sessionLogs : séances uniquement (pas de quêtes, pas de rituels) — pour l'historique.
+  // sessionLogs : séances uniquement (pas de quêtes, pas de rituels, pas de bonus) — pour l'historique.
   const sessionLogs = useMemo(
-    () => items.filter((l) => l.type !== 'quest_reward' && l.type !== 'ritual'),
+    () => items.filter((l) => l.type !== 'quest_reward' && l.type !== 'ritual' && l.type !== 'item_bonus'),
     [items],
   );
 
-  // activityLogs : toute activité valide pour le streak (pas de quêtes, pas de shortSession).
+  // activityLogs : toute activité valide pour le streak (pas de quêtes, pas de bonus, pas de shortSession).
+  // item_bonus (objet consommé, bonus de groupe) ne doit jamais compter comme une séance.
   const activityLogs = useMemo(
-    () => items.filter((l) => l.type !== 'quest_reward' && !l.shortSession),
+    () => items.filter((l) => l.type !== 'quest_reward' && l.type !== 'item_bonus' && !l.shortSession),
     [items],
   );
 
@@ -66,9 +67,19 @@ export function WorkoutLogsProvider({ children }) {
     return item;
   }, []);
 
+  // Synchronise l'XP/niveau affiché localement (Profil, Accueil) avec un gain
+  // accordé côté backend hors séance : objet d'inventaire consommé, bonus de
+  // streak de groupe... Voir addBonusXpLog (stats.service.js).
+  const addBonusXp = useCallback(async (source, xpEarned) => {
+    const item = await addBonusXpLog(source, xpEarned);
+    if (!item) return null;
+    setItems((prev) => [item, ...prev]);
+    return item;
+  }, []);
+
   const value = useMemo(
-    () => ({ items, sessionLogs, activityLogs, loading, error, refresh, create, remove, addRitual, totalXP, clearAll }),
-    [items, sessionLogs, activityLogs, loading, error, refresh, create, remove, addRitual, totalXP, clearAll],
+    () => ({ items, sessionLogs, activityLogs, loading, error, refresh, create, remove, addRitual, addBonusXp, totalXP, clearAll }),
+    [items, sessionLogs, activityLogs, loading, error, refresh, create, remove, addRitual, addBonusXp, totalXP, clearAll],
   );
 
   return (

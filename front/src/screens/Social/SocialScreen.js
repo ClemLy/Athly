@@ -7,10 +7,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '../../constants/theme';
 import { useToast } from '../../context/ToastContext';
+import { useUser } from '../../context/UserContext';
+import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
+import ConfirmModal from '../../components/common/ConfirmModal';
 import {
   searchUsers, sendFriendRequest, acceptFriendRequest, declineFriendRequest,
   getFriendsList, getPendingRequests, getLeaderboard,
-  getMyGroup, inviteToGroup, respondToGroupInvite, shakeMember, checkGroupStreak,
+  getMyGroup, inviteToGroup, respondToGroupInvite, shakeMember, checkGroupStreak, leaveGroup,
 } from '../../services/social.service';
 
 const SEGMENTS = [
@@ -25,6 +28,8 @@ const SEGMENTS = [
 
 export default function SocialScreen({ navigation }) {
   const { showToast } = useToast();
+  const { refetch: refetchUser } = useUser();
+  const { addBonusXp } = useWorkoutLogs();
   const [segment, setSegment] = useState('friends');
 
   // ── Données ──
@@ -41,6 +46,9 @@ export default function SocialScreen({ navigation }) {
   const [results,   setResults]   = useState(null); // null = pas de recherche active
   const [searching, setSearching] = useState(false);
   const searchTimer = useRef(null);
+
+  // ── Confirmation quitter le groupe ──
+  const [leaveConfirmVisible, setLeaveConfirmVisible] = useState(false);
 
   const loadAll = useCallback(async () => {
     try {
@@ -171,6 +179,14 @@ export default function SocialScreen({ navigation }) {
                   const res = await checkGroupStreak(groupId);
                   if (res.allValidated) {
                     showToast(`Streak jour ${res.currentStreak} ! +${res.groupBonus?.bonusXp ?? 0} XP (x${res.groupBonus?.multiplier ?? 1}) 🔥`, 'success');
+                    // Le bonus XP peut faire franchir un palier de niveau, refetch
+                    // le profil global pour que LevelUpCelebration le détecte,
+                    // et pousse le même gain dans les logs locaux pour que le
+                    // Profil (calculé localement) se mette à jour immédiatement.
+                    refetchUser();
+                    if (res.groupBonus?.bonusXp > 0) {
+                      addBonusXp('Bonus de groupe', res.groupBonus.bonusXp);
+                    }
                   } else if (res.alreadyValidated) {
                     showToast('Déjà validée aujourd\'hui ✅', 'success');
                   } else {
@@ -181,12 +197,28 @@ export default function SocialScreen({ navigation }) {
                   if (!error.isSessionExpired) showToast(error.data?.message || 'Erreur.', 'error');
                 }
               }}
+              onLeaveGroup={() => setLeaveConfirmVisible(true)}
             />
           )}
 
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
+
+      <ConfirmModal
+        visible={leaveConfirmVisible}
+        icon="exit-outline"
+        title="Quitter le groupe"
+        body="Êtes-vous sûr de vouloir quitter le groupe ? Cette action est irréversible et tu perdras l'accès à la streak collective."
+        confirmLabel="Quitter le groupe"
+        cancelLabel="Annuler"
+        destructive
+        onConfirm={() => {
+          setLeaveConfirmVisible(false);
+          doAction(() => leaveGroup(), 'Vous avez quitté le groupe.');
+        }}
+        onCancel={() => setLeaveConfirmVisible(false)}
+      />
     </View>
   );
 }
@@ -354,7 +386,7 @@ function PodiumColumn({ entry, height, color, delay }) {
 
 // ═══ Segment Groupe ═══════════════════════════════════════════════════════════
 
-function GroupSegment({ group, invites, friends, onInvite, onRespond, onShake, onCheckStreak }) {
+function GroupSegment({ group, invites, friends, onInvite, onRespond, onShake, onCheckStreak, onLeaveGroup }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [groupName, setGroupName]     = useState('');
 
@@ -366,9 +398,12 @@ function GroupSegment({ group, invites, friends, onInvite, onRespond, onShake, o
       {/* ── Invitations reçues ── */}
       {invites.map((inv) => (
         <View key={inv._id} style={styles.inviteCard}>
-          <Text style={styles.inviteTxt}>
-            🔥 Demande de Streak de Groupe — <Text style={{ fontWeight: '800' }}>{inv.name || 'Sans nom'}</Text>
-          </Text>
+          <View style={styles.inviteTxtRow}>
+            <Ionicons name="flame" size={15} color={Colors.primary} style={{ marginRight: 6 }} />
+            <Text style={styles.inviteTxt}>
+              Demande de Streak de Groupe : <Text style={{ fontWeight: '800' }}>{inv.name || 'Sans nom'}</Text>
+            </Text>
+          </View>
           <View style={styles.inviteBtns}>
             <SmallBtn label="Rejoindre" icon="checkmark" color={Colors.valid} onPress={() => onRespond(inv._id, true)} />
             <SmallBtn label="" icon="close" color={Colors.error} onPress={() => onRespond(inv._id, false)} />
@@ -377,7 +412,7 @@ function GroupSegment({ group, invites, friends, onInvite, onRespond, onShake, o
       ))}
 
       {group ? (
-        <GroupCard group={group} onShake={onShake} onCheckStreak={onCheckStreak} />
+        <GroupCard group={group} onShake={onShake} onCheckStreak={onCheckStreak} onLeaveGroup={onLeaveGroup} />
       ) : (
         <>
           <Text style={styles.sectionLabel}>CRÉER UN GROUPE DE STREAK (MAX 5)</Text>
@@ -397,6 +432,7 @@ function GroupSegment({ group, invites, friends, onInvite, onRespond, onShake, o
             <Text style={styles.emptySmall}>Ajoute d'abord des amis pour former un groupe.</Text>
           ) : (
             <>
+              <Text style={styles.sectionLabel}>SÉLECTIONNE TES AMIS</Text>
               {friends.map((f) => {
                 const selected = selectedIds.includes(f.user._id);
                 return (
@@ -435,8 +471,17 @@ function GroupSegment({ group, invites, friends, onInvite, onRespond, onShake, o
   );
 }
 
-function GroupCard({ group, onShake, onCheckStreak }) {
+// Barème de référence (miroir de computeGroupXpBonus côté backend) : à taille
+// et régularité fixées, quel multiplicateur peut-on espérer atteindre.
+const SIZE_SCALE = [1, 2, 3, 4, 5].map((n) => ({ n, multiplier: 1 + 0.35 * (n - 1) }));
+const REGULARITY_SCALE = [0, 7, 14, 21, 28, 35, 42, 49, 56].map((days) => ({
+  days,
+  multiplier: 1 + Math.min(0.6, 0.08 * Math.floor(days / 7)),
+}));
+
+function GroupCard({ group, onShake, onCheckStreak, onLeaveGroup }) {
   const flame = useRef(new Animated.Value(1)).current;
+  const [showScale, setShowScale] = useState(false);
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -451,19 +496,69 @@ function GroupCard({ group, onShake, onCheckStreak }) {
   }, []);
 
   const memberCount = group.members?.length ?? 0;
-  const multiplier  = (1 + 0.25 * (memberCount - 1)).toFixed(2);
+  // xpBonus vient du backend (getMyGroup) — source de vérité pour le détail
+  // taille/régularité. Fallback taille-seule si absent (réponse en cache ancienne).
+  const xpBonus = group.xpBonus ?? { sizeMultiplier: 1 + 0.25 * (memberCount - 1), regularityMultiplier: 1, multiplier: 1 + 0.25 * (memberCount - 1) };
 
   return (
     <View style={styles.groupCard}>
       <View style={styles.groupHeader}>
-        <Animated.Text style={[styles.groupFlame, { transform: [{ scale: flame }] }]}>🔥</Animated.Text>
+        <Animated.View style={[styles.groupFlameWrap, { transform: [{ scale: flame }] }]}>
+          <Ionicons name="flame" size={30} color={Colors.primary} />
+        </Animated.View>
         <View style={{ flex: 1 }}>
           <Text style={styles.groupName}>{group.name || 'Groupe de Streak'}</Text>
           <Text style={styles.groupStreak}>
             Streak : <Text style={{ color: Colors.primary, fontWeight: '800' }}>{group.currentStreak ?? 0} jours</Text>
-            {'   '}Multiplicateur : <Text style={{ color: Colors.gold, fontWeight: '800' }}>x{multiplier}</Text>
           </Text>
         </View>
+      </View>
+
+      {/* ── Détail du multiplicateur d'XP ── */}
+      <View style={styles.multiplierCard}>
+        <View style={styles.multiplierHeader}>
+          <Ionicons name="trending-up" size={14} color={Colors.gold} />
+          <Text style={styles.multiplierTitle}>Multiplicateur d'XP</Text>
+          <Text style={styles.multiplierTotal}>×{xpBonus.multiplier.toFixed(2)}</Text>
+        </View>
+        <View style={styles.multiplierRow}>
+          <Ionicons name="people" size={13} color={Colors.textMuted} />
+          <Text style={styles.multiplierLabel}>Taille du groupe ({memberCount} membres)</Text>
+          <Text style={styles.multiplierValue}>×{xpBonus.sizeMultiplier.toFixed(2)}</Text>
+        </View>
+        <View style={styles.multiplierRow}>
+          <Ionicons name="calendar" size={13} color={Colors.textMuted} />
+          <Text style={styles.multiplierLabel}>Régularité ({group.currentStreak ?? 0}j de streak)</Text>
+          <Text style={styles.multiplierValue}>×{xpBonus.regularityMultiplier.toFixed(2)}</Text>
+        </View>
+
+        <TouchableOpacity style={styles.scaleToggle} onPress={() => setShowScale((v) => !v)} activeOpacity={0.75}>
+          <Text style={styles.scaleToggleTxt}>{showScale ? 'Masquer le barème' : 'Voir le barème complet'}</Text>
+          <Ionicons name={showScale ? 'chevron-up' : 'chevron-down'} size={13} color={Colors.gold} />
+        </TouchableOpacity>
+
+        {showScale && (
+          <View style={styles.scaleWrap}>
+            <View style={styles.scaleCol}>
+              <Text style={styles.scaleColTitle}>Taille</Text>
+              {SIZE_SCALE.map((row) => (
+                <View key={row.n} style={styles.scaleRow}>
+                  <Text style={styles.scaleRowLabel}>{row.n} {row.n > 1 ? 'membres' : 'membre'}</Text>
+                  <Text style={styles.scaleRowValue}>×{row.multiplier.toFixed(2)}</Text>
+                </View>
+              ))}
+            </View>
+            <View style={styles.scaleCol}>
+              <Text style={styles.scaleColTitle}>Régularité</Text>
+              {REGULARITY_SCALE.map((row) => (
+                <View key={row.days} style={styles.scaleRow}>
+                  <Text style={styles.scaleRowLabel}>{row.days === 0 ? '0 j' : `${row.days}+ j`}</Text>
+                  <Text style={styles.scaleRowValue}>×{row.multiplier.toFixed(2)}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
       </View>
 
       <Text style={styles.sectionLabel}>MEMBRES ({memberCount}/5)</Text>
@@ -474,7 +569,8 @@ function GroupCard({ group, onShake, onCheckStreak }) {
             onPress={() => onShake(group._id, m._id, m.pseudo)}
             activeOpacity={0.8}
           >
-            <Text style={styles.shakeTxt}>🚨 Secouer</Text>
+            <Ionicons name="warning" size={12} color={Colors.error} style={{ marginRight: 4 }} />
+            <Text style={styles.shakeTxt}>Secouer</Text>
           </TouchableOpacity>
         </UserRow>
       ))}
@@ -482,6 +578,11 @@ function GroupCard({ group, onShake, onCheckStreak }) {
       <TouchableOpacity style={styles.ctaBtn} onPress={() => onCheckStreak(group._id)} activeOpacity={0.85}>
         <Ionicons name="flash" size={16} color="#fff" style={{ marginRight: 7 }} />
         <Text style={styles.ctaTxt}>Valider la streak du jour</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.leaveBtn} onPress={() => onLeaveGroup(group._id)} activeOpacity={0.75}>
+        <Ionicons name="exit-outline" size={15} color={Colors.error} style={{ marginRight: 6 }} />
+        <Text style={styles.leaveBtnTxt}>Quitter le groupe</Text>
       </TouchableOpacity>
     </View>
   );
@@ -525,9 +626,17 @@ function UserRow({ user, children }) {
 
 function FriendshipHearts({ level }) {
   return (
-    <Text style={styles.hearts}>
-      {'❤️'.repeat(level)}{'🤍'.repeat(Math.max(0, 5 - level))}
-    </Text>
+    <View style={styles.hearts}>
+      {Array.from({ length: 5 }, (_, i) => (
+        <Ionicons
+          key={i}
+          name={i < level ? 'heart' : 'heart-outline'}
+          size={11}
+          color={i < level ? '#FF4D6D' : Colors.borderDim}
+          style={{ marginLeft: i === 0 ? 0 : 1 }}
+        />
+      ))}
+    </View>
   );
 }
 
@@ -606,7 +715,7 @@ const styles = StyleSheet.create({
   userActions:{ flexDirection: 'row', alignItems: 'center', gap: 6 },
   pendingTag: { color: Colors.textMuted, fontSize: 12, fontWeight: '600' },
   friendTag:  { color: Colors.valid, fontSize: 12, fontWeight: '700' },
-  hearts:     { fontSize: 10, letterSpacing: 1 },
+  hearts:     { flexDirection: 'row', alignItems: 'center' },
 
   smallBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -645,7 +754,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(254,116,57,0.30)',
     borderRadius: 14, padding: 14, marginBottom: 10,
   },
-  inviteTxt:  { color: Colors.textPrimary, fontSize: 13.5, lineHeight: 19, marginBottom: 10 },
+  inviteTxtRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  inviteTxt:  { flex: 1, color: Colors.textPrimary, fontSize: 13.5, lineHeight: 19 },
   inviteBtns: { flexDirection: 'row', gap: 8 },
 
   groupCard: {
@@ -654,22 +764,66 @@ const styles = StyleSheet.create({
     borderRadius: 18, padding: 16, marginTop: 6,
   },
   groupHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  groupFlame:  { fontSize: 34 },
+  groupFlameWrap: {
+    width: 52, height: 52, borderRadius: 16,
+    backgroundColor: 'rgba(254,116,57,0.12)',
+    justifyContent: 'center', alignItems: 'center',
+  },
   groupName:   { color: Colors.textPrimary, fontSize: 16, fontWeight: '800' },
   groupStreak: { color: Colors.textSecondary, fontSize: 12.5, marginTop: 3 },
 
+  // ── Détail multiplicateur ──
+  multiplierCard: {
+    backgroundColor: 'rgba(255,215,0,0.05)',
+    borderWidth: 1, borderColor: 'rgba(255,215,0,0.18)',
+    borderRadius: 14, padding: 12, marginTop: 14,
+  },
+  multiplierHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  multiplierTitle:  { flex: 1, color: Colors.textPrimary, fontSize: 12.5, fontWeight: '700' },
+  multiplierTotal:  { color: Colors.gold, fontSize: 14, fontWeight: '800' },
+  multiplierRow:    { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  multiplierLabel:  { flex: 1, color: Colors.textMuted, fontSize: 11.5 },
+  multiplierValue:  { color: Colors.textSecondary, fontSize: 11.5, fontWeight: '700' },
+
+  scaleToggle: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    marginTop: 10, paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,215,0,0.18)',
+  },
+  scaleToggleTxt: { color: Colors.gold, fontSize: 11.5, fontWeight: '700' },
+  scaleWrap: { flexDirection: 'row', gap: 14, marginTop: 12 },
+  scaleCol:  { flex: 1 },
+  scaleColTitle: {
+    color: Colors.textMuted, fontSize: 10.5, fontWeight: '800',
+    letterSpacing: 0.6, marginBottom: 6,
+  },
+  scaleRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    paddingVertical: 3,
+  },
+  scaleRowLabel: { color: Colors.textSecondary, fontSize: 11.5 },
+  scaleRowValue: { color: Colors.textPrimary, fontSize: 11.5, fontWeight: '700' },
+
   shakeBtn: {
+    flexDirection: 'row', alignItems: 'center',
     backgroundColor: 'rgba(255,77,77,0.10)',
     borderWidth: 1, borderColor: 'rgba(255,77,77,0.40)',
     borderRadius: 9, paddingHorizontal: 10, height: 32, justifyContent: 'center',
   },
   shakeTxt: { color: Colors.error, fontSize: 11.5, fontWeight: '800' },
 
+  leaveBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    height: 42, borderRadius: 13, marginTop: 10,
+    borderWidth: 1, borderColor: 'rgba(255,77,77,0.30)',
+  },
+  leaveBtnTxt: { color: Colors.error, fontSize: 13, fontWeight: '700' },
+
   selectRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     backgroundColor: Colors.cardDeep,
     borderWidth: 1, borderColor: Colors.borderSubtle,
-    borderRadius: 12, padding: 12, marginBottom: 7,
+    borderRadius: 12, padding: 12, marginBottom: 9,
   },
   selectRowActive: { borderColor: 'rgba(254,116,57,0.45)' },
   selectPseudo:    { flex: 1, color: Colors.textPrimary, fontSize: 13.5, fontWeight: '600' },

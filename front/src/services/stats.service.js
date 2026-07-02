@@ -315,6 +315,32 @@ export async function addRitualLog(ritualId, ritualLabel, durationSeconds = 300,
   return log;
 }
 
+// Enregistre un gain d'XP dont la source n'est pas une séance (objet
+// d'inventaire consommé, bonus de streak de groupe...). Sert uniquement à
+// synchroniser l'XP/niveau affiché sur le Profil (calculé localement à partir
+// des logs) avec les gains accordés côté backend. Exclu du streak et de
+// l'historique de séances (voir WorkoutLogsContext : sessionLogs/activityLogs).
+export async function addBonusXpLog(source, xpEarned) {
+  if (!xpEarned || xpEarned <= 0) return null;
+  const all = await readAll();
+  const log = {
+    id: genId(),
+    date: new Date().toISOString(),
+    name: source,
+    type: 'item_bonus',
+    exercises: [],
+    totalVolume: 0,
+    setsCompleted: 0,
+    totalSets: 0,
+    muscleDistribution: {},
+    durationSeconds: 0,
+    xpEarned: Math.round(xpEarned),
+    notes: '',
+  };
+  await writeAll([log, ...all]);
+  return log;
+}
+
 export async function removeLog(id) {
   const all = await readAll();
   await writeAll(all.filter((x) => x.id !== id));

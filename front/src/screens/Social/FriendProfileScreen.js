@@ -74,12 +74,20 @@ export default function FriendProfileScreen({ route, navigation }) {
 
             {/* ── Lien d'amitié ── */}
             <View style={styles.friendshipCard}>
-              <Text style={styles.friendshipHearts}>
-                {'❤️'.repeat(profile.friendshipLevel)}{'🤍'.repeat(Math.max(0, 5 - profile.friendshipLevel))}
-              </Text>
+              <View style={styles.friendshipHearts}>
+                {Array.from({ length: 5 }, (_, i) => (
+                  <Ionicons
+                    key={i}
+                    name={i < profile.friendshipLevel ? 'heart' : 'heart-outline'}
+                    size={18}
+                    color={i < profile.friendshipLevel ? '#FF4D6D' : Colors.borderDim}
+                    style={{ marginHorizontal: 2 }}
+                  />
+                ))}
+              </View>
               <Text style={styles.friendshipLevel}>
                 Niveau d'amitié {profile.friendshipLevel}/5
-                {profile.friendshipLevel === 5 ? ' — Lien de Sang 🩸' : ''}
+                {profile.friendshipLevel === 5 ? ' · Lien de Sang' : ''}
               </Text>
               <Text style={styles.friendshipXp}>{profile.friendshipXp} XP d'amitié</Text>
             </View>
@@ -149,7 +157,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(139,92,246,0.28)',
     borderRadius: 16, padding: 16, marginTop: 12,
   },
-  friendshipHearts: { fontSize: 16, letterSpacing: 3, marginBottom: 6 },
+  friendshipHearts: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   friendshipLevel:  { color: Colors.textPrimary, fontSize: 13.5, fontWeight: '700' },
   friendshipXp:     { color: Colors.textMuted, fontSize: 11.5, marginTop: 2 },
 
