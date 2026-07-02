@@ -33,7 +33,7 @@ import {
   scheduleDailyReminder,
   cancelDailyReminder,
 } from '../../services/notificationService';
-import { syncBackendLevel } from '../../services/debug.service';
+import { syncBackendLevel, giveChests, generateMockSocial } from '../../services/debug.service';
 
 const UNIT_WEIGHT_KEY   = 'athly:unit:weight:v1';
 const UNIT_DIST_KEY     = 'athly:unit:distance:v1';
@@ -146,6 +146,7 @@ export default function SettingsScreen({ navigation }) {
   const [targetLevel,     setTargetLevel]     = useState('');
   const [targetStreak,    setTargetStreak]    = useState('');
   const [targetXP,        setTargetXP]        = useState('');
+  const [targetChests,    setTargetChests]    = useState('1');
   const [simLoading,      setSimLoading]      = useState(false);
   const [simFeedback,     setSimFeedback]     = useState('');
   const [trophyExpanded,  setTrophyExpanded]  = useState(false);
@@ -313,6 +314,39 @@ export default function SettingsScreen({ navigation }) {
       setSimLoading(false);
     }
   }, [level, refetchUser, showFeedback]);
+
+  // Crédite des CHEST_KEY backend pour tester l'ouverture de coffre sans
+  // attendre les paliers de 5h de séance. Bloqué en production (404).
+  const handleGiveChests = useCallback(async () => {
+    const n = parseInt(targetChests, 10);
+    if (!targetChests || isNaN(n) || n < 1 || n > 50) { showFeedback('Quantité invalide (1–50)'); return; }
+    try {
+      setSimLoading(true);
+      const res = await giveChests(n);
+      showFeedback(`+${n} coffre(s) ✓ (total : ${res.chestCount})`);
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [targetChests, showFeedback]);
+
+  // Génère 2 amis acceptés + 1 demande en attente pour tester l'écran Social
+  // (Classement, création de Groupe, Accepter/Refuser) sans dépendre de vrais
+  // comptes tiers. Idempotent côté backend. Bloqué en production (404).
+  const handleMockSocial = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await generateMockSocial();
+      showFeedback(res.message || 'Réseau social de test généré ✓');
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback]);
 
   const handleLockDevSection = useCallback(async () => {
     setDevVisible(false);
@@ -524,6 +558,31 @@ export default function SettingsScreen({ navigation }) {
                     flex
                   />
                 </View>
+
+                {/* ── SANDBOX INVENTAIRE & SOCIAL ── */}
+                <DevSectionTitle title="SANDBOX INVENTAIRE & SOCIAL" />
+                <Text style={styles.devHint}>
+                  Coffres et faux amis générés directement en base — pour tester
+                  l'Inventaire et l'écran Social sans dizaines de vraies actions.
+                </Text>
+                <View style={styles.devInputRow}>
+                  <TextInput style={styles.devInput} value={targetChests} onChangeText={setTargetChests}
+                    keyboardType="number-pad" placeholder="1"
+                    placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
+                  <DevBtn label="+ Coffre(s)" onPress={handleGiveChests} disabled={simLoading} />
+                </View>
+                <View style={styles.devBtnRow}>
+                  <DevBtn
+                    label="Générer un réseau social de test"
+                    onPress={handleMockSocial}
+                    disabled={simLoading}
+                    flex
+                  />
+                </View>
+                <Text style={styles.devHint}>
+                  Crée FauxAmi_1 et FauxAmi_2 (amis acceptés — pour Classement et Groupe)
+                  + FauxAmi_3 (demande en attente — pour Accepter/Refuser). Rejouable sans doublons.
+                </Text>
 
                 {/* ── SIMULATION ── */}
                 <DevSectionTitle title="SIMULATION" />

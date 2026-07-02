@@ -10,6 +10,10 @@ const debug   = require('../controllers/debug.controller');
 router.use(devOnly);
 router.use(auth);
 
-router.post('/sync-level', debug.syncLevel);
+router.post('/sync-level',            debug.syncLevel);
+
+// ── God Mode : sandbox de test (voir controllers/debug.controller.js) ────────
+router.post('/godmode/give-chests',   debug.giveChests);
+router.post('/godmode/mock-social',   debug.mockSocial);
 
 module.exports = router;
