@@ -357,4 +357,105 @@ describe("Système Récompenses & Trophées Athly — Briques I & V", () => {
       expect(res.statusCode).toBe(401);
     });
   });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 4. checkBirthday — cadeau du "jour J" (une fois par an)
+  // ───────────────────────────────────────────────────────────────────────────
+  describe("POST /api/rewards/birthday/check — checkBirthday", () => {
+
+    it("✅ isBirthday: false si aucune date de naissance n'est renseignée", async () => {
+      const res = await request(app)
+        .post('/api/rewards/birthday/check')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.isBirthday).toBe(false);
+      expect(res.body.rewarded).toBe(false);
+    });
+
+    it("✅ isBirthday: false si la date de naissance n'est pas aujourd'hui", async () => {
+      // Anniversaire décalé de 6 mois : garantit un mois différent d'aujourd'hui
+      const notToday = new Date();
+      notToday.setUTCFullYear(notToday.getUTCFullYear() - 20);
+      notToday.setUTCMonth((notToday.getUTCMonth() + 6) % 12);
+
+      await request(app)
+        .post('/api/rewards/birthdate')
+        .set('Authorization', `Bearer ${alice.token}`)
+        .send({ birthdate: notToday.toISOString() });
+
+      const res = await request(app)
+        .post('/api/rewards/birthday/check')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.isBirthday).toBe(false);
+      expect(res.body.rewarded).toBe(false);
+    });
+
+    it("✅ Accorde le cadeau (CHEST_KEY + trophée) le jour J, la première fois de l'année", async () => {
+      const today = new Date();
+      const birthdateToday = new Date(Date.UTC(today.getUTCFullYear() - 25, today.getUTCMonth(), today.getUTCDate()));
+
+      await request(app)
+        .post('/api/rewards/birthdate')
+        .set('Authorization', `Bearer ${alice.token}`)
+        .send({ birthdate: birthdateToday.toISOString() });
+
+      const beforeUser = await User.findById(alice.userId);
+      const beforeQty  = beforeUser.inventory.find((i) => i.itemType === 'CHEST_KEY')?.quantity || 0;
+
+      const res = await request(app)
+        .post('/api/rewards/birthday/check')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.isBirthday).toBe(true);
+      expect(res.body.rewarded).toBe(true);
+      expect(res.body.chestKeyAdded).toBe(true);
+      expect(res.body.newlyUnlocked).toContain('BIRTHDAY_CELEBRATED');
+
+      const updatedUser = await User.findById(alice.userId);
+      const afterQty = updatedUser.inventory.find((i) => i.itemType === 'CHEST_KEY')?.quantity || 0;
+      expect(afterQty).toBe(beforeQty + 1);
+      expect(updatedUser.lastBirthdayRewardedYear).toBe(today.getUTCFullYear());
+
+      const trophy = updatedUser.achievements.find((a) => a.achievementId === 'BIRTHDAY_CELEBRATED');
+      expect(trophy).toBeDefined();
+    });
+
+    it("✅ Idempotent : rejouée le même jour, le cadeau n'est pas raccordé une deuxième fois", async () => {
+      const today = new Date();
+      const birthdateToday = new Date(Date.UTC(today.getUTCFullYear() - 25, today.getUTCMonth(), today.getUTCDate()));
+
+      await request(app)
+        .post('/api/rewards/birthdate')
+        .set('Authorization', `Bearer ${alice.token}`)
+        .send({ birthdate: birthdateToday.toISOString() });
+
+      await request(app)
+        .post('/api/rewards/birthday/check')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      const midUser = await User.findById(alice.userId);
+      const midQty  = midUser.inventory.find((i) => i.itemType === 'CHEST_KEY')?.quantity || 0;
+
+      const res = await request(app)
+        .post('/api/rewards/birthday/check')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.isBirthday).toBe(true);
+      expect(res.body.rewarded).toBe(false);
+
+      const finalUser = await User.findById(alice.userId);
+      const finalQty  = finalUser.inventory.find((i) => i.itemType === 'CHEST_KEY')?.quantity || 0;
+      expect(finalQty).toBe(midQty);
+    });
+
+    it("❌ 401 sans token", async () => {
+      const res = await request(app).post('/api/rewards/birthday/check');
+      expect(res.statusCode).toBe(401);
+    });
+  });
 });

@@ -8,7 +8,10 @@ const reward  = require('../controllers/reward.controller');
 router.use(auth);
 
 // ── Profil / Anti-triche anniversaire ─────────────────────────────────────────
-router.post('/birthdate',    reward.setBirthdate);
+router.post('/birthdate',       reward.setBirthdate);
+
+// Jour J : à appeler au login / au chargement de l'app.
+router.post('/birthday/check',  reward.checkBirthday);
 
 // ── Trophées / Succès ─────────────────────────────────────────────────────────
 router.get('/achievements',  reward.getUserAchievements);

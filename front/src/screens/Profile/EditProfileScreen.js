@@ -13,6 +13,8 @@ import { Colors } from '../../constants/theme';
 import API from '../../api/api';
 import { useUser } from '../../context/UserContext';
 import { useToast } from '../../context/ToastContext';
+import { setBirthdate } from '../../services/reward.service';
+import BirthdatePicker from '../../components/profile/BirthdatePicker';
 
 // ─── EditProfileScreen ────────────────────────────────────────────────────────
 // Pas de header custom : on configure navigation.setOptions via useLayoutEffect.
@@ -138,6 +140,22 @@ export default function EditProfileScreen({ navigation }) {
 
   handleUpdateRef.current = handleUpdate;
 
+  // Anti-triche : setBirthdate est un endpoint dédié (pas /users/me), verrouillé
+  // côté backend dès la première saisie. On re-throw en cas d'échec pour que
+  // BirthdatePicker garde sa modale ouverte et permette un nouvel essai.
+  const handleBirthdateConfirm = useCallback(async (dateObj) => {
+    try {
+      await setBirthdate(dateObj.toISOString());
+      await refetchUser();
+      showToast('Date de naissance enregistrée. Ton coffre est dans ton inventaire ! 🎁', 'success');
+    } catch (error) {
+      if (error.isSessionExpired) throw error;
+      const msg = error.data?.message || error.message || 'Erreur réseau. Réessaie dans un instant.';
+      showToast(msg, 'error');
+      throw error;
+    }
+  }, [refetchUser, showToast]);
+
   // Configure native header with "Sauver" button — re-runs when loading changes
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -227,7 +245,7 @@ export default function EditProfileScreen({ navigation }) {
               keyboardType="decimal-pad"
             />
           </SettingsRow>
-          <SettingsRow label="Taille (cm)" last>
+          <SettingsRow label="Taille (cm)" last={false}>
             <TextInput
               style={styles.inlineInput}
               value={formData.taille}
@@ -236,6 +254,12 @@ export default function EditProfileScreen({ navigation }) {
               placeholderTextColor={Colors.textMuted}
               selectionColor={Colors.primary}
               keyboardType="number-pad"
+            />
+          </SettingsRow>
+          <SettingsRow label="Date de naissance" last>
+            <BirthdatePicker
+              value={user?.isBirthdateSet && user?.birthdate ? new Date(user.birthdate) : null}
+              onConfirm={handleBirthdateConfirm}
             />
           </SettingsRow>
         </SettingsGroup>

@@ -56,7 +56,12 @@ export default function AppNavigator() {
             <SavedWorkoutsProvider>
               <CustomExercisesProvider>
                 <QuestProvider>
-                  {userToken === null ? <AuthStack /> : <BottomTabs />}
+                  {userToken === null ? <AuthStack /> : (
+                    <>
+                      <BirthdayCelebration />
+                      <BottomTabs />
+                    </>
+                  )}
                 </QuestProvider>
               </CustomExercisesProvider>
             </SavedWorkoutsProvider>
