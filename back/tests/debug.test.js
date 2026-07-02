@@ -1,9 +1,10 @@
 'use strict';
 
-const request  = require('supertest');
-const mongoose = require('mongoose');
-const app      = require('../app');
-const User     = require('../models/User');
+const request    = require('supertest');
+const mongoose   = require('mongoose');
+const app        = require('../app');
+const User       = require('../models/User');
+const Friendship = require('../models/Friendship');
 const { xpForLevel } = require('../utils/levelHelpers');
 
 async function createAndLoginUser(pseudo, email) {
@@ -109,6 +110,175 @@ describe('POST /api/debug/sync-level — outil dev (God Mode → backend)', () =
     } finally {
       config.nodeEnv = originalNodeEnv;
       process.env.NODE_ENV = original;
+    }
+  });
+});
+
+describe('POST /api/debug/godmode/give-chests — outil dev (crédite des CHEST_KEY)', () => {
+  let alice;
+
+  beforeAll(async () => {
+    if (mongoose.connection.readyState === 0) {
+      await mongoose.connect(process.env.MONGO_URI);
+    }
+  });
+
+  afterAll(async () => {
+    await User.deleteMany({});
+    await mongoose.connection.close();
+  });
+
+  beforeEach(async () => {
+    await User.deleteMany({});
+    alice = await createAndLoginUser('AliceFit', 'alice@athly.fr');
+  });
+
+  it('✅ +1 coffre par défaut, atomique', async () => {
+    const res = await request(app)
+      .post('/api/debug/godmode/give-chests')
+      .set('Authorization', `Bearer ${alice.token}`)
+      .send({});
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.chestCount).toBe(1);
+
+    const user = await User.findById(alice.userId);
+    const chest = user.inventory.find((i) => i.itemType === 'CHEST_KEY');
+    expect(chest.quantity).toBe(1);
+  });
+
+  it('✅ amount personnalisé s\'ajoute à un stock existant', async () => {
+    await User.updateOne(
+      { _id: alice.userId },
+      { inventory: [{ itemType: 'CHEST_KEY', rarity: 'common', quantity: 2 }] },
+    );
+
+    const res = await request(app)
+      .post('/api/debug/godmode/give-chests')
+      .set('Authorization', `Bearer ${alice.token}`)
+      .send({ amount: 5 });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.chestCount).toBe(7);
+  });
+
+  it('❌ 400 si amount est hors bornes (1-50)', async () => {
+    const res = await request(app)
+      .post('/api/debug/godmode/give-chests')
+      .set('Authorization', `Bearer ${alice.token}`)
+      .send({ amount: 999 });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('❌ 401 sans token', async () => {
+    const res = await request(app).post('/api/debug/godmode/give-chests').send({});
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('🔒 404 en production', async () => {
+    const config = require('../config/env');
+    const originalNodeEnv = config.nodeEnv;
+    config.nodeEnv = 'production';
+    try {
+      const res = await request(app)
+        .post('/api/debug/godmode/give-chests')
+        .set('Authorization', `Bearer ${alice.token}`)
+        .send({});
+      expect(res.statusCode).toBe(404);
+    } finally {
+      config.nodeEnv = originalNodeEnv;
+    }
+  });
+});
+
+describe('POST /api/debug/godmode/mock-social — outil dev (génère un faux réseau social)', () => {
+  let alice;
+
+  beforeAll(async () => {
+    if (mongoose.connection.readyState === 0) {
+      await mongoose.connect(process.env.MONGO_URI);
+    }
+  });
+
+  afterAll(async () => {
+    await User.deleteMany({});
+    await Friendship.deleteMany({});
+    await mongoose.connection.close();
+  });
+
+  beforeEach(async () => {
+    await User.deleteMany({});
+    await Friendship.deleteMany({});
+    alice = await createAndLoginUser('AliceFit', 'alice@athly.fr');
+  });
+
+  it('✅ Génère 2 amis acceptés + 1 demande en attente reçue', async () => {
+    const res = await request(app)
+      .post('/api/debug/godmode/mock-social')
+      .set('Authorization', `Bearer ${alice.token}`);
+
+    expect(res.statusCode).toBe(201);
+    expect(res.body.created).toHaveLength(3);
+
+    const friendsRes = await request(app)
+      .get('/api/friends/list')
+      .set('Authorization', `Bearer ${alice.token}`);
+    expect(friendsRes.body.friends).toHaveLength(2);
+    expect(friendsRes.body.friends.every((f) => f.user.pseudo.startsWith('FauxAmi_'))).toBe(true);
+
+    const pendingRes = await request(app)
+      .get('/api/friends/pending')
+      .set('Authorization', `Bearer ${alice.token}`);
+    expect(pendingRes.body.requests).toHaveLength(1);
+    expect(pendingRes.body.requests[0].requester.pseudo).toMatch(/^FauxAmi_/);
+  });
+
+  it('✅ Le classement inclut les amis acceptés (podium testable)', async () => {
+    await request(app)
+      .post('/api/debug/godmode/mock-social')
+      .set('Authorization', `Bearer ${alice.token}`);
+
+    const res = await request(app)
+      .get('/api/friends/leaderboard')
+      .set('Authorization', `Bearer ${alice.token}`);
+
+    // Alice + 2 amis acceptés (le 3e est encore "pending", pas dans le classement)
+    expect(res.body.count).toBe(3);
+  });
+
+  it('🔁 Idempotent : rejouer l\'outil ne crée pas de doublons', async () => {
+    await request(app)
+      .post('/api/debug/godmode/mock-social')
+      .set('Authorization', `Bearer ${alice.token}`);
+    await request(app)
+      .post('/api/debug/godmode/mock-social')
+      .set('Authorization', `Bearer ${alice.token}`);
+
+    const allMocks = await User.find({ pseudo: /^FauxAmi_/ });
+    expect(allMocks).toHaveLength(3);
+
+    const friendsRes = await request(app)
+      .get('/api/friends/list')
+      .set('Authorization', `Bearer ${alice.token}`);
+    expect(friendsRes.body.friends).toHaveLength(2);
+  });
+
+  it('❌ 401 sans token', async () => {
+    const res = await request(app).post('/api/debug/godmode/mock-social');
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('🔒 404 en production', async () => {
+    const config = require('../config/env');
+    const originalNodeEnv = config.nodeEnv;
+    config.nodeEnv = 'production';
+    try {
+      const res = await request(app)
+        .post('/api/debug/godmode/mock-social')
+        .set('Authorization', `Bearer ${alice.token}`);
+      expect(res.statusCode).toBe(404);
+    } finally {
+      config.nodeEnv = originalNodeEnv;
     }
   });
 });
