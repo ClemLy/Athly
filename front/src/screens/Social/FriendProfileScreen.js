@@ -152,26 +152,20 @@ export default function FriendProfileScreen({ route, navigation }) {
             </View>
           )}
 
-            {/* ── Lien d'amitié ── */}
-            <View style={styles.friendshipCard}>
-              <View style={styles.friendshipHearts}>
-                {Array.from({ length: 5 }, (_, i) => (
-                  <Ionicons
-                    key={i}
-                    name={i < profile.friendshipLevel ? 'heart' : 'heart-outline'}
-                    size={18}
-                    color={i < profile.friendshipLevel ? '#FF4D6D' : Colors.borderDim}
-                    style={{ marginHorizontal: 2 }}
-                  />
-                ))}
-              </View>
-              <Text style={styles.friendshipLevel}>
-                Niveau d'amitié {profile.friendshipLevel}/5
-                {profile.friendshipLevel === 5 ? ' · Lien de Sang' : ''}
-              </Text>
-              <Text style={styles.friendshipXp}>{profile.friendshipXp} XP d'amitié</Text>
+          {/* ── Statut d'amitié ── */}
+          <View style={styles.friendshipCard}>
+            <View style={styles.friendshipHearts}>
+              {Array.from({ length: 5 }, (_, i) => (
+                <Ionicons
+                  key={i}
+                  name={i < profile.friendshipLevel ? 'heart' : 'heart-outline'}
+                  size={16}
+                  color={i < profile.friendshipLevel ? '#FF4D6D' : Colors.borderDim}
+                  style={{ marginHorizontal: 2 }}
+                />
+              ))}
             </View>
-            <Text style={styles.friendshipLabel}>
+            <Text style={styles.friendshipLevel}>
               Niveau d'amitié {profile.friendshipLevel}/5
               {profile.friendshipLevel === 5 ? ' · Lien de Sang' : ''}
             </Text>
