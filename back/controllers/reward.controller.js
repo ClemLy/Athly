@@ -16,6 +16,13 @@ const ACHIEVEMENT_CATALOG = {
     category:    'profile',
     hidden:      true,
   },
+  BIRTHDAY_CELEBRATED: {
+    id:          'BIRTHDAY_CELEBRATED',
+    name:        'Fêter son anniversaire',
+    description: "Vous avez réclamé votre cadeau d'anniversaire sur Athly.",
+    category:    'profile',
+    hidden:      false,
+  },
 
   // ── Collection (inventaire) ───────────────────────────────────────────────
   FIRST_COMMON_ITEM: {
@@ -82,6 +89,15 @@ function createError(message, statusCode = 400) {
   return err;
 }
 
+// True si `date` tombe le même jour/mois que `birthdate`, quelle que soit l'année.
+// Comparaison en UTC pour rester déterministe indépendamment du fuseau du serveur.
+function isSameDayAndMonth(birthdate, date) {
+  return (
+    birthdate.getUTCDate()  === date.getUTCDate() &&
+    birthdate.getUTCMonth() === date.getUTCMonth()
+  );
+}
+
 // ─── checkAndUnlockAchievements ───────────────────────────────────────────────
 /**
  * Vérifie l'état de l'utilisateur et débloque tous les trophées dont les
@@ -110,8 +126,9 @@ async function checkAndUnlockAchievements(userId) {
     newlyUnlocked.push(achievementId);
   }
 
-  // ── Trophée anniversaire ───────────────────────────────────────────────────
+  // ── Trophées anniversaire ──────────────────────────────────────────────────
   if (user.isBirthdateSet) tryUnlock('BIRTHDAY_SET');
+  if (user.lastBirthdayRewardedYear != null) tryUnlock('BIRTHDAY_CELEBRATED');
 
   // ── Trophées de collection : 1 item par rareté dans l'inventaire ──────────
   const RARITY_ACHIEVEMENTS = {
@@ -222,6 +239,76 @@ exports.setBirthdate = async (req, res, next) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// checkBirthday  POST /api/rewards/birthday/check
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * À appeler au login / au chargement de l'app.
+ *
+ * Si aujourd'hui est le jour de naissance de l'utilisateur et que le cadeau
+ * n'a pas encore été réclamé cette année civile :
+ *  - Octroie 1 CHEST_KEY (cadeau de bienvenue, prépare la Brique II).
+ *  - Débloque le trophée BIRTHDAY_CELEBRATED (prépare la Brique V).
+ *  - Marque `lastBirthdayRewardedYear` avec l'année en cours.
+ *
+ * Idempotent : rejouée plusieurs fois le même jour, la récompense n'est
+ * accordée qu'une seule fois (contrôle sur lastBirthdayRewardedYear).
+ */
+exports.checkBirthday = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return next(createError('Utilisateur introuvable.', 404));
+
+    if (!user.isBirthdateSet || !user.birthdate) {
+      return res.status(200).json({ success: true, isBirthday: false, rewarded: false });
+    }
+
+    const now = new Date();
+    const isBirthday = isSameDayAndMonth(user.birthdate, now);
+
+    if (!isBirthday) {
+      return res.status(200).json({ success: true, isBirthday: false, rewarded: false });
+    }
+
+    const currentYear = now.getUTCFullYear();
+    if (user.lastBirthdayRewardedYear === currentYear) {
+      return res.status(200).json({
+        success:   true,
+        isBirthday: true,
+        rewarded:  false,
+        pseudo:    user.pseudo || user.name || null,
+      });
+    }
+
+    // Cadeau de bienvenue : +1 CHEST_KEY
+    const existingKey = user.inventory.find((i) => i.itemType === 'CHEST_KEY');
+    if (existingKey) {
+      existingKey.quantity += 1;
+    } else {
+      user.inventory.push({ itemType: 'CHEST_KEY', rarity: 'common', quantity: 1 });
+    }
+    user.markModified('inventory');
+
+    user.lastBirthdayRewardedYear = currentYear;
+    await user.save();
+
+    // Déblocage des trophées (déclenche BIRTHDAY_CELEBRATED)
+    const newlyUnlocked = await checkAndUnlockAchievements(req.user.id);
+
+    return res.status(200).json({
+      success:       true,
+      isBirthday:    true,
+      rewarded:      true,
+      chestKeyAdded: true,
+      newlyUnlocked,
+      pseudo:        user.pseudo || user.name || null,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // getUserAchievements  GET /api/rewards/achievements
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -306,3 +393,4 @@ exports.checkAchievements = async (req, res, next) => {
 exports.checkAndUnlockAchievements = checkAndUnlockAchievements;
 exports.ACHIEVEMENT_CATALOG        = ACHIEVEMENT_CATALOG;
 exports.CATALOG_SIZE               = CATALOG_SIZE;
+exports.isSameDayAndMonth          = isSameDayAndMonth;

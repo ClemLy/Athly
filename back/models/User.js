@@ -65,6 +65,9 @@ const UserSchema = new mongoose.Schema(
     // ── Profil physique ───────────────────────────────────────────────────────
     birthdate:      { type: Date },
     isBirthdateSet: { type: Boolean, default: false }, // verrouille la modif après 1ère saisie
+    // Année (calendaire) où le cadeau d'anniversaire ("jour J") a été réclamé.
+    // Empêche de le réclamer plusieurs fois la même année. null = jamais fêté.
+    lastBirthdayRewardedYear: { type: Number, default: null },
     age:            { type: Number },
     sexe:           { type: String, enum: ["H", "F", "Autre"] },
     poids:          { type: Number },

@@ -18,6 +18,7 @@ import { QuestProvider } from '../context/QuestContext';
 import { UserProvider } from '../context/UserContext';
 import { TutorialProvider } from '../context/TutorialContext';
 import { setupNotificationChannels } from '../services/notificationService';
+import BirthdayCelebration from '../components/profile/BirthdayCelebration';
 
 export default function AppNavigator() {
   const { userToken, isLoading } = useAuth();
@@ -47,7 +48,12 @@ export default function AppNavigator() {
             <SavedWorkoutsProvider>
               <CustomExercisesProvider>
                 <QuestProvider>
-                  {userToken === null ? <AuthStack /> : <BottomTabs />}
+                  {userToken === null ? <AuthStack /> : (
+                    <>
+                      <BirthdayCelebration />
+                      <BottomTabs />
+                    </>
+                  )}
                 </QuestProvider>
               </CustomExercisesProvider>
             </SavedWorkoutsProvider>
