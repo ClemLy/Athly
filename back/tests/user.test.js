@@ -42,4 +42,37 @@ describe('User API (Routes Protégées)', () => {
     expect(res.statusCode).toEqual(200);
     expect(res.body.user).toHaveProperty('poids', 80);
   });
+
+  describe('PUT /api/users/me/frame — updateFrame', () => {
+    it('✅ Synchronise le cadre équipé (forme + couleur)', async () => {
+      const res = await request(app)
+        .put('/api/users/me/frame')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ shapeId: 'hexagon', colorId: 'gold' });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.equippedFrame).toEqual({ shapeId: 'hexagon', colorId: 'gold' });
+
+      const user = await User.findOne({ email: 'user@test.fr' });
+      expect(user.equippedFrame.shapeId).toBe('hexagon');
+      expect(user.equippedFrame.colorId).toBe('gold');
+    });
+
+    it('❌ 400 si shapeId ou colorId manquant', async () => {
+      const res = await request(app)
+        .put('/api/users/me/frame')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ shapeId: 'hexagon' });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('❌ 401 sans token', async () => {
+      const res = await request(app)
+        .put('/api/users/me/frame')
+        .send({ shapeId: 'hexagon', colorId: 'gold' });
+
+      expect(res.statusCode).toBe(401);
+    });
+  });
 });

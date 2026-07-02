@@ -3,6 +3,9 @@
 const mongoose = require('mongoose');
 const Friendship = require('../models/Friendship');
 const User       = require('../models/User');
+const Workout    = require('../models/Workout');
+const ExerciseRecord = require('../models/ExerciseRecord');
+const { ACHIEVEMENT_CATALOG, CATALOG_SIZE } = require('./reward.controller');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -23,6 +26,67 @@ function isValidId(id) {
  * On n'expose jamais password, verificationCode, resetPasswordCode…
  */
 const FRIEND_PUBLIC_FIELDS = 'pseudo level rank xp';
+
+/**
+ * Streak courante (jours consécutifs) calculée depuis des dates de séances
+ * synchronisées côté backend. Approximation honnête : contrairement au calcul
+ * local (front), elle ne voit pas les rituels/activités 100% locales — mais
+ * c'est la seule donnée de séance disponible pour le profil d'un tiers.
+ */
+// Clé YYYY-MM-DD basée sur les composantes LOCALES (pas .toISOString(), qui
+// décale au jour UTC précédent/suivant selon le fuseau du serveur).
+function dayKey(d) {
+  const dt = new Date(d);
+  return `${dt.getFullYear()}-${dt.getMonth() + 1}-${dt.getDate()}`;
+}
+
+function computeStreakFromDates(dates) {
+  const days = new Set(dates.map((d) => dayKey(d)));
+  const cur = new Date();
+  cur.setHours(0, 0, 0, 0);
+
+  if (!days.has(dayKey(cur))) cur.setDate(cur.getDate() - 1);
+
+  let streak = 0;
+  while (days.has(dayKey(cur))) {
+    streak += 1;
+    cur.setDate(cur.getDate() - 1);
+  }
+  return streak;
+}
+
+/**
+ * Étend le catalogue de trophées avec l'état débloqué/verrouillé pour un
+ * utilisateur donné — même logique que getUserAchievements, factorisée ici
+ * pour être réutilisée sur le profil public d'un ami.
+ */
+function buildAchievementsView(userAchievements) {
+  const unlockedMap = new Map(userAchievements.map((a) => [a.achievementId, a.unlockedAt]));
+
+  const achievements = Object.values(ACHIEVEMENT_CATALOG).map((entry) => {
+    const unlocked   = unlockedMap.has(entry.id);
+    const unlockedAt = unlockedMap.get(entry.id) ?? null;
+
+    if (entry.hidden && !unlocked) {
+      return {
+        id: entry.id, name: '???', description: 'Ce trophée est encore secret.',
+        category: entry.category, hidden: true, unlocked: false, unlockedAt: null,
+      };
+    }
+    return { ...entry, unlocked, unlockedAt };
+  });
+
+  const unlockedCount = achievements.filter((a) => a.unlocked).length;
+
+  return {
+    achievements,
+    stats: {
+      total:      CATALOG_SIZE,
+      unlocked:   unlockedCount,
+      percentage: Math.round((unlockedCount / CATALOG_SIZE) * 100),
+    },
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // sendFriendRequest  POST /api/friends/request
@@ -322,8 +386,10 @@ exports.searchUsers = async (req, res, next) => {
 
 /**
  * Profil public d'un AMI ACCEPTÉ uniquement : identité de jeu, progression,
- * trophées débloqués, records d'exercices (top 5 par poids), niveau d'amitié.
- * 403 si la relation n'est pas acceptée — pas de fuite de données entre inconnus.
+ * cadre équipé, trophées débloqués (catalogue complet), stats de séances
+ * (total, streak approximée, minutes cumulées), records d'exercices,
+ * niveau d'amitié. 403 si la relation n'est pas acceptée — pas de fuite de
+ * données entre inconnus.
  */
 exports.getFriendProfile = async (req, res, next) => {
   try {
@@ -344,13 +410,14 @@ exports.getFriendProfile = async (req, res, next) => {
     }
 
     const friend = await User.findById(friendId)
-      .select('pseudo level rank xp achievements streakGels totalWorkoutMinutes createdAt');
+      .select('pseudo level rank xp achievements streakGels totalWorkoutMinutes equippedFrame createdAt');
     if (!friend) return next(createError('Utilisateur introuvable.', 404));
 
+    const friendObjectId = new mongoose.Types.ObjectId(friendId);
+
     // Top 5 des records par poids max soulevé
-    const ExerciseRecord = require('../models/ExerciseRecord');
-    const records = await ExerciseRecord.aggregate([
-      { $match: { user: new mongoose.Types.ObjectId(friendId) } },
+    const recordsPromise = ExerciseRecord.aggregate([
+      { $match: { user: friendObjectId } },
       { $unwind: '$series' },
       { $group: {
         _id:       '$exerciceNom',
@@ -361,13 +428,30 @@ exports.getFriendProfile = async (req, res, next) => {
       { $limit: 5 },
     ]);
 
+    // Séances finalisées synchronisées côté backend (total + dates pour la streak)
+    const workoutsPromise = Workout.find({
+      user:   friendObjectId,
+      status: { $in: ['finished', 'completed'] },
+    }).select('date');
+
+    const [records, workouts] = await Promise.all([recordsPromise, workoutsPromise]);
+
+    const { achievements, stats: achievementsStats } = buildAchievementsView(friend.achievements);
+
     return res.status(200).json({
       success: true,
       profile: {
         user:            friend,
         friendshipLevel: friendship.friendshipLevel,
         friendshipXp:    friendship.friendshipXp,
-        achievementsCount: friend.achievements.length,
+        stats: {
+          totalSessions:       workouts.length,
+          totalActiveDays:     new Set(workouts.map((w) => dayKey(w.date))).size,
+          streak:              computeStreakFromDates(workouts.map((w) => w.date)),
+          totalWorkoutMinutes: friend.totalWorkoutMinutes,
+        },
+        achievements,
+        achievementsStats,
         records: records.map((r) => ({
           exercice: r._id,
           maxPoids: r.maxPoids,

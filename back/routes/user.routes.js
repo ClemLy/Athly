@@ -3,7 +3,7 @@ const router = express.Router();
 const userController = require("../controllers/user.controller");
 const auth = require("../middleware/auth.middleware");
 const validate = require("../middleware/validate.middleware");
-const { updateProfile } = require("../validators/user.validator");
+const { updateProfile, updateFrame } = require("../validators/user.validator");
 
 /**
  * ROUTES UTILISATEURS PROTEGEES
@@ -15,6 +15,9 @@ router.get("/me", auth, userController.getMe);
 
 // Modifier mes infos (avec validation Joi)
 router.put("/me", auth, validate(updateProfile), userController.updateMe);
+
+// Synchroniser le cadre de profil équipé (visible sur le profil public)
+router.put("/me/frame", auth, validate(updateFrame), userController.updateFrame);
 
 // Suppression définitive du compte (RGPD)
 router.delete("/delete-account", auth, userController.deleteAccount);

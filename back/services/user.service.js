@@ -51,6 +51,22 @@ class UserService {
     console.log(`🗑️  [deleteAccount] Utilisateur supprimé    : ${userId}`);
   }
 
+  /**
+   * Met à jour atomiquement le cadre de profil équipé (forme + couleur).
+   * @param {string} userId
+   * @param {string} shapeId
+   * @param {string} colorId
+   */
+  async updateEquippedFrame(userId, shapeId, colorId) {
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: { 'equippedFrame.shapeId': shapeId, 'equippedFrame.colorId': colorId } },
+      { new: true, runValidators: true },
+    ).select('equippedFrame');
+    if (!updatedUser) throw new Error('Utilisateur non trouvé.');
+    return updatedUser;
+  }
+
   async addExperience(userId, xpAmount) {
     const user = await User.findById(userId);
     user.xp += xpAmount;

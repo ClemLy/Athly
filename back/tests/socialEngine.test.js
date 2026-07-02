@@ -154,6 +154,55 @@ describe('Moteur RPG & Social Athly — Briques II, III, IV', () => {
         .set('Authorization', `Bearer ${alice.token}`);
       expect(res.statusCode).toBe(403);
     });
+
+    it('🎯 Expose le cadre équipé, le catalogue de trophées détaillé et les stats de séances', async () => {
+      await makeFriends(alice.userId, bob.userId);
+      await User.updateOne(
+        { _id: bob.userId },
+        {
+          equippedFrame: { shapeId: 'hexagon', colorId: 'gold' },
+          achievements: [{ achievementId: 'FIRST_REFERRAL' }],
+        },
+      );
+      await finishedWorkoutToday(bob.userId);
+
+      const res = await request(app)
+        .get(`/api/friends/profile/${bob.userId}`)
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(200);
+
+      // Cadre équipé
+      expect(res.body.profile.user.equippedFrame).toEqual({ shapeId: 'hexagon', colorId: 'gold' });
+
+      // Stats de séances
+      expect(res.body.profile.stats.totalSessions).toBe(1);
+      expect(res.body.profile.stats.totalActiveDays).toBe(1);
+      expect(res.body.profile.stats.streak).toBe(1);
+
+      // Catalogue de trophées complet, avec détail (pas juste un compteur)
+      expect(Array.isArray(res.body.profile.achievements)).toBe(true);
+      expect(res.body.profile.achievementsStats.unlocked).toBe(1);
+      const unlockedTrophy = res.body.profile.achievements.find((a) => a.id === 'FIRST_REFERRAL');
+      expect(unlockedTrophy.unlocked).toBe(true);
+      expect(unlockedTrophy.name).not.toBe('???');
+
+      // Trophée caché non débloqué reste masqué (même règle que pour soi-même)
+      const hiddenLocked = res.body.profile.achievements.find((a) => a.id === 'BIRTHDAY_SET');
+      expect(hiddenLocked.name).toBe('???');
+    });
+
+    it('✅ Cadre par défaut si jamais synchronisé', async () => {
+      await makeFriends(alice.userId, bob.userId);
+
+      const res = await request(app)
+        .get(`/api/friends/profile/${bob.userId}`)
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.body.profile.user.equippedFrame).toEqual({ shapeId: 'circle', colorId: 'none' });
+      expect(res.body.profile.stats.totalSessions).toBe(0);
+      expect(res.body.profile.stats.streak).toBe(0);
+    });
   });
 
   // ───────────────────────────────────────────────────────────────────────────
