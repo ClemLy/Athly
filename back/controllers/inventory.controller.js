@@ -33,29 +33,71 @@ function getRankForLevel(level) {
 }
 
 /**
- * Ajoute un item à l'inventaire en incrémentant la quantité si déjà présent.
- * Modifie le tableau en place.
+ * Consomme atomiquement 1 unité d'un item.
+ *
+ * Anti race-condition (double-spend) : le filtre conditionnel garantit que le
+ * décrément n'a lieu que si la quantité est encore >= 1 AU MOMENT de l'écriture.
+ * Deux requêtes simultanées sur la dernière unité : une seule matche le filtre,
+ * l'autre reçoit null — impossible de dépenser deux fois le même objet.
+ *
+ * @returns Le document User APRÈS décrément, ou null si non possédé
+ *          (ou si extraFilter ne matche pas).
  */
-function addToInventory(inventory, itemType, rarity, quantity = 1) {
-  const existing = inventory.find((i) => i.itemType === itemType);
-  if (existing) {
-    existing.quantity += quantity;
-  } else {
-    inventory.push({ itemType, rarity, quantity });
-  }
+async function consumeItemAtomic(userId, itemType, extraFilter = {}) {
+  return User.findOneAndUpdate(
+    {
+      _id: userId,
+      inventory: { $elemMatch: { itemType, quantity: { $gte: 1 } } },
+      ...extraFilter,
+    },
+    { $inc: { 'inventory.$[elem].quantity': -1 } },
+    {
+      returnDocument: 'after',
+      arrayFilters: [{ 'elem.itemType': itemType }],
+    },
+  );
 }
 
 /**
- * Consomme `quantity` unités d'un item dans l'inventaire.
- * Supprime l'entrée si la quantité tombe à 0.
- * Retourne false si l'item est introuvable ou en quantité insuffisante.
+ * Ajoute atomiquement 1 unité d'un item ($inc si l'entrée existe, sinon $push
+ * gardé par $ne pour éviter un double-push concurrent).
+ * @returns Le document User APRÈS ajout.
  */
-function consumeFromInventory(inventory, itemType, quantity = 1) {
-  const idx = inventory.findIndex((i) => i.itemType === itemType);
-  if (idx === -1 || inventory[idx].quantity < quantity) return false;
-  inventory[idx].quantity -= quantity;
-  if (inventory[idx].quantity === 0) inventory.splice(idx, 1);
-  return true;
+async function addItemAtomic(userId, itemType, rarity) {
+  const incremented = await User.findOneAndUpdate(
+    { _id: userId, 'inventory.itemType': itemType },
+    { $inc: { 'inventory.$.quantity': 1 } },
+    { returnDocument: 'after' },
+  );
+  if (incremented) return incremented;
+
+  const pushed = await User.findOneAndUpdate(
+    { _id: userId, 'inventory.itemType': { $ne: itemType } },
+    { $push: { inventory: { itemType, rarity, quantity: 1 } } },
+    { returnDocument: 'after' },
+  );
+  if (pushed) return pushed;
+
+  // Course perdue contre un $push concurrent du même itemType : on retombe
+  // sur le $inc, qui matche forcément maintenant.
+  return User.findOneAndUpdate(
+    { _id: userId, 'inventory.itemType': itemType },
+    { $inc: { 'inventory.$.quantity': 1 } },
+    { returnDocument: 'after' },
+  );
+}
+
+/**
+ * Purge les entrées d'inventaire tombées à 0 (comportement historique :
+ * une entrée épuisée disparaît de l'inventaire).
+ * @returns Le document User APRÈS purge.
+ */
+async function purgeEmptyEntries(userId) {
+  return User.findOneAndUpdate(
+    { _id: userId },
+    { $pull: { inventory: { quantity: { $lte: 0 } } } },
+    { returnDocument: 'after' },
+  );
 }
 
 // Effets des consommables — chaque fonction modifie user en place
@@ -94,32 +136,31 @@ const VALID_USE_ITEMS = Object.keys(ITEM_EFFECTS);
  */
 exports.openChest = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id);
-    if (!user) return next(createError('Utilisateur introuvable.', 404));
+    // Consommation atomique : clé décrémentée UNIQUEMENT si possédée ET niveau
+    // suffisant, en une seule écriture — aucune fenêtre de double-spend.
+    const afterConsume = await consumeItemAtomic(req.user.id, 'CHEST_KEY', {
+      level: { $gte: MIN_LEVEL_FOR_CHEST },
+    });
 
-    if (user.level < MIN_LEVEL_FOR_CHEST) {
-      return next(createError("Fonctionnalité bloquée jusqu'au niveau 11.", 403));
-    }
-
-    const hasKey = user.inventory.some((i) => i.itemType === 'CHEST_KEY' && i.quantity > 0);
-    if (!hasKey) {
+    if (!afterConsume) {
+      // Diagnostic du refus pour renvoyer l'erreur historique appropriée.
+      const user = await User.findById(req.user.id).select('level inventory');
+      if (!user) return next(createError('Utilisateur introuvable.', 404));
+      if (user.level < MIN_LEVEL_FOR_CHEST) {
+        return next(createError("Fonctionnalité bloquée jusqu'au niveau 11.", 403));
+      }
       return next(createError('Aucun coffre disponible dans votre inventaire.', 400));
     }
 
-    consumeFromInventory(user.inventory, 'CHEST_KEY');
-
     const drawnItem = drawChestItem();
-    addToInventory(user.inventory, drawnItem.itemType, drawnItem.rarity);
-
-    // markModified nécessaire : Mongoose ne détecte pas les mutations des tableaux de sous-documents
-    user.markModified('inventory');
-    await user.save();
+    await addItemAtomic(req.user.id, drawnItem.itemType, drawnItem.rarity);
+    const finalUser = await purgeEmptyEntries(req.user.id);
 
     return res.status(200).json({
       success:   true,
       message:   'Coffre ouvert !',
       drawnItem,
-      inventory: user.inventory,
+      inventory: finalUser.inventory,
     });
   } catch (err) {
     next(err);
@@ -151,18 +192,21 @@ exports.useItem = async (req, res, next) => {
       ));
     }
 
-    const user = await User.findById(req.user.id);
-    if (!user) return next(createError('Utilisateur introuvable.', 404));
+    // Consommation atomique : même garde anti double-spend que openChest.
+    const user = await consumeItemAtomic(req.user.id, itemType);
 
-    const consumed = consumeFromInventory(user.inventory, itemType);
-    if (!consumed) {
+    if (!user) {
+      const exists = await User.exists({ _id: req.user.id });
+      if (!exists) return next(createError('Utilisateur introuvable.', 404));
       return next(createError('Vous ne possédez pas cet objet.', 400));
     }
 
+    // L'effet ne touche que des champs scalaires (xp, level, rank, streakGels) :
+    // save() n'écrit que ces chemins, sans réécrire l'inventaire déjà à jour.
     ITEM_EFFECTS[itemType](user);
-
-    user.markModified('inventory');
     await user.save();
+
+    const finalUser = await purgeEmptyEntries(req.user.id);
 
     return res.status(200).json({
       success: true,
@@ -172,7 +216,7 @@ exports.useItem = async (req, res, next) => {
         level:      user.level,
         rank:       user.rank,
         streakGels: user.streakGels,
-        inventory:  user.inventory,
+        inventory:  finalUser.inventory,
       },
     });
   } catch (err) {

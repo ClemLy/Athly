@@ -120,6 +120,33 @@ describe("Système Inventaire & Coffres Athly — V2", () => {
       const res = await request(app).post('/api/inventory/chest/open');
       expect(res.statusCode).toBe(401);
     });
+
+    it('🔒 Anti double-spend : 5 ouvertures simultanées avec 1 seule clé → 1 seul succès', async () => {
+      await User.updateOne(
+        { _id: user.userId },
+        { level: 11, inventory: [{ itemType: 'CHEST_KEY', rarity: 'common', quantity: 1 }] },
+      );
+
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          request(app)
+            .post('/api/inventory/chest/open')
+            .set('Authorization', `Bearer ${user.token}`),
+        ),
+      );
+
+      const successes = results.filter((r) => r.statusCode === 200);
+      const rejected  = results.filter((r) => r.statusCode === 400);
+      expect(successes).toHaveLength(1);
+      expect(rejected).toHaveLength(4);
+
+      // La clé est bien consommée une seule fois, un seul item a été crédité
+      const updatedUser = await User.findById(user.userId);
+      const chestKey = updatedUser.inventory.find((i) => i.itemType === 'CHEST_KEY');
+      expect(chestKey).toBeUndefined();
+      const totalItems = updatedUser.inventory.reduce((sum, i) => sum + i.quantity, 0);
+      expect(totalItems).toBe(1);
+    });
   });
 
   // ───────────────────────────────────────────────────────────────────────────

@@ -42,24 +42,15 @@ jobs:
   # Lint ESLint + vérification syntaxique + suite de tests Jest/Supertest
   # ────────────────────────────────────────────────────────────────────────────
   backend-validation:
-    name: "Backend — Lint & Tests"
+    name: "Backend — Lint, Audit & Tests"
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    # Base de données disponible pendant tous les steps du job
-    services:
-      mongodb:
-        image: mongo:7
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --eval 'db.adminCommand({ ping: 1 })' --quiet"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --health-start-period 20s
+    # Plus besoin de service MongoDB : la suite Jest démarre sa propre
+    # instance en mémoire (mongodb-memory-server) — environnement 100% isolé,
+    # identique en CI et en local.
 
     # Tous les `run:` s'exécutent dans back/ par défaut
     defaults:
@@ -88,13 +79,18 @@ jobs:
       - name: Syntax check — node --check
         run: node --check server.js
 
-      # ── Tests ─────────────────────────────────────────────────────────────
+      # ── Sécurité des dépendances ──────────────────────────────────────────
+      # Bloque le merge si une dépendance DE PRODUCTION a une vulnérabilité
+      # high/critical. Les devDependencies (outillage) ne bloquent pas.
+      - name: Security audit — npm audit (prod, high+)
+        run: npm audit --omit=dev --audit-level=high
+
+      # ── Tests (MongoDB en mémoire via jest globalSetup) ───────────────────
       - name: Run test suite
         run: npm test
         env:
           NODE_ENV: test
           PORT: 5000
-          MONGO_URI: mongodb://localhost:27017/athly-ci
           # Utilise le secret GitHub si configuré, sinon une valeur de repli CI-only
           JWT_SECRET: ${{ secrets.JWT_SECRET || 'ci-test-secret-do-not-use-in-prod' }}
 
@@ -130,6 +126,10 @@ jobs:
 
       - name: Install dependencies (--legacy-peer-deps)
         run: npm ci --legacy-peer-deps
+
+      # ── Sécurité des dépendances ──────────────────────────────────────────
+      - name: Security audit — npm audit (prod, high+)
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Build PWA — expo export --platform web
         run: npm run build:web
