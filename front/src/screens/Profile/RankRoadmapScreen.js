@@ -44,6 +44,7 @@ const RANKS = [
     perks: [
       'Cadre Bronze débloqué (Niv. 11)',
       'Forme Hexagone débloquée (Niv. 11)',
+      'Inventaire débloqué : coffres à ouvrir en cumulant tes séances',
     ],
     icon: 'ribbon',
   },

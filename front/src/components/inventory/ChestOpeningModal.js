@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Animated, Easing } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { ITEM_CATALOG, RARITY_META } from '../../services/inventory.service';
 import BirthdayConfetti from '../profile/BirthdayConfetti';
@@ -103,13 +104,11 @@ export default function ChestOpeningModal({ visible, drawnItem, onClose }) {
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flash, { opacity: flash }]} />
 
         {phase !== 'reveal' ? (
-          <Animated.Text
-            style={[styles.chest, {
-              transform: [{ translateX: shake }, { scale: chestScale }],
-            }]}
+          <Animated.View
+            style={{ transform: [{ translateX: shake }, { scale: chestScale }] }}
           >
-            📦
-          </Animated.Text>
+            <Ionicons name="cube" size={104} color={Colors.primary} />
+          </Animated.View>
         ) : (
           <View style={styles.revealWrap}>
             {/* Halo pulsé à la couleur de la rareté */}
@@ -119,8 +118,8 @@ export default function ChestOpeningModal({ visible, drawnItem, onClose }) {
                 opacity: glow.interpolate({ inputRange: [0, 1], outputRange: [0.06, 0.22] }),
               }]}
             />
-            <Animated.View style={{ transform: [{ scale: itemScale }, { rotate: spinDeg }], alignItems: 'center' }}>
-              <Text style={styles.itemEmoji}>{item?.emoji ?? '❔'}</Text>
+            <Animated.View style={[styles.itemIconWrap, { transform: [{ scale: itemScale }, { rotate: spinDeg }] }]}>
+              <Ionicons name={item?.icon ?? 'help-circle-outline'} size={72} color={rarity?.color ?? Colors.textPrimary} />
             </Animated.View>
 
             <Text style={[styles.rarityLabel, { color: rarity?.color ?? Colors.textSecondary }]}>
@@ -152,7 +151,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   flash: { backgroundColor: '#FFFFFF' },
-  chest: { fontSize: 96 },
 
   revealWrap: { alignItems: 'center', width: '100%' },
   halo: {
@@ -162,7 +160,7 @@ const styles = StyleSheet.create({
     height:       260,
     borderRadius: 130,
   },
-  itemEmoji: { fontSize: 84, marginBottom: 18 },
+  itemIconWrap: { marginBottom: 18 },
   rarityLabel: {
     fontSize:      13,
     fontWeight:    '800',

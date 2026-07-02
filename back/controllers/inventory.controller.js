@@ -3,6 +3,7 @@
 const User              = require('../models/User');
 const { drawChestItem } = require('../services/chest.service');
 const { consumeItemAtomic, addItemAtomic, purgeEmptyEntries } = require('../services/inventory.service');
+const { getRankForLevel } = require('../utils/levelHelpers');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -13,25 +14,6 @@ function createError(message, statusCode = 400) {
 }
 
 const MIN_LEVEL_FOR_CHEST = 11;
-
-// Correspondance niveau → rang (ordre décroissant : premier match gagné)
-const RANK_THRESHOLDS = [
-  { min: 200, rank: 'ATHLY GOD'    },
-  { min: 171, rank: 'Légende'      },
-  { min: 141, rank: 'Grand Maître' },
-  { min: 111, rank: 'Maître'       },
-  { min:  91, rank: 'Élite'        },
-  { min:  71, rank: 'Warrior'      },
-  { min:  51, rank: 'Compétiteur'  },
-  { min:  31, rank: 'Athlète'      },
-  { min:  11, rank: 'Initié'       },
-  { min:   1, rank: 'Novice'       },
-];
-
-function getRankForLevel(level) {
-  const match = RANK_THRESHOLDS.find((t) => level >= t.min);
-  return match ? match.rank : 'Novice';
-}
 
 // Effets des consommables — chaque fonction modifie user en place
 // Note : DOUBLE/TRIPLE/QUINTUPLE_XP donnent un XP instantané.

@@ -7,7 +7,7 @@ const User        = require('../models/User');
 const Workout     = require('../models/Workout');
 const { addUniqueItemOnce } = require('../services/inventory.service');
 const { checkAndUnlockAchievements } = require('./reward.controller');
-const { levelFromXP } = require('../utils/levelHelpers');
+const { levelFromXP, getRankForLevel } = require('../utils/levelHelpers');
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -113,7 +113,10 @@ async function grantGroupXpBonus(memberId, bonusXp) {
   if (!updated) return;
   const newLevel = levelFromXP(updated.xp);
   if (newLevel !== updated.level) {
-    await User.updateOne({ _id: memberId }, { $set: { level: newLevel } });
+    await User.updateOne(
+      { _id: memberId },
+      { $set: { level: newLevel, rank: getRankForLevel(newLevel) } },
+    );
   }
 }
 

@@ -248,13 +248,23 @@ export default function ProfileScreen({ navigation }) {
               onPress={() => navigation && navigation.navigate('TrophyRoom')}
               accentColor={isElite ? rank.color : null}
             />
-            <QuickBtn
-              icon="cube-outline"
-              label="Sac"
-              onPress={() => navigation && navigation.navigate('Inventory')}
-              accentColor={isElite ? rank.color : null}
-            />
           </View>
+
+          {/* ── Inventaire (bannière pleine largeur — trop à l'étroit dans quickActions) ── */}
+          <TouchableOpacity
+            style={styles.inventoryBanner}
+            onPress={() => navigation && navigation.navigate('Inventory')}
+            activeOpacity={0.85}
+          >
+            <View style={[styles.inventoryIconBox, isElite && { backgroundColor: `${rank.color}20`, borderColor: `${rank.color}45` }]}>
+              <Ionicons name="cube" size={20} color={isElite ? rank.color : Colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.inventoryTitle}>Inventaire</Text>
+              <Text style={styles.inventorySub}>Coffres, objets & récompenses</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.chevron} />
+          </TouchableOpacity>
 
           {/* ── Vitrine de trophées ── */}
           <View ref={vitrineRef} onLayout={onVitrineLayout} collapsable={false}>
@@ -393,6 +403,31 @@ const styles = StyleSheet.create({
     borderColor: Colors.glassBorder,
   },
   quickBtnText: { color: Colors.textSecondary, fontSize: 12, fontWeight: '700' },
+
+  inventoryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 10,
+    backgroundColor: Colors.glassBg,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+  },
+  inventoryIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: 'rgba(254,116,57,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(254,116,57,0.30)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  inventoryTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: '700' },
+  inventorySub:   { color: Colors.textMuted, fontSize: 11.5, marginTop: 1 },
 
   section: { marginTop: 26 },
   sectionRow: {

@@ -104,7 +104,7 @@ export default function InventoryScreen({ navigation }) {
         <Text style={styles.sectionLabel}>MES OBJETS</Text>
         {items.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyEmoji}>🎒</Text>
+            <Ionicons name="bag-outline" size={36} color={Colors.textMuted} style={{ marginBottom: 12 }} />
             <Text style={styles.emptyTxt}>
               Ton sac est vide.{'\n'}Enchaîne les séances pour gagner des coffres !
             </Text>
@@ -154,9 +154,9 @@ function ChestCard({ count, locked, busy, onOpen }) {
 
   return (
     <View style={[styles.chestCard, locked && styles.chestCardLocked]}>
-      <Animated.Text style={[styles.chestEmoji, { transform: [{ translateY: float }] }]}>
-        {locked ? '🔒' : '📦'}
-      </Animated.Text>
+      <Animated.View style={[styles.chestIconWrap, { transform: [{ translateY: float }] }]}>
+        <Ionicons name={locked ? 'lock-closed' : 'cube'} size={34} color={locked ? Colors.textMuted : Colors.primary} />
+      </Animated.View>
 
       <View style={styles.chestInfo}>
         <Text style={styles.chestTitle}>
@@ -213,7 +213,7 @@ function StaggeredItemCard({ entry, index, busy, onUse }) {
       }]}
     >
       <View style={[styles.itemIconBox, { backgroundColor: `${rarity.color}18` }]}>
-        <Text style={styles.itemEmoji}>{meta.emoji ?? '❔'}</Text>
+        <Ionicons name={meta.icon ?? 'help-circle-outline'} size={24} color={rarity.color} />
       </View>
 
       <View style={styles.itemInfo}>
@@ -274,7 +274,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderColor:     'rgba(255,255,255,0.09)',
   },
-  chestEmoji: { fontSize: 40, marginRight: 14 },
+  chestIconWrap: {
+    width: 60, height: 60, borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    justifyContent: 'center', alignItems: 'center', marginRight: 14,
+  },
   chestInfo:  { flex: 1, marginRight: 10 },
   chestTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: '800', marginBottom: 3 },
   chestSub:   { color: Colors.textSecondary, fontSize: 12, lineHeight: 17 },
@@ -303,7 +307,6 @@ const styles = StyleSheet.create({
     width: 52, height: 52, borderRadius: 14,
     justifyContent: 'center', alignItems: 'center', marginRight: 12,
   },
-  itemEmoji: { fontSize: 26 },
   itemInfo:  { flex: 1, marginRight: 10 },
   itemNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   itemName:  { color: Colors.textPrimary, fontSize: 14, fontWeight: '700' },
@@ -321,6 +324,5 @@ const styles = StyleSheet.create({
 
   // ── Vide ──
   emptyBox: { alignItems: 'center', paddingVertical: 40 },
-  emptyEmoji: { fontSize: 40, marginBottom: 12 },
   emptyTxt: { color: Colors.textMuted, fontSize: 13, lineHeight: 20, textAlign: 'center' },
 });
