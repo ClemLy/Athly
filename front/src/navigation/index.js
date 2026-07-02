@@ -17,14 +17,22 @@ import { CustomExercisesProvider } from '../context/CustomExercisesContext';
 import { QuestProvider } from '../context/QuestContext';
 import { UserProvider } from '../context/UserContext';
 import { TutorialProvider } from '../context/TutorialContext';
-import { setupNotificationChannels } from '../services/notificationService';
-import BirthdayCelebration from '../components/profile/BirthdayCelebration';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setupNotificationChannels, ensureDailyRemindersScheduled } from '../services/notificationService';
+
+const NOTIF_ENABLED_KEY = 'athly:notif:enabled:v1';
 
 export default function AppNavigator() {
   const { userToken, isLoading } = useAuth();
 
   useEffect(() => {
     setupNotificationChannels();
+    (async () => {
+      try {
+        const enabled = await AsyncStorage.getItem(NOTIF_ENABLED_KEY);
+        if (enabled === 'true') await ensureDailyRemindersScheduled();
+      } catch (_) {}
+    })();
   }, []);
 
   if (isLoading) {
