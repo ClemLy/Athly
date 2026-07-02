@@ -16,7 +16,12 @@ const userSchemas = {
     niveauSportif: Joi.string().valid("Débutant", "Intermédiaire", "Avancé"),
     objectif: Joi.string().valid("prise de masse", "perte de poids", "entretien", "force"),
     rythme: Joi.number().min(1).max(7).allow(null)
-  })
+  }),
+
+  updateFrame: Joi.object({
+    shapeId: Joi.string().max(40).required(),
+    colorId: Joi.string().max(40).required(),
+  }),
 };
 
 module.exports = userSchemas;

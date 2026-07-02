@@ -128,6 +128,16 @@ const UserSchema = new mongoose.Schema(
     // ── Trophées / Succès V2 ─────────────────────────────────────────────────
     // Tableau des trophées débloqués. Le catalogue complet vit dans reward.controller.js.
     achievements: { type: [AchievementEntrySchema], default: [] },
+
+    // ── Cadre de profil équipé ─────────────────────────────────────────────────
+    // Synchronisé depuis le choix local (useAvatarFrame.js) pour que les amis
+    // voient le même cadre sur le profil public. shapeId/colorId sont des clés
+    // libres du catalogue front (BorderPicker.js) — pas d'enum ici pour ne pas
+    // dupliquer/figer ce catalogue côté backend.
+    equippedFrame: {
+      shapeId: { type: String, default: 'circle', maxlength: 40, trim: true },
+      colorId: { type: String, default: 'none',   maxlength: 40, trim: true },
+    },
   },
   { timestamps: true }
 );
