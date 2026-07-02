@@ -33,6 +33,7 @@ import {
   scheduleDailyReminder,
   cancelDailyReminder,
 } from '../../services/notificationService';
+import { syncBackendLevel } from '../../services/debug.service';
 
 const UNIT_WEIGHT_KEY   = 'athly:unit:weight:v1';
 const UNIT_DIST_KEY     = 'athly:unit:distance:v1';
@@ -49,7 +50,7 @@ const DEV_TAP_TARGET = 10;
 
 export default function SettingsScreen({ navigation }) {
   const { signOut }                       = useAuth();
-  const { setUser }                       = useUser();
+  const { setUser, refetch: refetchUser } = useUser();
   const { showToast }                     = useToast();
   const { totalXP, sessionLogs, activityLogs, refresh, clearAll: clearWorkoutLogs } = useWorkoutLogs();
   const { clearAll: clearSavedWorkouts }  = useSavedWorkouts();
@@ -293,6 +294,26 @@ export default function SettingsScreen({ navigation }) {
     showFeedback('Overrides trophées réinitialisés ✓');
   };
 
+  // Le niveau simulé ci-dessus (debugSetLevel…) reste 100% local (AsyncStorage) —
+  // il ne débloque pas les fonctionnalités gated côté serveur (coffres, niveau 11+).
+  // Ce bouton pousse le niveau affiché vers le user.level backend pour tester
+  // ces features sans dizaines de vraies séances. Bloqué en production (404).
+  const handleSyncBackendLevel = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await syncBackendLevel(level);
+      await refetchUser();
+      showFeedback(`Backend synchronisé : niveau ${res.level} (${res.rank}) ✓`);
+    } catch (e) {
+      const msg = e?.status === 404
+        ? 'Indisponible en production.'
+        : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [level, refetchUser, showFeedback]);
+
   const handleLockDevSection = useCallback(async () => {
     setDevVisible(false);
     setTapCount(0);
@@ -488,6 +509,21 @@ export default function SettingsScreen({ navigation }) {
                   <DevBtn label="+ XP" onPress={handleAddCustomXP} disabled={simLoading} />
                 </View>
                 <Text style={styles.devHint}>XP requis Niv.{level + 1} : {xpForLevel(level + 1).toLocaleString('fr-FR')}</Text>
+
+                {/* ── SYNC BACKEND ── */}
+                <DevSectionTitle title="SYNC BACKEND" />
+                <Text style={styles.devHint}>
+                  Le niveau ci-dessus est local uniquement — les coffres et fonctionnalités
+                  serveur (niveau 11+) lisent le niveau backend. Synchronise pour les tester.
+                </Text>
+                <View style={styles.devBtnRow}>
+                  <DevBtn
+                    label={`Pousser niveau ${level} vers le backend`}
+                    onPress={handleSyncBackendLevel}
+                    disabled={simLoading}
+                    flex
+                  />
+                </View>
 
                 {/* ── SIMULATION ── */}
                 <DevSectionTitle title="SIMULATION" />

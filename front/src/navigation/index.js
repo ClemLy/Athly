@@ -19,6 +19,7 @@ import { UserProvider } from '../context/UserContext';
 import { TutorialProvider } from '../context/TutorialContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setupNotificationChannels, ensureDailyRemindersScheduled } from '../services/notificationService';
+import BirthdayCelebration from '../components/profile/BirthdayCelebration';
 
 const NOTIF_ENABLED_KEY = 'athly:notif:enabled:v1';
 

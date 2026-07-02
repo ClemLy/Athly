@@ -5,6 +5,7 @@ import EditProfileScreen  from '../screens/Profile/EditProfileScreen';
 import RankRoadmapScreen  from '../screens/Profile/RankRoadmapScreen';
 import TrophyRoomScreen   from '../screens/Profile/TrophyRoomScreen';
 import SettingsScreen     from '../screens/Profile/SettingsScreen';
+import InventoryScreen    from '../screens/Profile/InventoryScreen';
 import { Colors } from '../constants/theme';
 
 const Stack = createStackNavigator();
@@ -56,6 +57,11 @@ export default function ProfileStack() {
         name="Settings"
         component={SettingsScreen}
         options={{ title: 'Réglages' }}
+      />
+      <Stack.Screen
+        name="Inventory"
+        component={InventoryScreen}
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );

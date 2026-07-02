@@ -5,6 +5,9 @@ const StreakGroup = require('../models/StreakGroup');
 const Friendship  = require('../models/Friendship');
 const User        = require('../models/User');
 const Workout     = require('../models/Workout');
+const { addUniqueItemOnce } = require('../services/inventory.service');
+const { checkAndUnlockAchievements } = require('./reward.controller');
+const { levelFromXP, getRankForLevel } = require('../utils/levelHelpers');
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -58,6 +61,10 @@ function computeFriendshipLevel(xp) {
  * Ajoute `xpGain` au document Friendship entre userId1 et userId2 (accepted).
  * Met à jour le niveau d'amitié si un seuil est franchi.
  * Si aucune amitié acceptée n'existe, ignore silencieusement.
+ *
+ * Passage au niveau 5 (Rareté Unique) : injecte le cadre cosmétique
+ * PROFILE_FRAME_BLOOD_BOND (hors coffres, une seule fois) dans l'inventaire
+ * des deux amis et déclenche le déblocage du trophée FRIENDSHIP_LEVEL_5.
  */
 async function addFriendshipXp(userId1, userId2, xpGain) {
   const friendship = await Friendship.findOne({
@@ -69,9 +76,48 @@ async function addFriendshipXp(userId1, userId2, xpGain) {
   });
   if (!friendship) return;
 
+  const previousLevel = friendship.friendshipLevel;
   friendship.friendshipXp    += xpGain;
   friendship.friendshipLevel  = computeFriendshipLevel(friendship.friendshipXp);
   await friendship.save();
+
+  if (previousLevel < 5 && friendship.friendshipLevel === 5) {
+    await Promise.all([
+      addUniqueItemOnce(userId1, 'PROFILE_FRAME_BLOOD_BOND', 'unique'),
+      addUniqueItemOnce(userId2, 'PROFILE_FRAME_BLOOD_BOND', 'unique'),
+    ]);
+    await Promise.all([
+      checkAndUnlockAchievements(String(userId1)),
+      checkAndUnlockAchievements(String(userId2)),
+    ]);
+  }
+}
+
+// ── Bonus XP de groupe (Brique IV) ────────────────────────────────────────────
+// Multiplicateur croissant avec la taille du groupe : x1.25 par membre
+// au-delà du premier (2 → x1.25, 5 → x2.0), appliqué à un bonus de base.
+const GROUP_BASE_BONUS_XP = 40;
+
+function computeGroupXpBonus(memberCount) {
+  const multiplier = 1 + 0.25 * (memberCount - 1);
+  return { multiplier, bonusXp: Math.round(GROUP_BASE_BONUS_XP * multiplier) };
+}
+
+/** Crédite atomiquement le bonus XP à un membre et recale son niveau/rang. */
+async function grantGroupXpBonus(memberId, bonusXp) {
+  const updated = await User.findOneAndUpdate(
+    { _id: memberId },
+    { $inc: { xp: bonusXp } },
+    { returnDocument: 'after' },
+  );
+  if (!updated) return;
+  const newLevel = levelFromXP(updated.xp);
+  if (newLevel !== updated.level) {
+    await User.updateOne(
+      { _id: memberId },
+      { $set: { level: newLevel, rank: getRankForLevel(newLevel) } },
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -394,6 +440,10 @@ exports.checkAndUpdateGroupStreaks = async (req, res, next) => {
       }
     }
 
+    // Bonus XP utilisateur : multiplicateur croissant avec la taille du groupe
+    const { multiplier, bonusXp } = computeGroupXpBonus(memberIds.length);
+    await Promise.all(memberIds.map((id) => grantGroupXpBonus(id, bonusXp)));
+
     return res.status(200).json({
       success:       true,
       allValidated:  true,
@@ -401,6 +451,7 @@ exports.checkAndUpdateGroupStreaks = async (req, res, next) => {
       currentStreak: group.currentStreak,
       xpGain,
       xpUpdates,
+      groupBonus: { multiplier, bonusXp, memberCount: memberIds.length },
     });
   } catch (err) {
     next(err);
@@ -424,15 +475,22 @@ exports.getMyGroup = async (req, res, next) => {
       .populate('members',       MEMBER_PUBLIC_FIELDS)
       .populate('pendingInvites', 'pseudo level rank');
 
+    // Invitations de groupe reçues (groupes où je suis en pendingInvites),
+    // pour que l'invité puisse accepter/refuser depuis l'app.
+    const invites = await StreakGroup.find({ pendingInvites: myId })
+      .populate('members', MEMBER_PUBLIC_FIELDS)
+      .select('name currentStreak members');
+
     if (!group) {
       return res.status(200).json({
         success: true,
         group:   null,
+        invites,
         message: "Vous ne faites partie d'aucun groupe.",
       });
     }
 
-    return res.status(200).json({ success: true, group });
+    return res.status(200).json({ success: true, group, invites });
   } catch (err) {
     next(err);
   }
