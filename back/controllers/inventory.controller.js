@@ -33,6 +33,74 @@ function getRankForLevel(level) {
   return match ? match.rank : 'Novice';
 }
 
+/**
+ * Consomme atomiquement 1 unité d'un item.
+ *
+ * Anti race-condition (double-spend) : le filtre conditionnel garantit que le
+ * décrément n'a lieu que si la quantité est encore >= 1 AU MOMENT de l'écriture.
+ * Deux requêtes simultanées sur la dernière unité : une seule matche le filtre,
+ * l'autre reçoit null — impossible de dépenser deux fois le même objet.
+ *
+ * @returns Le document User APRÈS décrément, ou null si non possédé
+ *          (ou si extraFilter ne matche pas).
+ */
+async function consumeItemAtomic(userId, itemType, extraFilter = {}) {
+  return User.findOneAndUpdate(
+    {
+      _id: userId,
+      inventory: { $elemMatch: { itemType, quantity: { $gte: 1 } } },
+      ...extraFilter,
+    },
+    { $inc: { 'inventory.$[elem].quantity': -1 } },
+    {
+      returnDocument: 'after',
+      arrayFilters: [{ 'elem.itemType': itemType }],
+    },
+  );
+}
+
+/**
+ * Ajoute atomiquement 1 unité d'un item ($inc si l'entrée existe, sinon $push
+ * gardé par $ne pour éviter un double-push concurrent).
+ * @returns Le document User APRÈS ajout.
+ */
+async function addItemAtomic(userId, itemType, rarity) {
+  const incremented = await User.findOneAndUpdate(
+    { _id: userId, 'inventory.itemType': itemType },
+    { $inc: { 'inventory.$.quantity': 1 } },
+    { returnDocument: 'after' },
+  );
+  if (incremented) return incremented;
+
+  const pushed = await User.findOneAndUpdate(
+    { _id: userId, 'inventory.itemType': { $ne: itemType } },
+    { $push: { inventory: { itemType, rarity, quantity: 1 } } },
+    { returnDocument: 'after' },
+  );
+  if (pushed) return pushed;
+
+  // Course perdue contre un $push concurrent du même itemType : on retombe
+  // sur le $inc, qui matche forcément maintenant.
+  return User.findOneAndUpdate(
+    { _id: userId, 'inventory.itemType': itemType },
+    { $inc: { 'inventory.$.quantity': 1 } },
+    { returnDocument: 'after' },
+  );
+}
+
+/**
+ * Purge les entrées d'inventaire tombées à 0 (comportement historique :
+ * une entrée épuisée disparaît de l'inventaire).
+ * @returns Le document User APRÈS purge.
+ */
+async function purgeEmptyEntries(userId) {
+  return User.findOneAndUpdate(
+    { _id: userId },
+    { $pull: { inventory: { quantity: { $lte: 0 } } } },
+    { returnDocument: 'after' },
+  );
+}
+
 // Effets des consommables — chaque fonction modifie user en place
 // Note : DOUBLE/TRIPLE/QUINTUPLE_XP donnent un XP instantané.
 // Un système de boost temporaire (multiplicateur) est prévu dans une brique future.
