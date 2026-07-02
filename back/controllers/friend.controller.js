@@ -257,3 +257,162 @@ exports.getPendingRequests = async (req, res, next) => {
     next(err);
   }
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// searchUsers  GET /api/friends/search?q=
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Recherche d'utilisateurs par pseudo (insensible à la casse).
+ * Chaque résultat est annoté du statut de relation avec l'utilisateur
+ * connecté : none | pending_sent | pending_received | accepted.
+ * La regex est échappée : aucune injection de pattern possible.
+ */
+exports.searchUsers = async (req, res, next) => {
+  try {
+    const myId = req.user.id;
+    const q    = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+
+    if (q.length < 2) {
+      return next(createError('La recherche doit contenir au moins 2 caractères.', 400));
+    }
+
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const users = await User.find({
+      _id:    { $ne: myId },
+      pseudo: { $regex: escaped, $options: 'i' },
+    })
+      .select(FRIEND_PUBLIC_FIELDS)
+      .limit(20);
+
+    // Annotation du statut de relation en une seule requête
+    const ids = users.map((u) => u._id);
+    const relations = await Friendship.find({
+      $or: [
+        { requester: myId, recipient: { $in: ids } },
+        { recipient: myId, requester: { $in: ids } },
+      ],
+    });
+
+    const results = users.map((u) => {
+      const rel = relations.find(
+        (r) => r.requester.toString() === u._id.toString() || r.recipient.toString() === u._id.toString(),
+      );
+      let relationStatus = 'none';
+      let requestId      = null;
+      if (rel) {
+        requestId = rel._id;
+        if (rel.status === 'accepted')      relationStatus = 'accepted';
+        else if (rel.status === 'pending') {
+          relationStatus = rel.requester.toString() === myId ? 'pending_sent' : 'pending_received';
+        }
+      }
+      return { user: u, relationStatus, requestId };
+    });
+
+    return res.status(200).json({ success: true, count: results.length, results });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getFriendProfile  GET /api/friends/profile/:friendId
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Profil public d'un AMI ACCEPTÉ uniquement : identité de jeu, progression,
+ * trophées débloqués, records d'exercices (top 5 par poids), niveau d'amitié.
+ * 403 si la relation n'est pas acceptée — pas de fuite de données entre inconnus.
+ */
+exports.getFriendProfile = async (req, res, next) => {
+  try {
+    const myId         = req.user.id;
+    const { friendId } = req.params;
+
+    if (!isValidId(friendId)) return next(createError('friendId invalide.', 400));
+
+    const friendship = await Friendship.findOne({
+      $or: [
+        { requester: myId, recipient: friendId },
+        { requester: friendId, recipient: myId },
+      ],
+      status: 'accepted',
+    });
+    if (!friendship) {
+      return next(createError("Vous devez être amis pour consulter ce profil.", 403));
+    }
+
+    const friend = await User.findById(friendId)
+      .select('pseudo level rank xp achievements streakGels totalWorkoutMinutes createdAt');
+    if (!friend) return next(createError('Utilisateur introuvable.', 404));
+
+    // Top 5 des records par poids max soulevé
+    const ExerciseRecord = require('../models/ExerciseRecord');
+    const records = await ExerciseRecord.aggregate([
+      { $match: { user: new mongoose.Types.ObjectId(friendId) } },
+      { $unwind: '$series' },
+      { $group: {
+        _id:       '$exerciceNom',
+        maxPoids:  { $max: '$series.poids' },
+        maxReps:   { $max: '$series.repetitions' },
+      } },
+      { $sort: { maxPoids: -1 } },
+      { $limit: 5 },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      profile: {
+        user:            friend,
+        friendshipLevel: friendship.friendshipLevel,
+        friendshipXp:    friendship.friendshipXp,
+        achievementsCount: friend.achievements.length,
+        records: records.map((r) => ({
+          exercice: r._id,
+          maxPoids: r.maxPoids,
+          maxReps:  r.maxReps,
+        })),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getLeaderboard  GET /api/friends/leaderboard
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Classement dynamique : l'utilisateur + tous ses amis acceptés,
+ * triés par XP décroissant, avec le rang de chacun.
+ */
+exports.getLeaderboard = async (req, res, next) => {
+  try {
+    const myId = req.user.id;
+
+    const friendships = await Friendship.find({
+      $or: [{ requester: myId }, { recipient: myId }],
+      status: 'accepted',
+    });
+
+    const friendIds = friendships.map((f) =>
+      f.requester.toString() === myId ? f.recipient : f.requester,
+    );
+
+    const competitors = await User.find({ _id: { $in: [...friendIds, myId] } })
+      .select(FRIEND_PUBLIC_FIELDS)
+      .sort({ xp: -1 });
+
+    const leaderboard = competitors.map((u, index) => ({
+      position: index + 1,
+      user:     u,
+      isMe:     u._id.toString() === myId,
+    }));
+
+    return res.status(200).json({ success: true, count: leaderboard.length, leaderboard });
+  } catch (err) {
+    next(err);
+  }
+};

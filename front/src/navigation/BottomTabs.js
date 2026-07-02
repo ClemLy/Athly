@@ -3,6 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import HomeScreen from '../screens/Home/HomeScreen';
 import WorkoutStack from './WorkoutStack';
 import StatsScreen from '../screens/Stats/StatsScreen';
+import SocialStack from './SocialStack';
 import ProfileStack from './ProfileStack';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/theme';
@@ -22,6 +23,7 @@ export default function BottomTabs() {
                 let icon = 'home';
                 if (route.name === 'Séances') icon = 'barbell';
                 if (route.name === 'Stats') icon = 'stats-chart';
+                if (route.name === 'SocialTab') icon = 'people';
                 if (route.name === 'ProfileTab') icon = 'person';
                 return <Ionicons name={icon} size={22} color={color} />;
             },
@@ -30,8 +32,13 @@ export default function BottomTabs() {
         <Tab.Screen name="Accueil" component={HomeScreen} />
         <Tab.Screen name="Séances" component={WorkoutStack} />
         <Tab.Screen name="Stats" component={StatsScreen} />
-        <Tab.Screen 
-            name="ProfileTab" 
+        <Tab.Screen
+            name="SocialTab"
+            component={SocialStack}
+            options={{ tabBarLabel: 'Social' }}
+        />
+        <Tab.Screen
+            name="ProfileTab"
             component={ProfileStack}
             options={{
                 tabBarLabel: 'Profil',

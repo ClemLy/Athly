@@ -248,6 +248,12 @@ export default function ProfileScreen({ navigation }) {
               onPress={() => navigation && navigation.navigate('TrophyRoom')}
               accentColor={isElite ? rank.color : null}
             />
+            <QuickBtn
+              icon="cube-outline"
+              label="Sac"
+              onPress={() => navigation && navigation.navigate('Inventory')}
+              accentColor={isElite ? rank.color : null}
+            />
           </View>
 
           {/* ── Vitrine de trophées ── */}

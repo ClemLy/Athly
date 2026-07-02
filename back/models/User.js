@@ -25,6 +25,7 @@ const InventoryItemSchema = new mongoose.Schema(
         "QUINTUPLE_XP",        // Boost Quintuple XP
         "LEVEL_COUPON",        // Coupon de niveau     : +1 level
         "CHEST_KEY",           // Clé de coffre        : ouvre un coffre
+        "PROFILE_FRAME_BLOOD_BOND", // Cadre cosmétique Unique — niveau d'amitié 5, hors coffres
       ],
     },
     rarity: {
