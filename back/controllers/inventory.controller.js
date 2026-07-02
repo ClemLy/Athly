@@ -3,7 +3,7 @@
 const User              = require('../models/User');
 const { drawChestItem } = require('../services/chest.service');
 const { consumeItemAtomic, addItemAtomic, purgeEmptyEntries } = require('../services/inventory.service');
-const { getRankForLevel } = require('../utils/levelHelpers');
+const { levelFromXP, getRankForLevel } = require('../utils/levelHelpers');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -15,19 +15,64 @@ function createError(message, statusCode = 400) {
 
 const MIN_LEVEL_FOR_CHEST = 11;
 
-// Effets des consommables — chaque fonction modifie user en place
-// Note : DOUBLE/TRIPLE/QUINTUPLE_XP donnent un XP instantané.
-// Un système de boost temporaire (multiplicateur) est prévu dans une brique future.
+/**
+ * Crédite atomiquement `amount` XP et recalcule level/rank si un palier est
+ * franchi. Deux écritures ($inc puis $set conditionnel) mais aucune lecture
+ * intermédiaire mutable : pas de fenêtre de perte d'XP entre deux consommations
+ * simultanées (contrairement à un read → mutate en mémoire → save()).
+ */
+async function applyXpGain(userId, amount) {
+  const updated = await User.findOneAndUpdate(
+    { _id: userId },
+    { $inc: { xp: amount } },
+    { returnDocument: 'after' },
+  );
+  if (!updated) return null;
+
+  const newLevel = levelFromXP(updated.xp);
+  if (newLevel === updated.level) return updated;
+
+  return User.findOneAndUpdate(
+    { _id: userId },
+    { $set: { level: newLevel, rank: getRankForLevel(newLevel) } },
+    { returnDocument: 'after' },
+  );
+}
+
+// Effets des consommables — chaque effet est une opération atomique côté DB,
+// jamais un mutate-en-mémoire + save() (qui perdrait des écritures concurrentes
+// sur xp/streakGels si deux items sont utilisés au même instant).
 const ITEM_EFFECTS = {
-  ENERGY_DRINK:        (user) => { user.xp += 150; },
-  STREAK_FREEZE:       (user) => { user.streakGels = Math.min(user.streakGels + 1, 3); },
-  SUPER_STREAK_FREEZE: (user) => { user.streakGels = 3; },
-  DOUBLE_XP:           (user) => { user.xp += 200; },
-  TRIPLE_XP:           (user) => { user.xp += 300; },
-  QUINTUPLE_XP:        (user) => { user.xp += 500; },
-  LEVEL_COUPON: (user) => {
-    user.level += 1;
-    user.rank   = getRankForLevel(user.level);
+  ENERGY_DRINK:        (userId) => applyXpGain(userId, 150),
+  DOUBLE_XP:           (userId) => applyXpGain(userId, 200),
+  TRIPLE_XP:           (userId) => applyXpGain(userId, 300),
+  QUINTUPLE_XP:        (userId) => applyXpGain(userId, 500),
+
+  // Pipeline d'agrégation dans l'update : le plafond à 3 est calculé côté
+  // MongoDB en une seule écriture atomique (pas de read-then-clamp en JS).
+  STREAK_FREEZE: (userId) => User.findOneAndUpdate(
+    { _id: userId },
+    [{ $set: { streakGels: { $min: [{ $add: ['$streakGels', 1] }, 3] } } }],
+    { returnDocument: 'after', updatePipeline: true },
+  ),
+  SUPER_STREAK_FREEZE: (userId) => User.findOneAndUpdate(
+    { _id: userId },
+    { $set: { streakGels: 3 } },
+    { returnDocument: 'after' },
+  ),
+
+  LEVEL_COUPON: async (userId) => {
+    const updated = await User.findOneAndUpdate(
+      { _id: userId },
+      { $inc: { level: 1 } },
+      { returnDocument: 'after' },
+    );
+    if (!updated) return null;
+    return User.findOneAndUpdate(
+      { _id: userId },
+      { $set: { rank: getRankForLevel(updated.level) } },
+      { returnDocument: 'after' },
+    );
   },
 };
 
@@ -108,18 +153,17 @@ exports.useItem = async (req, res, next) => {
     }
 
     // Consommation atomique : même garde anti double-spend que openChest.
-    const user = await consumeItemAtomic(req.user.id, itemType);
+    const consumed = await consumeItemAtomic(req.user.id, itemType);
 
-    if (!user) {
+    if (!consumed) {
       const exists = await User.exists({ _id: req.user.id });
       if (!exists) return next(createError('Utilisateur introuvable.', 404));
       return next(createError('Vous ne possédez pas cet objet.', 400));
     }
 
-    // L'effet ne touche que des champs scalaires (xp, level, rank, streakGels) :
-    // save() n'écrit que ces chemins, sans réécrire l'inventaire déjà à jour.
-    ITEM_EFFECTS[itemType](user);
-    await user.save();
+    // Effet 100% atomique côté DB (xp/level/rank/streakGels) — voir ITEM_EFFECTS.
+    const user = await ITEM_EFFECTS[itemType](req.user.id);
+    if (!user) return next(createError('Utilisateur introuvable.', 404));
 
     const finalUser = await purgeEmptyEntries(req.user.id);
 

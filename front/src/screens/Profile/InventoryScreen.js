@@ -7,8 +7,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '../../constants/theme';
 import { useUser } from '../../context/UserContext';
+import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import { useToast } from '../../context/ToastContext';
 import { openChest, useItem, ITEM_CATALOG, RARITY_META } from '../../services/inventory.service';
+import { xpForLevel, xpToLevel } from '../../services/stats.service';
 import ChestOpeningModal from '../../components/inventory/ChestOpeningModal';
 
 const MIN_LEVEL_FOR_CHEST = 11;
@@ -20,6 +22,7 @@ const RARITY_ORDER = ['unique', 'legendary', 'epic', 'rare', 'common'];
 
 export default function InventoryScreen({ navigation }) {
   const { user, refetch } = useUser();
+  const { addBonusXp, totalXP } = useWorkoutLogs();
   const { showToast } = useToast();
 
   const [busy, setBusy]         = useState(false);
@@ -58,11 +61,27 @@ export default function InventoryScreen({ navigation }) {
   const handleUseItem = async (itemType) => {
     if (busy) return;
     setBusy(true);
+    const beforeXp    = user?.xp ?? 0;
+    const beforeLevel = user?.level ?? 1;
     try {
       const res = await useItem(itemType);
       if (res.success) {
         showToast(`${ITEM_CATALOG[itemType]?.name ?? itemType} utilisé ! ✨`, 'success');
         refetch();
+
+        // Le Profil affiche un niveau/XP calculé localement (logs de séances),
+        // distinct du user.xp backend. On pousse un log de synchronisation pour
+        // que l'usage d'un objet se reflète immédiatement sur le Profil/Accueil.
+        const xpGained = (res.user?.xp ?? beforeXp) - beforeXp;
+        const itemLabel = `Objet : ${ITEM_CATALOG[itemType]?.name ?? itemType}`;
+        if (xpGained > 0) {
+          addBonusXp(itemLabel, xpGained);
+        } else if ((res.user?.level ?? beforeLevel) > beforeLevel) {
+          // LEVEL_COUPON : pas de gain d'XP direct, on pousse localement de quoi
+          // franchir le prochain palier pour que le niveau affiché suive.
+          const needed = xpForLevel(xpToLevel(totalXP).level + 1) - totalXP;
+          if (needed > 0) addBonusXp(itemLabel, needed);
+        }
       }
     } catch (error) {
       if (error.isSessionExpired) return;

@@ -20,6 +20,7 @@ import { TutorialProvider } from '../context/TutorialContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setupNotificationChannels, ensureDailyRemindersScheduled } from '../services/notificationService';
 import BirthdayCelebration from '../components/profile/BirthdayCelebration';
+import LevelUpCelebration from '../components/profile/LevelUpCelebration';
 
 const NOTIF_ENABLED_KEY = 'athly:notif:enabled:v1';
 
@@ -60,6 +61,7 @@ export default function AppNavigator() {
                   {userToken === null ? <AuthStack /> : (
                     <>
                       <BirthdayCelebration />
+                      <LevelUpCelebration />
                       <BottomTabs />
                     </>
                   )}

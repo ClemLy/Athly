@@ -94,13 +94,32 @@ async function addFriendshipXp(userId1, userId2, xpGain) {
 }
 
 // ── Bonus XP de groupe (Brique IV) ────────────────────────────────────────────
-// Multiplicateur croissant avec la taille du groupe : x1.25 par membre
-// au-delà du premier (2 → x1.25, 5 → x2.0), appliqué à un bonus de base.
-const GROUP_BASE_BONUS_XP = 40;
+// Le multiplicateur cumule deux composantes, exposées séparément pour
+// affichage front (ex: "x1.98 = x1.35 taille × x1.47 régularité") :
+//   - Taille     : +35% par membre au-delà du premier (2 → x1.35, 5 → x2.40).
+//     Un groupe à 5 est bien plus dur à maintenir qu'à 2 (aléas du quotidien
+//     de 5 personnes) : le bonus doit le refléter, pas juste suivre linéairement.
+//   - Régularité : +8% par semaine de streak consécutive, plafonné à +60%
+//     (7j → x1.08, ~53j+ → x1.60) — récompense la constance sans devenir infini.
+const GROUP_BASE_BONUS_XP  = 50;
+const REGULARITY_STEP      = 0.08;
+const REGULARITY_MAX_BONUS = 0.6;
 
-function computeGroupXpBonus(memberCount) {
-  const multiplier = 1 + 0.25 * (memberCount - 1);
-  return { multiplier, bonusXp: Math.round(GROUP_BASE_BONUS_XP * multiplier) };
+function round2(n) {
+  return Math.round(n * 100) / 100;
+}
+
+function computeGroupXpBonus(memberCount, currentStreak = 0) {
+  const sizeMultiplier       = 1 + 0.35 * (memberCount - 1);
+  const regularityMultiplier = 1 + Math.min(REGULARITY_MAX_BONUS, REGULARITY_STEP * Math.floor(currentStreak / 7));
+  const multiplier           = sizeMultiplier * regularityMultiplier;
+
+  return {
+    sizeMultiplier:       round2(sizeMultiplier),
+    regularityMultiplier: round2(regularityMultiplier),
+    multiplier:           round2(multiplier),
+    bonusXp:              Math.round(GROUP_BASE_BONUS_XP * multiplier),
+  };
 }
 
 /** Crédite atomiquement le bonus XP à un membre et recale son niveau/rang. */
@@ -440,9 +459,9 @@ exports.checkAndUpdateGroupStreaks = async (req, res, next) => {
       }
     }
 
-    // Bonus XP utilisateur : multiplicateur croissant avec la taille du groupe
-    const { multiplier, bonusXp } = computeGroupXpBonus(memberIds.length);
-    await Promise.all(memberIds.map((id) => grantGroupXpBonus(id, bonusXp)));
+    // Bonus XP utilisateur : multiplicateur taille × régularité (streak fraîchement incrémenté)
+    const xpBonus = computeGroupXpBonus(memberIds.length, group.currentStreak);
+    await Promise.all(memberIds.map((id) => grantGroupXpBonus(id, xpBonus.bonusXp)));
 
     return res.status(200).json({
       success:       true,
@@ -451,7 +470,7 @@ exports.checkAndUpdateGroupStreaks = async (req, res, next) => {
       currentStreak: group.currentStreak,
       xpGain,
       xpUpdates,
-      groupBonus: { multiplier, bonusXp, memberCount: memberIds.length },
+      groupBonus: { ...xpBonus, memberCount: memberIds.length },
     });
   } catch (err) {
     next(err);
@@ -490,7 +509,57 @@ exports.getMyGroup = async (req, res, next) => {
       });
     }
 
-    return res.status(200).json({ success: true, group, invites });
+    // Multiplicateur courant (taille + régularité), affichable même sans
+    // attendre la prochaine validation — group est un document Mongoose,
+    // on construit la réponse à part pour ne pas le muter.
+    const xpBonus = computeGroupXpBonus(group.members.length, group.currentStreak);
+
+    return res.status(200).json({
+      success: true,
+      group:   { ...group.toObject(), xpBonus },
+      invites,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// leaveGroup  POST /api/groups/leave
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Quitte le groupe de streak actuel.
+ *
+ * Si l'utilisateur était le dernier membre, le groupe est dissous
+ * (supprimé) plutôt que laissé vide en base. Sinon, la streak et
+ * l'historique du groupe sont conservés pour les membres restants.
+ */
+exports.leaveGroup = async (req, res, next) => {
+  try {
+    const myId = req.user.id;
+
+    const group = await StreakGroup.findOne({ members: myId });
+    if (!group) return next(createError("Vous ne faites partie d'aucun groupe.", 404));
+
+    group.members = group.members.filter((m) => m.toString() !== myId);
+
+    if (group.members.length === 0) {
+      await StreakGroup.deleteOne({ _id: group._id });
+      return res.status(200).json({
+        success:      true,
+        message:      'Vous avez quitté le groupe. Il était vide, il a été dissous.',
+        groupDeleted: true,
+      });
+    }
+
+    await group.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Vous avez quitté le groupe.',
+      groupDeleted: false,
+    });
   } catch (err) {
     next(err);
   }

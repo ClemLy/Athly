@@ -12,7 +12,7 @@ export const ITEM_CATALOG = {
   },
   STREAK_FREEZE: {
     name: 'Gel de Streak', icon: 'snow', rarity: 'rare',
-    description: 'Charge 1 gel — sauve ta streak en cas de jour manqué', usable: true,
+    description: 'Charge 1 gel, sauve ta streak en cas de jour manqué', usable: true,
   },
   DOUBLE_XP: {
     name: 'Boost Double XP', icon: 'flash-outline', rarity: 'rare',
@@ -36,11 +36,11 @@ export const ITEM_CATALOG = {
   },
   CHEST_KEY: {
     name: 'Coffre', icon: 'cube', rarity: 'common',
-    description: 'Un coffre à ouvrir — que contient-il ?', usable: false,
+    description: 'Un coffre à ouvrir, que contient-il ?', usable: false,
   },
   PROFILE_FRAME_BLOOD_BOND: {
     name: 'Cadre "Lien de Sang"', icon: 'shield', rarity: 'unique',
-    description: "Cosmétique Unique — niveau d'amitié 5. Introuvable en coffre.", usable: false,
+    description: "Cosmétique Unique (niveau d'amitié 5). Introuvable en coffre.", usable: false,
   },
 };
 
