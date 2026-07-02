@@ -547,8 +547,8 @@ export default function SettingsScreen({ navigation }) {
                 {/* ── SYNC BACKEND ── */}
                 <DevSectionTitle title="SYNC BACKEND" />
                 <Text style={styles.devHint}>
-                  Le niveau ci-dessus est local uniquement — les coffres et fonctionnalités
-                  serveur (niveau 11+) lisent le niveau backend. Synchronise pour les tester.
+                  Le niveau ci-dessus est local uniquement. Les coffres et fonctionnalités
+                  serveur (niveau 11+) lisent le niveau backend, synchronise pour les tester.
                 </Text>
                 <View style={styles.devBtnRow}>
                   <DevBtn
@@ -562,7 +562,7 @@ export default function SettingsScreen({ navigation }) {
                 {/* ── SANDBOX INVENTAIRE & SOCIAL ── */}
                 <DevSectionTitle title="SANDBOX INVENTAIRE & SOCIAL" />
                 <Text style={styles.devHint}>
-                  Coffres et faux amis générés directement en base — pour tester
+                  Coffres et faux amis générés directement en base, pour tester
                   l'Inventaire et l'écran Social sans dizaines de vraies actions.
                 </Text>
                 <View style={styles.devInputRow}>
@@ -580,8 +580,8 @@ export default function SettingsScreen({ navigation }) {
                   />
                 </View>
                 <Text style={styles.devHint}>
-                  Crée FauxAmi_1 et FauxAmi_2 (amis acceptés — pour Classement et Groupe)
-                  + FauxAmi_3 (demande en attente — pour Accepter/Refuser). Rejouable sans doublons.
+                  Crée FauxAmi_1 et FauxAmi_2 (amis acceptés, pour Classement et Groupe)
+                  et FauxAmi_3 (demande en attente, pour Accepter/Refuser). Rejouable sans doublons.
                 </Text>
 
                 {/* ── SIMULATION ── */}
@@ -697,9 +697,9 @@ export default function SettingsScreen({ navigation }) {
                 {/* ── RESET ── */}
                 <DevSectionTitle title="RESET" />
                 <DevBtn label="Reset quota XP quotidien" onPress={handleResetDailyXP} disabled={simLoading} fullWidth />
-                <Text style={styles.devHint}>Décale les séances d'aujourd'hui à hier — relance le gain d'XP.</Text>
+                <Text style={styles.devHint}>Décale les séances d'aujourd'hui à hier, relance le gain d'XP.</Text>
                 <DevBtn label="Effacer les logs DEBUG" onPress={handleClearDebug} disabled={simLoading} variant="destructive" fullWidth />
-                <Text style={styles.devHint}>Supprime uniquement les logs [DEBUG] — les vraies séances sont conservées.</Text>
+                <Text style={styles.devHint}>Supprime uniquement les logs [DEBUG], les vraies séances sont conservées.</Text>
 
                 {simLoading && (
                   <View style={styles.devLoader}>

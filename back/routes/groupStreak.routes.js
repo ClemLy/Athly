@@ -11,6 +11,7 @@ router.use(auth);
 // Ordre impératif : les routes littérales AVANT les routes paramétriques
 // pour éviter que Express interprète "my-group" comme un :groupId
 router.get('/my-group',                       groupStreak.getMyGroup);
+router.post('/leave',                         groupStreak.leaveGroup);
 router.post('/invite',                        groupStreak.inviteToGroup);
 router.put('/respond/:groupId',               groupStreak.respondToGroupInvite);
 router.post('/:groupId/shake/:memberId',      groupStreak.shakeMember);

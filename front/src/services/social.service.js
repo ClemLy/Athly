@@ -69,6 +69,11 @@ export async function checkGroupStreak(groupId) {
   return res.data;
 }
 
+export async function leaveGroup() {
+  const res = await API.post('/groups/leave');
+  return res.data;
+}
+
 // ─── Parrainage (Brique III) ──────────────────────────────────────────────────
 
 export async function claimReferral(code) {

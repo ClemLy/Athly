@@ -340,14 +340,14 @@ describe('Moteur RPG & Social Athly — Briques II, III, IV', () => {
       expect(res.statusCode).toBe(200);
       expect(res.body.allValidated).toBe(true);
       expect(res.body.currentStreak).toBe(1);
-      // 2 membres → multiplicateur x1.25 → 40 * 1.25 = 50 XP
-      expect(res.body.groupBonus.multiplier).toBeCloseTo(1.25);
-      expect(res.body.groupBonus.bonusXp).toBe(50);
+      // 2 membres → multiplicateur x1.35 → 50 * 1.35 = 68 XP
+      expect(res.body.groupBonus.multiplier).toBeCloseTo(1.35);
+      expect(res.body.groupBonus.bonusXp).toBe(68);
 
       const aliceDb = await User.findById(alice.userId);
       const bobDb   = await User.findById(bob.userId);
-      expect(aliceDb.xp).toBe(50);
-      expect(bobDb.xp).toBe(50);
+      expect(aliceDb.xp).toBe(68);
+      expect(bobDb.xp).toBe(68);
     });
 
     it('✅ Un membre manquant → pas de streak, pas de bonus', async () => {
@@ -435,6 +435,106 @@ describe('Moteur RPG & Social Athly — Briques II, III, IV', () => {
       expect(res.body.group).toBeNull();
       expect(res.body.invites).toHaveLength(1);
       expect(res.body.invites[0].name).toBe('Team Recrutement');
+    });
+
+    it('🎯 getMyGroup expose le multiplicateur courant (taille + régularité)', async () => {
+      const group = await createValidatedGroup([alice, bob]);
+      await StreakGroup.updateOne({ _id: group._id }, { currentStreak: 14 }); // 2 semaines pile
+
+      const res = await request(app)
+        .get('/api/groups/my-group')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(200);
+      // 2 membres → x1.35 taille ; 14j = 2 semaines → +16% régularité → x1.16
+      expect(res.body.group.xpBonus.sizeMultiplier).toBeCloseTo(1.35);
+      expect(res.body.group.xpBonus.regularityMultiplier).toBeCloseTo(1.16);
+      expect(res.body.group.xpBonus.multiplier).toBeCloseTo(1.57);
+    });
+
+    it('🎯 Le bonus de régularité est plafonné à +60% même après 70+ jours', async () => {
+      await makeFriends(alice.userId, bob.userId);
+      const group = await createValidatedGroup([alice, bob]);
+      await StreakGroup.updateOne({ _id: group._id }, { currentStreak: 200 });
+
+      const res = await request(app)
+        .post(`/api/groups/${group._id}/check-streak`)
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(200);
+      // currentStreak devient 201 → floor(201/7)=28 semaines, plafonné à +60%
+      expect(res.body.groupBonus.regularityMultiplier).toBeCloseTo(1.6);
+      expect(res.body.groupBonus.multiplier).toBeCloseTo(1.35 * 1.6);
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 6. leaveGroup — quitter le groupe de streak
+  // ───────────────────────────────────────────────────────────────────────────
+  describe('POST /api/groups/leave — leaveGroup', () => {
+
+    it('✅ Un membre quitte : le groupe persiste pour les autres', async () => {
+      const group = await StreakGroup.create({
+        name: 'Team Test',
+        members: [alice.userId, bob.userId, carol.userId],
+        pendingInvites: [],
+      });
+
+      const res = await request(app)
+        .post('/api/groups/leave')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.groupDeleted).toBe(false);
+
+      const updated = await StreakGroup.findById(group._id);
+      expect(updated.members.map(String)).not.toContain(alice.userId);
+      expect(updated.members).toHaveLength(2);
+    });
+
+    it('✅ Le dernier membre quitte : le groupe est dissous', async () => {
+      const group = await StreakGroup.create({
+        name: 'Solo', members: [alice.userId], pendingInvites: [],
+      });
+
+      const res = await request(app)
+        .post('/api/groups/leave')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.groupDeleted).toBe(true);
+
+      const deleted = await StreakGroup.findById(group._id);
+      expect(deleted).toBeNull();
+    });
+
+    it('✅ Après avoir quitté, l\'utilisateur peut rejoindre/créer un nouveau groupe', async () => {
+      await StreakGroup.create({
+        name: 'Ancien groupe', members: [alice.userId, bob.userId], pendingInvites: [],
+      });
+      await request(app)
+        .post('/api/groups/leave')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      await makeFriends(alice.userId, carol.userId);
+      const res = await request(app)
+        .post('/api/groups/invite')
+        .set('Authorization', `Bearer ${alice.token}`)
+        .send({ friendIds: [carol.userId], name: 'Nouveau groupe' });
+
+      expect(res.statusCode).toBe(201);
+    });
+
+    it('❌ 404 si l\'utilisateur ne fait partie d\'aucun groupe', async () => {
+      const res = await request(app)
+        .post('/api/groups/leave')
+        .set('Authorization', `Bearer ${alice.token}`);
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('❌ 401 sans token', async () => {
+      const res = await request(app).post('/api/groups/leave');
+      expect(res.statusCode).toBe(401);
     });
   });
 });
