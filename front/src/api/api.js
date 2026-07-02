@@ -1,6 +1,40 @@
 import axios from 'axios';
 import { API_URL } from '@env';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getToken, removeToken } from '../utils/authStorage';
+
+// ── Cache réseau dégradé ──────────────────────────────────────────────────────
+// Chaque réponse GET réussie est mise en cache. Si le réseau tombe (serveur
+// down, offline, cold-start Render), les GET sont servis depuis ce cache avec
+// `fromCache: true` au lieu d'échouer → l'UI affiche un état "stale" au lieu
+// d'un écran d'erreur. Le cache est purgé à la déconnexion (purgeApiCache).
+const API_CACHE_PREFIX = 'athly:apicache:v1:';
+
+async function readApiCache(url) {
+  try {
+    const raw = await AsyncStorage.getItem(API_CACHE_PREFIX + url);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeApiCache(url, data) {
+  // Fire-and-forget : un échec d'écriture du cache ne doit rien bloquer
+  AsyncStorage.setItem(API_CACHE_PREFIX + url, JSON.stringify(data)).catch(() => {});
+}
+
+// À appeler à la déconnexion : aucune donnée utilisateur ne doit survivre
+// dans le cache sur un appareil partagé.
+export async function purgeApiCache() {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const mine = keys.filter((k) => k.startsWith(API_CACHE_PREFIX));
+    if (mine.length > 0) await AsyncStorage.multiRemove(mine);
+  } catch {
+    // best effort
+  }
+}
 
 // Référence vers la fonction signOut de AuthContext, injectée au montage du provider.
 // Permet à l'intercepteur (code hors-React) de déclencher la déconnexion proprement.
@@ -62,7 +96,13 @@ API.interceptors.request.use(
 
 // Intercepteur de réponse — gestion centralisée des erreurs + déconnexion JWT
 API.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Alimente le cache dégradé avec les GET réussis
+    if (response.config?.method === 'get' && response.config?.url) {
+      writeApiCache(response.config.url, response.data);
+    }
+    return response;
+  },
   async (error) => {
     const err = {
       isAxiosError: error.isAxiosError || false,
@@ -99,6 +139,21 @@ API.interceptors.response.use(
     if (error.request) {
       err.network = true;
       err.message = "Aucune réponse du serveur. Vérifiez votre connexion réseau.";
+
+      // ── Mode dégradé : GET en échec réseau → réponse servie depuis le cache ──
+      const cfg = error.config;
+      if (cfg?.method === 'get' && cfg?.url) {
+        const cached = await readApiCache(cfg.url);
+        if (cached !== null) {
+          return Promise.resolve({
+            data:      cached,
+            status:    200,
+            fromCache: true,
+            config:    cfg,
+          });
+        }
+      }
+
       return Promise.reject(err);
     }
 

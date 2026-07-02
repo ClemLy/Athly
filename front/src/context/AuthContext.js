@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { getToken, removeToken, saveToken, setSessionOnly, getSessionOnly } from '../utils/authStorage';
-import { setSignOutCallback } from '../api/api';
+import { setSignOutCallback, purgeApiCache } from '../api/api';
 
 const AuthContext = createContext();
 
@@ -37,6 +37,8 @@ export const AuthProvider = ({ children }) => {
   const signOut = async () => {
     await removeToken();
     await setSessionOnly(false);
+    // Aucune donnée du compte ne doit survivre dans le cache API (appareil partagé)
+    await purgeApiCache();
     setUserToken(null);
   };
 

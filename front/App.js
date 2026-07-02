@@ -6,6 +6,7 @@ import { ToastProvider } from './src/context/ToastContext';
 
 import AppNavigator from './src/navigation';
 import DesktopInstallPage from './src/components/web/DesktopInstallPage';
+import ErrorBoundary from './src/components/common/ErrorBoundary';
 
 const isDesktopWeb =
   Platform.OS === 'web' &&
@@ -18,13 +19,15 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <ToastProvider>
-          <StatusBar barStyle="light-content" />
-          <AppNavigator />
-        </ToastProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <StatusBar barStyle="light-content" />
+            <AppNavigator />
+          </ToastProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }
