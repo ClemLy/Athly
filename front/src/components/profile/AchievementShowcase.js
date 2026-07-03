@@ -1,17 +1,21 @@
-import React, { useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Modal, ScrollView, TouchableOpacity, Pressable, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { RARITY_META } from '../../services/inventory.service';
+import { FeaturedModal } from './TrophySlot';
 
 // ─── AchievementShowcase ──────────────────────────────────────────────────────
-// Vitrine des trophées backend V2 (reward.controller.js ACHIEVEMENT_CATALOG) :
-// anniversaire, collection d'objets, social. Distinct du système de trophées
-// V1 100% local (trophyCatalog.js / TrophyGrid) qui n'est pas consultable
-// pour un tiers faute d'accès à ses logs de séances.
+// Résumé compact (X/50 débloqués + barre de progression) avec un bouton
+// "Voir le détail" qui ouvre le catalogue complet dans une modale, groupé par
+// catégorie — évite de dérouler 50 badges directement sur le profil.
+//
+// Couvre les deux catalogues fusionnés côté back (buildAchievementsView) :
+// le V2 backend ({name, description}, ~9 trophées) et le miroir du V1 local
+// ({label, condition, epicDesc, gradientColors}, ~41 trophées).
 //
 // Props :
-//   achievements  Array<{ id, name, description, category, hidden, unlocked, unlockedAt }>
+//   achievements  Array<{ id, name|label, description|condition, category, hidden, unlocked, unlockedAt }>
 //   stats         { total, unlocked, percentage }
 
 const ICON_BY_ID = {
@@ -35,58 +39,144 @@ const RARITY_BY_ID = {
 };
 
 const CATEGORY_COLOR = {
-  profile:    Colors.rankViolet,
-  collection: Colors.primary,
-  social:     '#22D3EE',
+  profile:     Colors.rankViolet,
+  collection:  Colors.primary,
+  social:      '#22D3EE',
+  heritage:    '#FE7439',
+  force:       '#DC2626',
+  exploration: '#22C55E',
+  secret:      '#6366F1',
+  corps:       '#D1D5DB',
+  regularite:  '#10B981',
+  special:     '#FE7439',
+  ultime:      '#FFD700',
 };
 
+const CATEGORY_LABELS = {
+  profile:     'Profil',
+  collection:  'Collection',
+  social:      'Social',
+  heritage:    'Héritage',
+  force:       'Force',
+  exploration: 'Exploration',
+  secret:      'Secrets',
+  corps:       'Poids du corps',
+  regularite:  'Régularité',
+  special:     'Spécial',
+  ultime:      'Ultime',
+};
+
+const CATEGORY_ORDER = [
+  'heritage', 'force', 'exploration', 'corps', 'regularite',
+  'collection', 'profile', 'social', 'special', 'secret', 'ultime',
+];
+
+// Hauteur numérique fixe (et non un pourcentage) : sur react-native-web, un
+// enfant `flex: 1` dans un parent contraint seulement par `maxHeight` (sans
+// `height`) calcule mal sa zone scrollable — le scroll ne répondait qu'au
+// centre de la modale, jamais en haut ni en bas.
+const SHEET_MAX_HEIGHT = Math.round(Dimensions.get('window').height * 0.82);
+
 function colorFor(achievement) {
+  if (achievement.color) return achievement.color;
   const rarity = RARITY_BY_ID[achievement.id];
   if (rarity) return RARITY_META[rarity].color;
   return CATEGORY_COLOR[achievement.category] || Colors.primary;
 }
 
+// Normalise les deux formes de catalogue (backend V2 vs miroir local) vers un
+// seul shape exploitable par TrophySlot/FeaturedModal (mêmes composants que
+// la Vitrine du profil).
+export function normalizeAchievement(a) {
+  const color = colorFor(a);
+  const hiddenLocked = a.hidden && !a.unlocked;
+  return {
+    ...a,
+    label: a.label || a.name || '',
+    condition: hiddenLocked ? '???' : (a.condition || a.description || ''),
+    epicDesc: hiddenLocked ? 'Ce trophée est encore secret.' : (a.epicDesc || a.description || a.condition || ''),
+    color,
+    gradientColors: a.gradientColors || [color, color, color],
+    icon: hiddenLocked ? 'help-circle' : (a.icon || ICON_BY_ID[a.id] || 'trophy'),
+    tier: a.tier || 'bronze',
+  };
+}
+
 export default function AchievementShowcase({ achievements = [], stats }) {
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selected, setSelected] = useState(null);
+
+  const normalized = achievements.map(normalizeAchievement);
+  const byCategory = CATEGORY_ORDER
+    .map((cat) => ({ cat, items: normalized.filter((a) => a.category === cat) }))
+    .filter((g) => g.items.length > 0);
+
   return (
     <View>
       {stats && (
         <View style={styles.statsBar}>
-          <Text style={styles.statsTxt}>
-            {stats.unlocked}/{stats.total} trophées débloqués
-          </Text>
-          <View style={styles.statsBarTrack}>
-            <View style={[styles.statsBarFill, { width: `${stats.percentage}%` }]} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.statsTxt}>
+              {stats.unlocked}/{stats.total} trophées débloqués
+            </Text>
+            <View style={styles.statsBarTrack}>
+              <View style={[styles.statsBarFill, { width: `${stats.percentage}%` }]} />
+            </View>
           </View>
           <Text style={styles.statsPct}>{stats.percentage}%</Text>
         </View>
       )}
 
-      <View style={styles.grid}>
-        {achievements.map((a, i) => (
-          <AchievementBadge key={a.id} achievement={a} color={colorFor(a)} index={i} />
-        ))}
-      </View>
+      <TouchableOpacity style={styles.detailBtn} onPress={() => setDetailOpen(true)} activeOpacity={0.8}>
+        <Ionicons name="grid" size={15} color={Colors.gold} />
+        <Text style={styles.detailBtnText}>Voir le détail</Text>
+        <Ionicons name="chevron-forward" size={15} color={Colors.gold} />
+      </TouchableOpacity>
+
+      {detailOpen && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setDetailOpen(false)}>
+          <Pressable style={styles.overlay} onPress={() => setDetailOpen(false)}>
+            <Pressable style={styles.sheet} onPress={() => {}}>
+              <View style={styles.sheetHeader}>
+                <Text style={styles.sheetTitle}>Trophées {stats ? `· ${stats.unlocked}/${stats.total}` : ''}</Text>
+                <TouchableOpacity onPress={() => setDetailOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="close" size={22} color={Colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={styles.scrollArea} showsVerticalScrollIndicator={false}>
+                {byCategory.map(({ cat, items }) => (
+                  <View key={cat} style={{ marginBottom: 18 }}>
+                    <Text style={styles.categoryLabel}>{CATEGORY_LABELS[cat] || cat}</Text>
+                    <View style={styles.grid}>
+                      {items.map((a) => (
+                        <AchievementBadge key={a.id} achievement={a} onPress={() => setSelected(a)} />
+                      ))}
+                    </View>
+                  </View>
+                ))}
+                <View style={{ height: 20 }} />
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+
+      {selected && (
+        <FeaturedModal trophy={selected} onClose={() => setSelected(null)} />
+      )}
     </View>
   );
 }
 
-function AchievementBadge({ achievement, color, index }) {
-  const scale = useRef(new Animated.Value(0.85)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.spring(scale, { toValue: 1, friction: 7, tension: 60, delay: index * 40, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 1, duration: 260, delay: index * 40, useNativeDriver: true }),
-    ]).start();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const { unlocked, hidden } = achievement;
-  const icon = hidden && !unlocked ? 'help-circle' : (ICON_BY_ID[achievement.id] || 'trophy');
-
+function AchievementBadge({ achievement, onPress }) {
+  const { unlocked, color, icon, label } = achievement;
   return (
-    <Animated.View style={[styles.badge, { opacity, transform: [{ scale }] }]}>
+    <TouchableOpacity
+      style={styles.badge}
+      onPress={unlocked ? onPress : undefined}
+      activeOpacity={unlocked ? 0.8 : 1}
+      disabled={!unlocked}
+    >
       <View
         style={[
           styles.badgeIconWrap,
@@ -98,29 +188,54 @@ function AchievementBadge({ achievement, color, index }) {
         <Ionicons name={icon} size={22} color={unlocked ? color : Colors.textMuted} />
       </View>
       <Text style={[styles.badgeName, unlocked && { color: Colors.textPrimary }]} numberOfLines={2}>
-        {achievement.name}
+        {label}
       </Text>
       {!unlocked && (
         <View style={styles.lockChip}>
           <Ionicons name="lock-closed" size={9} color={Colors.textMuted} />
         </View>
       )}
-    </Animated.View>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   statsBar: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    marginBottom: 16,
+    marginBottom: 12,
   },
-  statsTxt: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' },
+  statsTxt: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 6 },
   statsBarTrack: {
-    flex: 1, height: 6, borderRadius: 3,
+    height: 6, borderRadius: 3,
     backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden',
   },
   statsBarFill: { height: '100%', backgroundColor: Colors.gold, borderRadius: 3 },
-  statsPct: { color: Colors.gold, fontSize: 12, fontWeight: '800' },
+  statsPct: { color: Colors.gold, fontSize: 14, fontWeight: '800' },
+
+  detailBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    borderWidth: 1, borderColor: 'rgba(255,215,0,0.3)', backgroundColor: 'rgba(255,215,0,0.06)',
+    borderRadius: 12, paddingVertical: 11,
+  },
+  detailBtnText: { color: Colors.gold, fontSize: 13, fontWeight: '700' },
+
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.74)', justifyContent: 'flex-end' },
+  sheet: {
+    height: SHEET_MAX_HEIGHT, backgroundColor: Colors.bgAbyss,
+    borderTopLeftRadius: 26, borderTopRightRadius: 26,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
+    paddingHorizontal: 18, paddingTop: 18, paddingBottom: 10,
+  },
+  sheetHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  sheetTitle: { color: Colors.textPrimary, fontSize: 16, fontWeight: '800' },
+  scrollArea: { flex: 1 },
+  categoryLabel: {
+    color: Colors.textMuted, fontSize: 11, fontWeight: '800',
+    letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10,
+  },
 
   grid: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 10,

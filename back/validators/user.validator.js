@@ -22,6 +22,10 @@ const userSchemas = {
     shapeId: Joi.string().max(40).required(),
     colorId: Joi.string().max(40).required(),
   }),
+
+  updateShowcase: Joi.object({
+    achievementIds: Joi.array().items(Joi.string().max(60)).max(3).required(),
+  }),
 };
 
 module.exports = userSchemas;

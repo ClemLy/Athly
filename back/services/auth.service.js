@@ -1,8 +1,11 @@
+const crypto      = require("crypto");
 const User        = require("../models/User");
+const Friendship  = require("../models/Friendship");
 const bcrypt      = require("bcrypt");
 const jwt         = require("jsonwebtoken");
 const config      = require("../config/env");
 const emailService = require("./email.service");
+const { addItemAtomic } = require("./inventory.service");
 
 const MAX_OTP_ATTEMPTS  = 5;
 const CODE_TTL_VERIFY   = 10 * 60 * 1000; // 10 min
@@ -13,6 +16,27 @@ const BCRYPT_ROUNDS     = 12;
 
 function generateCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Code de parrainage lisible : ATH-XXXXX (sans 0/O/1/I ambigus).
+// L'unicité est garantie par l'index unique+sparse du modèle : en cas de
+// collision (improbable, 33^5 combinaisons), on retire.
+const REFERRAL_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function generateReferralCode() {
+  let suffix = "";
+  const bytes = crypto.randomBytes(5);
+  for (let i = 0; i < 5; i++) suffix += REFERRAL_ALPHABET[bytes[i] % REFERRAL_ALPHABET.length];
+  return `ATH-${suffix}`;
+}
+
+async function uniqueReferralCode() {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = generateReferralCode();
+    const taken = await User.exists({ referralCode: code });
+    if (!taken) return code;
+  }
+  // Repli quasi-impossible à atteindre : suffixe horodaté forcément unique
+  return `ATH-${Date.now().toString(36).toUpperCase().slice(-6)}`;
 }
 
 function makeToken(userId) {
@@ -31,14 +55,33 @@ function httpError(message, statusCode, code) {
 class AuthService {
 
   // ── Inscription ────────────────────────────────────────────────────────────
-  async register(pseudo, email, password) {
+  /**
+   * Crée le compte. Si un `referralCode` (optionnel) est fourni :
+   *  - Il doit être valide, sinon 400 REFERRAL_INVALID (l'utilisateur peut
+   *    corriger sa saisie ou vider le champ — le compte n'est PAS créé).
+   *  - Le filleul reçoit ses récompenses de bienvenue dès la création
+   *    (1 STREAK_FREEZE + 1 LEVEL_COUPON), le parrain les mêmes + le trophée
+   *    FIRST_REFERRAL, et les deux sont liés en amis "accepted" d'office.
+   */
+  async register(pseudo, email, password, referralCode = null) {
     const existing = await User.findOne({ email });
     if (existing) throw httpError("Un utilisateur avec cet email existe déjà.", 409, "EMAIL_TAKEN");
+
+    // ── Résolution du parrain AVANT création : un code invalide ne doit pas
+    //    laisser un compte à moitié parrainé en base ────────────────────────
+    let referrer = null;
+    const cleanCode = typeof referralCode === "string" ? referralCode.trim().toUpperCase() : "";
+    if (cleanCode) {
+      referrer = await User.findOne({ referralCode: cleanCode }).select("_id");
+      if (!referrer) {
+        throw httpError("Code de parrainage invalide.", 400, "REFERRAL_INVALID");
+      }
+    }
 
     const hashedPassword   = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const verificationCode = generateCode();
 
-    await User.create({
+    const newUser = await User.create({
       pseudo,
       name: pseudo,           // rétrocompatibilité
       email,
@@ -47,14 +90,49 @@ class AuthService {
       verificationCode,
       codeExpires:     new Date(Date.now() + CODE_TTL_VERIFY),
       verifyAttempts:  0,
+      referralCode:    await uniqueReferralCode(),
+      ...(referrer && {
+        referredBy: referrer._id,
+        // Récompenses de bienvenue du filleul, directement à la création
+        inventory: [
+          { itemType: "STREAK_FREEZE", rarity: "rare",      quantity: 1 },
+          { itemType: "LEVEL_COUPON",  rarity: "legendary", quantity: 1 },
+        ],
+      }),
     });
+
+    // ── Effets côté parrain (best-effort : ne bloque jamais l'inscription) ──
+    if (referrer) {
+      try {
+        await addItemAtomic(referrer._id, "STREAK_FREEZE", "rare", 1);
+        await addItemAtomic(referrer._id, "LEVEL_COUPON", "legendary", 1);
+
+        // Liés en amis d'office — le parrainage EST la preuve de la relation
+        await Friendship.create({
+          requester: referrer._id,
+          recipient: newUser._id,
+          status:    "accepted",
+        });
+
+        // Trophée FIRST_REFERRAL du parrain (require tardif : évite le cycle
+        // auth.service → reward.controller → … au chargement des modules)
+        const { checkAndUnlockAchievements } = require("../controllers/reward.controller");
+        await checkAndUnlockAchievements(referrer._id.toString());
+      } catch (err) {
+        console.error("⚠️  [register] Récompenses de parrainage partielles :", err.message);
+      }
+    }
 
     // Envoi non-bloquant : un échec SMTP ne plante pas la réponse
     emailService.sendVerificationEmail(email, verificationCode).catch(err =>
       console.error("❌ Email de vérification :", err.message)
     );
 
-    return { message: "Compte créé. Vérifiez votre email.", email };
+    return {
+      message:  "Compte créé. Vérifiez votre email.",
+      email,
+      referred: Boolean(referrer),
+    };
   }
 
   // ── Connexion ──────────────────────────────────────────────────────────────
@@ -245,3 +323,5 @@ class AuthService {
 }
 
 module.exports = new AuthService();
+// Réutilisé par user.service (génération lazy pour les comptes existants)
+module.exports.uniqueReferralCode = uniqueReferralCode;

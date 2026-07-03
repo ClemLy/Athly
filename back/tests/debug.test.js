@@ -212,18 +212,18 @@ describe('POST /api/debug/godmode/mock-social — outil dev (génère un faux r�
     alice = await createAndLoginUser('AliceFit', 'alice@athly.fr');
   });
 
-  it('✅ Génère 2 amis acceptés + 1 demande en attente reçue', async () => {
+  it('✅ Génère 3 amis acceptés + 1 demande en attente reçue', async () => {
     const res = await request(app)
       .post('/api/debug/godmode/mock-social')
       .set('Authorization', `Bearer ${alice.token}`);
 
     expect(res.statusCode).toBe(201);
-    expect(res.body.created).toHaveLength(3);
+    expect(res.body.created).toHaveLength(4);
 
     const friendsRes = await request(app)
       .get('/api/friends/list')
       .set('Authorization', `Bearer ${alice.token}`);
-    expect(friendsRes.body.friends).toHaveLength(2);
+    expect(friendsRes.body.friends).toHaveLength(3);
     expect(friendsRes.body.friends.every((f) => f.user.pseudo.startsWith('FauxAmi_'))).toBe(true);
 
     const pendingRes = await request(app)
@@ -242,8 +242,8 @@ describe('POST /api/debug/godmode/mock-social — outil dev (génère un faux r�
       .get('/api/friends/leaderboard')
       .set('Authorization', `Bearer ${alice.token}`);
 
-    // Alice + 2 amis acceptés (le 3e est encore "pending", pas dans le classement)
-    expect(res.body.count).toBe(3);
+    // Alice + 3 amis acceptés (le 4e est encore "pending", pas dans le classement)
+    expect(res.body.count).toBe(4);
   });
 
   it('🔁 Idempotent : rejouer l\'outil ne crée pas de doublons', async () => {
@@ -255,12 +255,12 @@ describe('POST /api/debug/godmode/mock-social — outil dev (génère un faux r�
       .set('Authorization', `Bearer ${alice.token}`);
 
     const allMocks = await User.find({ pseudo: /^FauxAmi_/ });
-    expect(allMocks).toHaveLength(3);
+    expect(allMocks).toHaveLength(4);
 
     const friendsRes = await request(app)
       .get('/api/friends/list')
       .set('Authorization', `Bearer ${alice.token}`);
-    expect(friendsRes.body.friends).toHaveLength(2);
+    expect(friendsRes.body.friends).toHaveLength(3);
   });
 
   it('❌ 401 sans token', async () => {

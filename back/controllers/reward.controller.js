@@ -389,6 +389,57 @@ exports.checkAchievements = async (req, res, next) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// syncLocalAchievements  PUT /api/rewards/achievements/sync
+// ─────────────────────────────────────────────────────────────────────────────
+
+const { LOCAL_TROPHY_IDS } = require('../data/localTrophyCatalog');
+
+/**
+ * Synchronise les trophées LOCAUX débloqués par le client (catalogue
+ * front/src/data/trophyCatalog.js, évalué sur les logs AsyncStorage que le
+ * serveur ne possède pas) vers le tableau `achievements` du User.
+ *
+ * Règles :
+ *  - Additif uniquement : un trophée synchronisé n'est jamais retiré
+ *    (même sémantique irréversible que les trophées backend).
+ *  - Allowlist stricte : tout ID hors catalogue local est ignoré — impossible
+ *    d'injecter des IDs arbitraires ou des trophées backend (BIRTHDAY_SET…)
+ *    qui, eux, ne se débloquent que par la logique serveur.
+ *  - Écriture par $push gardé ($ne) : idempotent et sans doublon même en
+ *    cas d'appels concurrents.
+ */
+exports.syncLocalAchievements = async (req, res, next) => {
+  try {
+    const myId  = req.user.id;
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids)) {
+      return next(createError('ids doit être un tableau.', 400));
+    }
+
+    const validIds = [...new Set(ids.filter((id) => typeof id === 'string' && LOCAL_TROPHY_IDS.has(id)))];
+
+    let added = 0;
+    for (const achievementId of validIds) {
+      const result = await User.updateOne(
+        { _id: myId, 'achievements.achievementId': { $ne: achievementId } },
+        { $push: { achievements: { achievementId, unlockedAt: new Date() } } },
+      );
+      if (result.modifiedCount > 0) added += 1;
+    }
+
+    return res.status(200).json({
+      success: true,
+      synced:  validIds.length,
+      added,
+      ignored: ids.length - validIds.length,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Exporté pour être importé depuis d'autres contrôleurs (openChest, acceptFriend…)
 exports.checkAndUnlockAchievements = checkAndUnlockAchievements;
 exports.ACHIEVEMENT_CATALOG        = ACHIEVEMENT_CATALOG;

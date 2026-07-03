@@ -5,7 +5,14 @@ const Friendship = require('../models/Friendship');
 const User       = require('../models/User');
 const Workout    = require('../models/Workout');
 const ExerciseRecord = require('../models/ExerciseRecord');
-const { ACHIEVEMENT_CATALOG, CATALOG_SIZE } = require('./reward.controller');
+const { ACHIEVEMENT_CATALOG } = require('./reward.controller');
+const { LOCAL_TROPHY_CATALOG } = require('../data/localTrophyCatalog');
+
+// Catalogue UNIFIÉ : 9 trophées backend (évalués serveur) + 41 trophées locaux
+// (évalués client, synchronisés via /rewards/achievements/sync). C'est la
+// totalité de ce qu'un ami peut voir sur un profil public.
+const FULL_ACHIEVEMENT_CATALOG = { ...ACHIEVEMENT_CATALOG, ...LOCAL_TROPHY_CATALOG };
+const FULL_CATALOG_SIZE        = Object.keys(FULL_ACHIEVEMENT_CATALOG).length;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,7 +70,7 @@ function computeStreakFromDates(dates) {
 function buildAchievementsView(userAchievements) {
   const unlockedMap = new Map(userAchievements.map((a) => [a.achievementId, a.unlockedAt]));
 
-  const achievements = Object.values(ACHIEVEMENT_CATALOG).map((entry) => {
+  const achievements = Object.values(FULL_ACHIEVEMENT_CATALOG).map((entry) => {
     const unlocked   = unlockedMap.has(entry.id);
     const unlockedAt = unlockedMap.get(entry.id) ?? null;
 
@@ -81,9 +88,9 @@ function buildAchievementsView(userAchievements) {
   return {
     achievements,
     stats: {
-      total:      CATALOG_SIZE,
+      total:      FULL_CATALOG_SIZE,
       unlocked:   unlockedCount,
-      percentage: Math.round((unlockedCount / CATALOG_SIZE) * 100),
+      percentage: Math.round((unlockedCount / FULL_CATALOG_SIZE) * 100),
     },
   };
 }
@@ -410,7 +417,7 @@ exports.getFriendProfile = async (req, res, next) => {
     }
 
     const friend = await User.findById(friendId)
-      .select('pseudo level rank xp achievements streakGels totalWorkoutMinutes equippedFrame createdAt');
+      .select('pseudo level rank xp achievements showcasedAchievements streakGels totalWorkoutMinutes equippedFrame createdAt');
     if (!friend) return next(createError('Utilisateur introuvable.', 404));
 
     const friendObjectId = new mongoose.Types.ObjectId(friendId);
@@ -452,6 +459,11 @@ exports.getFriendProfile = async (req, res, next) => {
         },
         achievements,
         achievementsStats,
+        // Vitrine : IDs mis en avant, restreints aux trophées réellement
+        // débloqués (au cas où un trophée aurait été retiré/désynchronisé)
+        showcasedAchievements: (friend.showcasedAchievements || []).filter((id) =>
+          friend.achievements.some((a) => a.achievementId === id),
+        ),
         records: records.map((r) => ({
           exercice: r._id,
           maxPoids: r.maxPoids,

@@ -129,6 +129,11 @@ const UserSchema = new mongoose.Schema(
     // Tableau des trophées débloqués. Le catalogue complet vit dans reward.controller.js.
     achievements: { type: [AchievementEntrySchema], default: [] },
 
+    // ── Vitrine de trophées ───────────────────────────────────────────────────
+    // IDs (catalogue unifié backend+local) que l'utilisateur met en avant sur
+    // son profil public. Max 3 — validé par la route PUT /users/me/showcase.
+    showcasedAchievements: { type: [String], default: [] },
+
     // ── Cadre de profil équipé ─────────────────────────────────────────────────
     // Synchronisé depuis le choix local (useAvatarFrame.js) pour que les amis
     // voient le même cadre sur le profil public. shapeId/colorId sont des clés

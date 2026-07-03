@@ -26,6 +26,7 @@ import {
   getRank,
 } from '../../services/stats.service';
 import { MAJOR_EXERCISES } from '../../data/majorExercises';
+import { syncLocalAchievements } from '../../services/reward.service';
 import { useAvatarFrame } from '../../hooks/useAvatarFrame';
 import { useDevSettings } from '../../hooks/useDevSettings';
 import { useFeaturedTrophies } from '../../hooks/useFeaturedTrophies';
@@ -138,6 +139,19 @@ export default function ProfileScreen({ navigation }) {
     // Ajoute le Trophée Ultime au catalogue pour que TrophyGrid puisse le trouver par ID
     return [...base, { ...ULTIMATE_TROPHY, unlocked: ultimateUnlocked, naturalUnlocked: ultimateUnlocked }];
   }, [level, totalSessions, logs, totalXP, trophyOverrides]);
+
+  // Synchronise vers le backend les trophées locaux NATURELLEMENT débloqués
+  // (jamais les overrides God Mode : la triche d'affichage reste locale).
+  // Dédupliqué via ref : n'envoie que si l'ensemble a changé depuis le dernier envoi.
+  const lastSyncedRef = useRef('');
+  useEffect(() => {
+    if (logsLoading) return;
+    const unlockedIds = evaluatedTrophies.filter((t) => t.naturalUnlocked).map((t) => t.id).sort();
+    const key = unlockedIds.join(',');
+    if (unlockedIds.length === 0 || key === lastSyncedRef.current) return;
+    lastSyncedRef.current = key;
+    syncLocalAchievements(unlockedIds).catch(() => { lastSyncedRef.current = ''; });
+  }, [evaluatedTrophies, logsLoading]);
 
   // Active profile theme (null when 'auto' or not set)
   const activeTheme = useMemo(() => {

@@ -57,3 +57,77 @@ exports.getWorkoutRecords = async (req, res, next) => {
     next(error);
   }
 };
+/**
+ * CLASSEMENT PAR EXERCICE (RÉSEAU D'AMIS)
+ * GET /api/exercises/leaderboard?exercise=Développé couché
+ *
+ * Renvoie, pour un exercice donné, le meilleur poids soulevé par chaque
+ * membre du réseau (moi + amis acceptés), trié décroissant. Le matching du
+ * nom est insensible à la casse et aux accents (collation fr, strength 1)
+ * pour tolérer les variations de saisie entre appareils.
+ */
+exports.getExerciseLeaderboard = async (req, res, next) => {
+  try {
+    const mongoose       = require("mongoose");
+    const Friendship     = require("../models/Friendship");
+    const User           = require("../models/User");
+    const ExerciseRecord = require("../models/ExerciseRecord");
+
+    const myId     = req.user.id;
+    const exercise = typeof req.query.exercise === "string" ? req.query.exercise.trim() : "";
+
+    if (exercise.length < 2) {
+      const err = new Error("Le paramètre 'exercise' est obligatoire (2 caractères minimum).");
+      err.statusCode = 400;
+      return next(err);
+    }
+
+    // Réseau : moi + amis acceptés uniquement — pas de fuite hors du cercle social
+    const friendships = await Friendship.find({
+      $or: [{ requester: myId }, { recipient: myId }],
+      status: "accepted",
+    });
+    const networkIds = [
+      new mongoose.Types.ObjectId(myId),
+      ...friendships.map((f) =>
+        f.requester.toString() === myId ? f.recipient : f.requester,
+      ),
+    ];
+
+    const rows = await ExerciseRecord.aggregate([
+      { $match: { user: { $in: networkIds }, exerciceNom: exercise } },
+      { $unwind: "$series" },
+      { $group: {
+        _id:      "$user",
+        maxPoids: { $max: "$series.poids" },
+        maxReps:  { $max: "$series.repetitions" },
+      } },
+      { $sort: { maxPoids: -1 } },
+      { $limit: 20 },
+    ]).collation({ locale: "fr", strength: 1 });
+
+    // Enrichissement avec les champs publics (une seule requête)
+    const users = await User.find({ _id: { $in: rows.map((r) => r._id) } })
+      .select("pseudo level rank");
+    const userById = new Map(users.map((u) => [u._id.toString(), u]));
+
+    const leaderboard = rows
+      .filter((r) => userById.has(r._id.toString()))
+      .map((r, index) => ({
+        position: index + 1,
+        user:     userById.get(r._id.toString()),
+        maxPoids: r.maxPoids,
+        maxReps:  r.maxReps,
+        isMe:     r._id.toString() === myId,
+      }));
+
+    return res.status(200).json({
+      success: true,
+      exercise,
+      count:   leaderboard.length,
+      leaderboard,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
