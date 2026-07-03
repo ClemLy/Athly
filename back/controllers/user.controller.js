@@ -49,6 +49,26 @@ exports.updateMe = async (req, res, next) => {
 };
 
 /**
+ * METTRE À JOUR LA VITRINE DE TROPHÉES
+ * Synchronise la sélection de trophées mis en avant (max 3) pour qu'elle soit
+ * visible sur le profil public. Les IDs hors catalogue unifié sont rejetés.
+ */
+exports.updateShowcase = async (req, res, next) => {
+  try {
+    const { achievementIds } = req.body;
+    const user = await userService.updateShowcase(req.user.id, achievementIds);
+
+    res.status(200).json({
+      success: true,
+      message: "Vitrine mise à jour avec succès",
+      showcasedAchievements: user.showcasedAchievements,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * METTRE À JOUR LE CADRE DE PROFIL ÉQUIPÉ
  * Synchronise le choix de cadre (forme + couleur) fait localement
  * (BorderPicker) pour qu'il soit visible sur le profil public par les amis.

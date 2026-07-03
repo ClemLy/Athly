@@ -33,6 +33,10 @@ const schemas = {
     }),
     email:    emailRule,
     password: registerPwdRule,
+    // Parrainage optionnel à l'inscription — champ vide toléré (front envoie '')
+    referralCode: Joi.string().trim().max(20).allow("", null).messages({
+      "string.max": "Le code de parrainage est trop long.",
+    }),
   }),
 
   login: Joi.object({

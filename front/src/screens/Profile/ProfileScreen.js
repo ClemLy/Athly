@@ -26,6 +26,7 @@ import {
   getRank,
 } from '../../services/stats.service';
 import { MAJOR_EXERCISES } from '../../data/majorExercises';
+import { syncLocalAchievements } from '../../services/reward.service';
 import { useAvatarFrame } from '../../hooks/useAvatarFrame';
 import { useDevSettings } from '../../hooks/useDevSettings';
 import { useFeaturedTrophies } from '../../hooks/useFeaturedTrophies';

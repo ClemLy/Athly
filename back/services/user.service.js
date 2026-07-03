@@ -15,6 +15,15 @@ class UserService {
     // .select("-password") permet d'exclure le champ mot de passe par sécurité
     const user = await User.findById(userId).select("-password");
     if (!user) throw new Error("Utilisateur non trouvé.");
+
+    // Génération lazy pour les comptes antérieurs au parrainage à l'inscription :
+    // tout utilisateur qui consulte son profil obtient son code une fois pour toutes.
+    if (!user.referralCode) {
+      const { uniqueReferralCode } = require("./auth.service");
+      user.referralCode = await uniqueReferralCode();
+      await user.save();
+    }
+
     return user;
   }
 
@@ -49,6 +58,30 @@ class UserService {
 
     await User.findByIdAndDelete(id);
     console.log(`🗑️  [deleteAccount] Utilisateur supprimé    : ${userId}`);
+  }
+
+  /**
+   * Met à jour atomiquement la vitrine de trophées (max 3 IDs).
+   * Les IDs sont filtrés sur le catalogue unifié (backend + local) : aucune
+   * valeur arbitraire ne peut être stockée puis affichée chez un ami.
+   * @param {string} userId
+   * @param {string[]} achievementIds
+   */
+  async updateShowcase(userId, achievementIds) {
+    const { ACHIEVEMENT_CATALOG } = require('../controllers/reward.controller');
+    const { LOCAL_TROPHY_CATALOG } = require('../data/localTrophyCatalog');
+
+    const validIds = [...new Set(achievementIds)]
+      .filter((id) => ACHIEVEMENT_CATALOG[id] || LOCAL_TROPHY_CATALOG[id])
+      .slice(0, 3);
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: { showcasedAchievements: validIds } },
+      { new: true, runValidators: true },
+    ).select('showcasedAchievements');
+    if (!updatedUser) throw new Error('Utilisateur non trouvé.');
+    return updatedUser;
   }
 
   /**

@@ -13,9 +13,10 @@ import ConfirmModal from '../../components/common/ConfirmModal';
 import FriendshipLevelUpModal from '../../components/social/FriendshipLevelUpModal';
 import {
   searchUsers, sendFriendRequest, acceptFriendRequest, declineFriendRequest,
-  getFriendsList, getPendingRequests, getLeaderboard,
+  getFriendsList, getPendingRequests, getLeaderboard, getExerciseLeaderboard,
   getMyGroup, inviteToGroup, respondToGroupInvite, shakeMember, checkGroupStreak, leaveGroup,
 } from '../../services/social.service';
+import { MAJOR_EXERCISES } from '../../data/majorExercises';
 
 const SEGMENTS = [
   { key: 'friends',     label: 'Amis',       icon: 'people' },
@@ -366,6 +367,36 @@ function FriendsSegment({
 const PODIUM_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32'];
 
 function LeaderboardSegment({ leaderboard }) {
+  const [mode, setMode] = useState('xp'); // 'xp' | 'records'
+
+  return (
+    <>
+      {/* ── Bascule XP / Records ── */}
+      <View style={styles.modeRow}>
+        <TouchableOpacity
+          style={[styles.modeBtn, mode === 'xp' && styles.modeBtnActive]}
+          onPress={() => setMode('xp')}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="flash" size={13} color={mode === 'xp' ? '#fff' : Colors.textMuted} />
+          <Text style={[styles.modeTxt, mode === 'xp' && styles.modeTxtActive]}>XP</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.modeBtn, mode === 'records' && styles.modeBtnActive]}
+          onPress={() => setMode('records')}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="barbell" size={13} color={mode === 'records' ? '#fff' : Colors.textMuted} />
+          <Text style={[styles.modeTxt, mode === 'records' && styles.modeTxtActive]}>Records</Text>
+        </TouchableOpacity>
+      </View>
+
+      {mode === 'xp' ? <XpLeaderboard leaderboard={leaderboard} /> : <RecordsLeaderboard />}
+    </>
+  );
+}
+
+function XpLeaderboard({ leaderboard }) {
   const podium = leaderboard.slice(0, 3);
   const rest   = leaderboard.slice(3);
 
@@ -373,7 +404,7 @@ function LeaderboardSegment({ leaderboard }) {
     <>
       {leaderboard.length < 2 ? (
         <View style={styles.emptyBox}>
-          <Text style={styles.emptyEmoji}>🏆</Text>
+          <Ionicons name="trophy-outline" size={36} color={Colors.textMuted} style={{ marginBottom: 10 }} />
           <Text style={styles.emptyTxt}>Ajoute des amis pour lancer la compétition !</Text>
         </View>
       ) : (
@@ -409,6 +440,69 @@ function LeaderboardSegment({ leaderboard }) {
           ))}
         </>
       )}
+    </>
+  );
+}
+
+// ── Classement par exercice (records du réseau d'amis) ─────────────────────────
+
+function RecordsLeaderboard() {
+  const [exercise, setExercise] = useState(MAJOR_EXERCISES[0].name);
+  const [rows, setRows]         = useState([]);
+  const [loading, setLoading]   = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getExerciseLeaderboard(exercise)
+      .then((res) => { if (!cancelled) setRows(res.leaderboard ?? []); })
+      .catch(() => { if (!cancelled) setRows([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [exercise]);
+
+  return (
+    <>
+      {/* ── Choix de l'exercice ── */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.exoChipRow}>
+        {MAJOR_EXERCISES.map((exo) => {
+          const active = exo.name === exercise;
+          return (
+            <TouchableOpacity
+              key={exo.name}
+              style={[styles.exoChip, active && styles.exoChipActive]}
+              onPress={() => setExercise(exo.name)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.exoChipTxt, active && styles.exoChipTxtActive]}>{exo.name}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      {loading ? (
+        <View style={styles.recordsLoading}><ActivityIndicator size="small" color={Colors.primary} /></View>
+      ) : rows.length === 0 ? (
+        <View style={styles.emptyBox}>
+          <Ionicons name="barbell-outline" size={36} color={Colors.textMuted} style={{ marginBottom: 10 }} />
+          <Text style={styles.emptyTxt}>
+            Aucun record sur cet exercice dans ton réseau.{'\n'}Sois le premier à poser la barre !
+          </Text>
+        </View>
+      ) : rows.map((entry, i) => (
+        <AnimatedRow key={entry.user._id} index={i}>
+          <View style={[styles.boardRow, entry.isMe && styles.boardRowMe]}>
+            <Text style={styles.boardPos}>
+              {entry.position <= 3 ? ['🥇', '🥈', '🥉'][entry.position - 1] : `#${entry.position}`}
+            </Text>
+            <Text style={[styles.boardPseudo, entry.isMe && { color: Colors.primary }]}>
+              {entry.user.pseudo}{entry.isMe ? ' (moi)' : ''}
+            </Text>
+            <Text style={styles.boardKg}>{entry.maxPoids} kg</Text>
+            <Text style={styles.boardReps}>× {entry.maxReps}</Text>
+          </View>
+        </AnimatedRow>
+      ))}
     </>
   );
 }
@@ -804,6 +898,32 @@ const styles = StyleSheet.create({
   boardPos:    { color: Colors.textMuted, fontSize: 13, fontWeight: '800', width: 36 },
   boardPseudo: { flex: 1, color: Colors.textPrimary, fontSize: 13.5, fontWeight: '600' },
   boardXp:     { color: Colors.textSecondary, fontSize: 12.5, fontWeight: '700' },
+  boardKg:     { color: Colors.primary, fontSize: 13.5, fontWeight: '800' },
+  boardReps:   { color: Colors.textMuted, fontSize: 11.5, fontWeight: '600', marginLeft: 4, width: 34 },
+
+  // ── Bascule XP / Records ──
+  modeRow: { flexDirection: 'row', gap: 8, marginTop: 4, marginBottom: 4 },
+  modeBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 5, height: 34, borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
+  },
+  modeBtnActive: { backgroundColor: Colors.secondaryAccent, borderColor: Colors.secondaryAccent },
+  modeTxt:       { color: Colors.textMuted, fontSize: 12, fontWeight: '700' },
+  modeTxtActive: { color: '#fff' },
+
+  // ── Chips d'exercices ──
+  exoChipRow: { gap: 6, paddingVertical: 10, paddingRight: 4 },
+  exoChip: {
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  exoChipActive:    { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  exoChipTxt:       { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' },
+  exoChipTxtActive: { color: '#fff' },
+  recordsLoading:   { paddingVertical: 30, alignItems: 'center' },
 
   // ── Groupe ──
   inviteCard: {

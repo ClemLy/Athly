@@ -3,8 +3,8 @@ const authService = require("../services/auth.service");
 // ── Inscription ───────────────────────────────────────────────────────────────
 exports.registerUser = async (req, res, next) => {
   try {
-    const { pseudo, email, password } = req.body;
-    const result = await authService.register(pseudo, email, password);
+    const { pseudo, email, password, referralCode } = req.body;
+    const result = await authService.register(pseudo, email, password, referralCode);
     res.status(201).json({ success: true, ...result });
   } catch (error) {
     next(error);
