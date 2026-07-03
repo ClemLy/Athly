@@ -10,6 +10,7 @@ import { useToast } from '../../context/ToastContext';
 import { useUser } from '../../context/UserContext';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import ConfirmModal from '../../components/common/ConfirmModal';
+import FriendshipLevelUpModal from '../../components/social/FriendshipLevelUpModal';
 import {
   searchUsers, sendFriendRequest, acceptFriendRequest, declineFriendRequest,
   getFriendsList, getPendingRequests, getLeaderboard,
@@ -50,12 +51,38 @@ export default function SocialScreen({ navigation }) {
   // ── Confirmation quitter le groupe ──
   const [leaveConfirmVisible, setLeaveConfirmVisible] = useState(false);
 
+  // ── Célébration montée de niveau d'amitié ──────────────────────────────────
+  // Comparaison du niveau d'amitié de chaque ami entre deux loadAll() : toute
+  // hausse détectée (déclenchée par une validation de streak de groupe) est
+  // mise en file et célébrée une par une. Le tout premier chargement mémorise
+  // sans célébrer (évite un faux déclenchement au démarrage — même garde que
+  // LevelUpCelebration.js).
+  const previousFriendshipLevels = useRef(new Map());
+  const [levelUpQueue, setLevelUpQueue]   = useState([]);
+  const [activeLevelUp, setActiveLevelUp] = useState(null);
+
+  // ── Popup "objet Unique à réclamer" (streak de groupe 30j à 5 membres) ────
+  const [bloodSangUnlockedVisible, setBloodSangUnlockedVisible] = useState(false);
+
   const loadAll = useCallback(async () => {
     try {
       const [friendsRes, pendingRes, boardRes, groupRes] = await Promise.all([
         getFriendsList(), getPendingRequests(), getLeaderboard(), getMyGroup(),
       ]);
-      setFriends(friendsRes.friends ?? []);
+      const incomingFriends = friendsRes.friends ?? [];
+      const newlyLeveledUp = [];
+      for (const f of incomingFriends) {
+        const prevLevel = previousFriendshipLevels.current.get(f.friendshipId);
+        if (prevLevel !== undefined && f.friendshipLevel > prevLevel) {
+          newlyLeveledUp.push({ pseudo: f.user.pseudo, level: f.friendshipLevel });
+        }
+        previousFriendshipLevels.current.set(f.friendshipId, f.friendshipLevel);
+      }
+      if (newlyLeveledUp.length > 0) {
+        setLevelUpQueue((q) => [...q, ...newlyLeveledUp]);
+      }
+
+      setFriends(incomingFriends);
       setPending(pendingRes.requests ?? []);
       setLeaderboard(boardRes.leaderboard ?? []);
       setGroup(groupRes.group ?? null);
@@ -69,6 +96,14 @@ export default function SocialScreen({ navigation }) {
       setRefreshing(false);
     }
   }, [showToast]);
+
+  // Défile la file un item à la fois — jamais deux modales superposées.
+  useEffect(() => {
+    if (!activeLevelUp && levelUpQueue.length > 0) {
+      setActiveLevelUp(levelUpQueue[0]);
+      setLevelUpQueue((q) => q.slice(1));
+    }
+  }, [activeLevelUp, levelUpQueue]);
 
   useFocusEffect(useCallback(() => { loadAll(); }, [loadAll]));
 
@@ -187,6 +222,7 @@ export default function SocialScreen({ navigation }) {
                     if (res.groupBonus?.bonusXp > 0) {
                       addBonusXp('Bonus de groupe', res.groupBonus.bonusXp);
                     }
+                    if (res.bloodSangUnlocked) setBloodSangUnlockedVisible(true);
                   } else if (res.alreadyValidated) {
                     showToast('Déjà validée aujourd\'hui ✅', 'success');
                   } else {
@@ -218,6 +254,27 @@ export default function SocialScreen({ navigation }) {
           doAction(() => leaveGroup(), 'Vous avez quitté le groupe.');
         }}
         onCancel={() => setLeaveConfirmVisible(false)}
+      />
+
+      <ConfirmModal
+        visible={bloodSangUnlockedVisible}
+        icon="color-palette"
+        title="Couleur Unique débloquée !"
+        body="Votre groupe a validé 30 jours de streak à 5 membres. La couleur de cadre « Rouge Sang » vous attend dans votre inventaire — direction le Sac pour la réclamer."
+        confirmLabel="Voir mon inventaire"
+        cancelLabel="Plus tard"
+        onConfirm={() => {
+          setBloodSangUnlockedVisible(false);
+          navigation.navigate('ProfileTab', { screen: 'Inventory' });
+        }}
+        onCancel={() => setBloodSangUnlockedVisible(false)}
+      />
+
+      <FriendshipLevelUpModal
+        visible={!!activeLevelUp}
+        pseudo={activeLevelUp?.pseudo}
+        level={activeLevelUp?.level}
+        onClose={() => setActiveLevelUp(null)}
       />
     </View>
   );

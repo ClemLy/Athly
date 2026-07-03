@@ -20,4 +20,8 @@ router.get('/achievements',  reward.getUserAchievements);
 // (openChest, acceptFriendRequest, checkAndUpdateGroupStreaks…)
 router.post('/check',        reward.checkAchievements);
 
+// Synchronise les trophées du catalogue LOCAL (V1) débloqués côté client,
+// pour qu'ils apparaissent sur le profil public consulté par les amis.
+router.put('/achievements/sync', reward.syncLocalAchievements);
+
 module.exports = router;

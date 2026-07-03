@@ -26,6 +26,8 @@ const InventoryItemSchema = new mongoose.Schema(
         "LEVEL_COUPON",        // Coupon de niveau     : +1 level
         "CHEST_KEY",           // Clé de coffre        : ouvre un coffre
         "PROFILE_FRAME_BLOOD_BOND", // Cadre cosmétique Unique — niveau d'amitié 5, hors coffres
+        "FRAME_COLOR_BLOOD_SANG",   // Couleur cosmétique Unique — streak groupe 30j à 5 membres, hors coffres
+        "THEME_UNLOCK_BLOOD_SANG",  // Thème cosmétique Unique — 100 coffres ouverts, hors coffres
       ],
     },
     rarity: {
@@ -118,6 +120,17 @@ const UserSchema = new mongoose.Schema(
     // Cumul des minutes de séance — débloque des coffres à certains paliers
     totalWorkoutMinutes: { type: Number, default: 0, min: 0 },
 
+    // Cumul du nombre de coffres ouverts (openChest) — indépendant des minutes
+    // de séance : sert de condition de déblocage (trophées gradués, thème
+    // cosmétique Rouge Sang Unique à 100 coffres).
+    totalChestsOpened: { type: Number, default: 0, min: 0 },
+
+    // Cosmétiques Uniques définitivement débloqués (réclamés depuis
+    // l'inventaire — voir inventory.controller.js → claimUniqueItem).
+    // Clés libres du catalogue front (BorderPicker.js / profileThemes.js) :
+    // ex. "FRAME_SHAPE_DRAGONFANG", "FRAME_COLOR_BLOODSANG", "THEME_BLOODSANG".
+    unlockedCosmetics: { type: [String], default: [] },
+
     // ── Parrainage V2 ─────────────────────────────────────────────────────────
     // Code unique généré à la création du compte (ex: "ATH-X7K2P")
     referralCode: { type: String, unique: true, sparse: true },
@@ -128,6 +141,11 @@ const UserSchema = new mongoose.Schema(
     // ── Trophées / Succès V2 ─────────────────────────────────────────────────
     // Tableau des trophées débloqués. Le catalogue complet vit dans reward.controller.js.
     achievements: { type: [AchievementEntrySchema], default: [] },
+
+    // Trophées mis en avant sur le profil public (max 3, contrôlé par Joi côté
+    // validateur). Peut référencer un id du catalogue backend OU du miroir
+    // local (LOCAL_TROPHY_CATALOG) — voir user.service.js → updateShowcase.
+    showcasedAchievements: { type: [String], default: [] },
 
     // ── Cadre de profil équipé ─────────────────────────────────────────────────
     // Synchronisé depuis le choix local (useAvatarFrame.js) pour que les amis

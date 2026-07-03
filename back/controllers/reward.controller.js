@@ -2,6 +2,7 @@
 
 const User       = require('../models/User');
 const Friendship = require('../models/Friendship');
+const { LOCAL_TROPHY_IDS } = require('../data/localTrophyCatalog');
 
 // ─── Catalogue des trophées ───────────────────────────────────────────────────
 // Source de vérité unique. Chaque entrée décrit un trophée du jeu.
@@ -57,6 +58,43 @@ const ACHIEVEMENT_CATALOG = {
     id:          'FIRST_UNIQUE_ITEM',
     name:        'ATHLY UNIQUE',
     description: "Vous avez obtenu votre premier objet Unique.",
+    category:    'collection',
+    hidden:      false,
+  },
+
+  // ── Coffres (paliers gradués) ─────────────────────────────────────────────
+  CHEST_1: {
+    id:          'CHEST_1',
+    name:        'Premier Trésor',
+    description: 'Vous avez ouvert votre premier coffre.',
+    category:    'collection',
+    hidden:      false,
+  },
+  CHEST_10: {
+    id:          'CHEST_10',
+    name:        'Chasseur de Coffres',
+    description: 'Vous avez ouvert 10 coffres.',
+    category:    'collection',
+    hidden:      false,
+  },
+  CHEST_50: {
+    id:          'CHEST_50',
+    name:        'Pilleur Aguerri',
+    description: 'Vous avez ouvert 50 coffres.',
+    category:    'collection',
+    hidden:      false,
+  },
+  CHEST_100: {
+    id:          'CHEST_100',
+    name:        'Maître du Butin',
+    description: 'Vous avez ouvert 100 coffres.',
+    category:    'collection',
+    hidden:      false,
+  },
+  CHEST_200: {
+    id:          'CHEST_200',
+    name:        'Seigneur des Coffres',
+    description: 'Vous avez ouvert 200 coffres.',
     category:    'collection',
     hidden:      false,
   },
@@ -143,6 +181,20 @@ async function checkAndUnlockAchievements(userId) {
     if (!unlockedIds.has(achievementId)) {
       const hasItem = user.inventory.some((i) => i.rarity === rarity && i.quantity > 0);
       if (hasItem) tryUnlock(achievementId);
+    }
+  }
+
+  // ── Trophées de coffres : paliers gradués sur totalChestsOpened ───────────
+  const CHEST_ACHIEVEMENTS = [
+    [1,   'CHEST_1'],
+    [10,  'CHEST_10'],
+    [50,  'CHEST_50'],
+    [100, 'CHEST_100'],
+    [200, 'CHEST_200'],
+  ];
+  for (const [threshold, achievementId] of CHEST_ACHIEVEMENTS) {
+    if (!unlockedIds.has(achievementId) && user.totalChestsOpened >= threshold) {
+      tryUnlock(achievementId);
     }
   }
 
@@ -383,6 +435,54 @@ exports.checkAchievements = async (req, res, next) => {
       message:        newlyUnlocked.length > 0
         ? `${newlyUnlocked.length} nouveau(x) trophée(s) débloqué(s) !`
         : 'Aucun nouveau trophée pour le moment.',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// syncLocalAchievements  PUT /api/rewards/achievements/sync
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Synchronise les trophées du catalogue LOCAL (V1, évalués côté client depuis
+ * les logs de séances AsyncStorage) vers le compte backend, pour qu'ils
+ * apparaissent dans le profil public consulté par les amis.
+ *
+ * Body : { ids: string[] } — filtré contre l'allowlist LOCAL_TROPHY_IDS :
+ *  - Un id hors catalogue local (y compris un id du catalogue BACKEND, ex.
+ *    "FRIENDSHIP_LEVEL_5") est silencieusement ignoré — jamais auto-octroyé.
+ *  - Additif uniquement : ne retire jamais un trophée déjà synchronisé
+ *    (le client peut renvoyer un sous-ensemble sans effacer l'historique).
+ */
+exports.syncLocalAchievements = async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) {
+      return next(createError('ids doit être un tableau.', 400));
+    }
+
+    const user = await User.findById(req.user.id).select('achievements');
+    if (!user) return next(createError('Utilisateur introuvable.', 404));
+
+    const alreadyUnlocked = new Set(user.achievements.map((a) => a.achievementId));
+    const validIds  = ids.filter((id) => typeof id === 'string' && LOCAL_TROPHY_IDS.has(id));
+    const toAdd     = validIds.filter((id) => !alreadyUnlocked.has(id));
+    const ignored   = ids.filter((id) => !LOCAL_TROPHY_IDS.has(id));
+
+    if (toAdd.length > 0) {
+      await User.updateOne(
+        { _id: req.user.id },
+        { $push: { achievements: { $each: toAdd.map((achievementId) => ({ achievementId })) } } },
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      synced:  toAdd,
+      added:   toAdd.length,
+      ignored: ignored.length,
     });
   } catch (err) {
     next(err);

@@ -22,6 +22,10 @@ import {
 } from '../../services/stats.service';
 import { PROFILE_THEMES, isThemeLocked } from '../../data/profileThemes';
 import { TROPHY_CATALOG, TROPHY_CATEGORIES, ULTIMATE_TROPHY, evaluateTrophies } from '../../data/trophyCatalog';
+import { COLLECTION_CATEGORY, BACKEND_CATEGORY_MAP } from '../../data/backendTrophyCategories';
+import { getAchievements } from '../../services/reward.service';
+import { normalizeAchievement } from '../../components/profile/AchievementShowcase';
+import { TrophyIcon } from '../../components/profile/TrophySlot';
 import { useDevSettings } from '../../hooks/useDevSettings';
 import { useFocusEffect } from '@react-navigation/native';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
@@ -33,7 +37,10 @@ import {
   scheduleDailyReminder,
   cancelDailyReminder,
 } from '../../services/notificationService';
-import { syncBackendLevel, giveChests, generateMockSocial } from '../../services/debug.service';
+import {
+  syncBackendLevel, giveChests, generateMockSocial, giveAllItems,
+  simulateChestsOpened, simulateReferral, simulateBirthday,
+} from '../../services/debug.service';
 
 const UNIT_WEIGHT_KEY   = 'athly:unit:weight:v1';
 const UNIT_DIST_KEY     = 'athly:unit:distance:v1';
@@ -50,7 +57,7 @@ const DEV_TAP_TARGET = 10;
 
 export default function SettingsScreen({ navigation }) {
   const { signOut }                       = useAuth();
-  const { setUser, refetch: refetchUser } = useUser();
+  const { user, setUser, refetch: refetchUser } = useUser();
   const { showToast }                     = useToast();
   const { totalXP, sessionLogs, activityLogs, refresh, clearAll: clearWorkoutLogs } = useWorkoutLogs();
   const { clearAll: clearSavedWorkouts }  = useSavedWorkouts();
@@ -348,6 +355,82 @@ export default function SettingsScreen({ navigation }) {
     }
   }, [showFeedback]);
 
+  // Injecte 1 exemplaire de CHAQUE objet existant (consommables + cosmétiques
+  // Uniques réclamables) pour tout tester en un clic. Bloqué en production (404).
+  const handleGiveAllItems = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await giveAllItems();
+      await refetchUser();
+      showFeedback(res.message || 'Tous les objets ajoutés ✓');
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback, refetchUser]);
+
+  // Formatte un retour "+N trophée(s) débloqué(s)" à partir de newlyUnlocked,
+  // partagé par les 3 simulateurs de trophées backend ci-dessous.
+  const feedbackWithUnlocks = useCallback((baseMessage, newlyUnlocked) => {
+    if (newlyUnlocked && newlyUnlocked.length > 0) {
+      return `${baseMessage} · ${newlyUnlocked.length} trophée(s) débloqué(s) ✓`;
+    }
+    return `${baseMessage} (déjà débloqué)`;
+  }, []);
+
+  // Incrémente totalChestsOpened sans vraies ouvertures de coffre — permet de
+  // tester les trophées CHEST_1…CHEST_200 et le thème Rouge Sang (100 coffres)
+  // sans enchaîner des dizaines d'ouvertures manuelles. Bloqué en prod (404).
+  const handleSimulateChests = useCallback(async () => {
+    const n = parseInt(targetChests, 10);
+    if (!targetChests || isNaN(n) || n < 1 || n > 250) { showFeedback('Quantité invalide (1–250)'); return; }
+    try {
+      setSimLoading(true);
+      const res = await simulateChestsOpened(n);
+      await refetchUser();
+      showFeedback(feedbackWithUnlocks(`+${n} coffre(s) simulé(s) (total : ${res.totalChestsOpened})`, res.newlyUnlocked));
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [targetChests, showFeedback, refetchUser, feedbackWithUnlocks]);
+
+  // Crée un filleul factice pour débloquer FIRST_REFERRAL (parrainage) sans
+  // avoir à créer un vrai second compte. Bloqué en production (404).
+  const handleSimulateReferral = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await simulateReferral();
+      await refetchUser();
+      showFeedback(feedbackWithUnlocks('Parrainage simulé', res.newlyUnlocked));
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback, refetchUser, feedbackWithUnlocks]);
+
+  // Force la date de naissance à aujourd'hui pour débloquer BIRTHDAY_SET et
+  // BIRTHDAY_CELEBRATED sans attendre le vrai jour J. Bloqué en prod (404).
+  const handleSimulateBirthday = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await simulateBirthday();
+      await refetchUser();
+      showFeedback(feedbackWithUnlocks('Anniversaire simulé', res.newlyUnlocked));
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback, refetchUser, feedbackWithUnlocks]);
+
   const handleLockDevSection = useCallback(async () => {
     setDevVisible(false);
     setTapCount(0);
@@ -387,9 +470,45 @@ export default function SettingsScreen({ navigation }) {
     () => evaluateTrophies(level, sessionLogs.length, sessionLogs, totalXP, trophyOverrides),
     [level, sessionLogs, totalXP, trophyOverrides],
   );
-  const ultimateUnlocked = evaluatedTrophies.every((t) => t.unlocked);
 
-  const unlockedThemes = PROFILE_THEMES.filter((t) => !isThemeLocked(t, level));
+  // Trophées backend V2 (anniversaire, collection d'objets, coffres, social) —
+  // sans eux, le panneau God Mode n'affichait que les 40 trophées locaux.
+  // Lecture seule ici : pas d'override dev possible sur des données serveur.
+  const [backendAchievements, setBackendAchievements] = useState([]);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      getAchievements()
+        .then((res) => { if (!cancelled) setBackendAchievements(res.achievements ?? []); })
+        .catch(() => {});
+      return () => { cancelled = true; };
+    }, []),
+  );
+
+  const normalizedBackendTrophies = useMemo(
+    () => backendAchievements.map((a) => ({
+      ...normalizeAchievement(a),
+      category: BACKEND_CATEGORY_MAP[a.category] || 'collection',
+      isBackend: true,
+    })),
+    [backendAchievements],
+  );
+
+  const allTrophyCategories = useMemo(() => [...TROPHY_CATEGORIES, COLLECTION_CATEGORY], []);
+  const fullTrophyList = useMemo(
+    () => [...evaluatedTrophies, ...normalizedBackendTrophies],
+    [evaluatedTrophies, normalizedBackendTrophies],
+  );
+
+  // Le Trophée Ultime exige la collection complète (local + backend) — voir
+  // la même règle dans TrophyRoomScreen.js.
+  const ultimateUnlocked = backendAchievements.length > 0 && fullTrophyList.every((t) => t.unlocked);
+
+  const unlockedCosmetics = user?.unlockedCosmetics ?? [];
+  const totalChestsOpened = user?.totalChestsOpened ?? 0;
+  const unlockedThemes = PROFILE_THEMES.filter((t) => !isThemeLocked(t, level, unlockedCosmetics));
+  const bloodSangTheme  = PROFILE_THEMES.find((t) => t.id === 'blood_sang');
+  const bloodSangLocked = bloodSangTheme ? isThemeLocked(bloodSangTheme, level, unlockedCosmetics) : false;
 
   return (
     <View style={styles.root}>
@@ -441,7 +560,7 @@ export default function SettingsScreen({ navigation }) {
           </View>
           <View style={styles.themeGrid} ref={themesRef} onLayout={onThemesLayout} collapsable={false}>
             {PROFILE_THEMES.map((theme) => {
-              const locked   = isThemeLocked(theme, level);
+              const locked   = isThemeLocked(theme, level, unlockedCosmetics);
               const selected = profileThemeId === theme.id;
               return (
                 <TouchableOpacity
@@ -458,6 +577,14 @@ export default function SettingsScreen({ navigation }) {
               );
             })}
           </View>
+          {bloodSangLocked && (
+            <View style={styles.themeSpecialHint}>
+              <Ionicons name="lock-closed" size={11} color={Colors.textMuted} />
+              <Text style={styles.themeSpecialHintTxt}>
+                Rouge Sang : déblocable après avoir ouvert 100 coffres (Actuel : {Math.min(totalChestsOpened, 100)}/100)
+              </Text>
+            </View>
+          )}
         </SettingsGroup>
 
         {/* ═══ NOTIFICATIONS ════════════════════════════════════════════════════ */}
@@ -570,7 +697,13 @@ export default function SettingsScreen({ navigation }) {
                     keyboardType="number-pad" placeholder="1"
                     placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
                   <DevBtn label="+ Coffre(s)" onPress={handleGiveChests} disabled={simLoading} />
+                  <DevBtn label="Simuler ouverts" onPress={handleSimulateChests} disabled={simLoading} />
                 </View>
+                <Text style={styles.devHint}>
+                  « + Coffre(s) » ajoute des CHEST_KEY à ouvrir manuellement. « Simuler ouverts »
+                  incrémente directement le compteur de coffres ouverts (trophées CHEST_1…CHEST_200,
+                  thème Rouge Sang à 100).
+                </Text>
                 <View style={styles.devBtnRow}>
                   <DevBtn
                     label="Générer un réseau social de test"
@@ -582,6 +715,27 @@ export default function SettingsScreen({ navigation }) {
                 <Text style={styles.devHint}>
                   Crée FauxAmi_1 et FauxAmi_2 (amis acceptés, pour Classement et Groupe)
                   et FauxAmi_3 (demande en attente, pour Accepter/Refuser). Rejouable sans doublons.
+                </Text>
+                <View style={styles.devBtnRow}>
+                  <DevBtn
+                    label="Tout obtenir (All Items)"
+                    onPress={handleGiveAllItems}
+                    disabled={simLoading}
+                    variant="violet"
+                    flex
+                  />
+                </View>
+                <Text style={styles.devHint}>
+                  Ajoute 1 exemplaire de chaque objet (consommables + cosmétiques Uniques
+                  réclamables) dans l'inventaire, pour tout tester d'un coup.
+                </Text>
+                <View style={styles.devBtnRow}>
+                  <DevBtn label="Simuler un parrainage" onPress={handleSimulateReferral} disabled={simLoading} flex />
+                  <DevBtn label="Simuler un anniversaire" onPress={handleSimulateBirthday} disabled={simLoading} flex />
+                </View>
+                <Text style={styles.devHint}>
+                  Débloquent respectivement le trophée « Recruteur Athly » (parrainage) et les
+                  trophées anniversaire, sans attendre un vrai filleul ou le vrai jour J.
                 </Text>
 
                 {/* ── SIMULATION ── */}
@@ -611,7 +765,7 @@ export default function SettingsScreen({ navigation }) {
                     {ULTIMATE_TROPHY.label}
                   </Text>
                   <Text style={[styles.trophyUltimateSub, { color: ultimateUnlocked ? Colors.success : Colors.textMuted }]}>
-                    {ultimateUnlocked ? '✓ Débloqué !' : `${evaluatedTrophies.filter(t => t.unlocked).length}/${TROPHY_CATALOG.length}`}
+                    {ultimateUnlocked ? '✓ Débloqué !' : `${fullTrophyList.filter(t => t.unlocked).length}/${fullTrophyList.length}`}
                   </Text>
                 </View>
 
@@ -651,8 +805,8 @@ export default function SettingsScreen({ navigation }) {
                   />
                 </TouchableOpacity>
 
-                {trophyExpanded && TROPHY_CATEGORIES.map((cat) => {
-                  const catTrophies = evaluatedTrophies.filter((t) => t.category === cat.id);
+                {trophyExpanded && allTrophyCategories.map((cat) => {
+                  const catTrophies = fullTrophyList.filter((t) => t.category === cat.id);
                   if (catTrophies.length === 0) return null;
                   return (
                     <View key={cat.id}>
@@ -660,7 +814,7 @@ export default function SettingsScreen({ navigation }) {
                       {catTrophies.map((t) => (
                         <View key={t.id} style={styles.trophyRow}>
                           <View style={[styles.trophyIconDot, { backgroundColor: t.color + '30', borderColor: t.color + '60' }]}>
-                            <Ionicons name={t.icon} size={10} color={t.unlocked ? t.color : Colors.textMuted} />
+                            <TrophyIcon name={t.icon} size={10} color={t.unlocked ? t.color : Colors.textMuted} />
                           </View>
                           <View style={styles.trophyTextCol}>
                             <Text style={[styles.trophyName, { color: t.unlocked ? Colors.textPrimary : Colors.textMuted }]} numberOfLines={1}>
@@ -668,18 +822,30 @@ export default function SettingsScreen({ navigation }) {
                             </Text>
                             <Text style={styles.trophyCond} numberOfLines={1}>{t.condition}</Text>
                           </View>
-                          <View style={styles.trophySwitchWrap}>
-                            {!t.naturalUnlocked && trophyOverrides[t.id] === true && (
-                              <Text style={styles.trophyOverrideTag}>DEV</Text>
-                            )}
-                            <Switch
-                              value={t.unlocked}
-                              onValueChange={(val) => setTrophyOverride(t.id, val === t.naturalUnlocked ? null : val)}
-                              trackColor={{ false: 'rgba(255,255,255,0.10)', true: t.color + 'AA' }}
-                              thumbColor={t.unlocked ? t.color : '#888'}
-                              style={styles.trophySwitch}
-                            />
-                          </View>
+                          {t.isBackend ? (
+                            // Trophée de compte (serveur) : pas d'override dev possible,
+                            // affiche uniquement le statut réel.
+                            <View style={styles.trophySwitchWrap}>
+                              <Ionicons
+                                name={t.unlocked ? 'checkmark-circle' : 'lock-closed'}
+                                size={16}
+                                color={t.unlocked ? t.color : Colors.textMuted}
+                              />
+                            </View>
+                          ) : (
+                            <View style={styles.trophySwitchWrap}>
+                              {!t.naturalUnlocked && trophyOverrides[t.id] === true && (
+                                <Text style={styles.trophyOverrideTag}>DEV</Text>
+                              )}
+                              <Switch
+                                value={t.unlocked}
+                                onValueChange={(val) => setTrophyOverride(t.id, val === t.naturalUnlocked ? null : val)}
+                                trackColor={{ false: 'rgba(255,255,255,0.10)', true: t.color + 'AA' }}
+                                thumbColor={t.unlocked ? t.color : '#888'}
+                                style={styles.trophySwitch}
+                              />
+                            </View>
+                          )}
                         </View>
                       ))}
                     </View>
@@ -986,6 +1152,11 @@ const styles = StyleSheet.create({
   themeLockOverlay:{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   themeLabel:      { color: Colors.textMuted, fontSize: 8, fontWeight: '600', textAlign: 'center' },
   themeLabelLocked:{ color: Colors.textMuted },
+  themeSpecialHint: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+    paddingHorizontal: 12, paddingBottom: 12, paddingTop: 2,
+  },
+  themeSpecialHintTxt: { flex: 1, color: Colors.textMuted, fontSize: 10.5, lineHeight: 14 },
 
   // ── God Mode console ───────────────────────────────────────────────────────
   devConsole: { marginTop: 10, backgroundColor: GOLD_BG, borderRadius: 16, borderWidth: 1, borderColor: GOLD_BDR, padding: 16, gap: 12 },

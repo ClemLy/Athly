@@ -31,6 +31,7 @@ import { useDevSettings } from '../../hooks/useDevSettings';
 import { useFeaturedTrophies } from '../../hooks/useFeaturedTrophies';
 import { getTheme } from '../../data/profileThemes';
 import { evaluateTrophies, ULTIMATE_TROPHY } from '../../data/trophyCatalog';
+import { syncLocalAchievements } from '../../services/reward.service';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 
@@ -43,7 +44,8 @@ import StreakBadge      from '../../components/profile/StreakBadge';
 import BorderPicker     from '../../components/profile/BorderPicker';
 
 
-function buildBgGradient(isGod, isLegend, isElite) {
+function buildBgGradient(isGod, isLegend, isElite, isBlood) {
+  if (isBlood)  return ['#0A0000', '#150202', Colors.bgAbyss, '#0A0000'];
   if (isGod)    return ['#0A0800', '#100D02', Colors.bgAbyss, '#08080E'];
   if (isLegend) return [Colors.bgAbyss, '#0C0816', '#0D0A1A', Colors.bgAbyss];
   if (isElite)  return [Colors.bgAbyss, '#0A0A18', '#0D0D1C', Colors.bgAbyss];
@@ -139,6 +141,19 @@ export default function ProfileScreen({ navigation }) {
     return [...base, { ...ULTIMATE_TROPHY, unlocked: ultimateUnlocked, naturalUnlocked: ultimateUnlocked }];
   }, [level, totalSessions, logs, totalXP, trophyOverrides]);
 
+  // Synchronise les trophées locaux NATURELLEMENT débloqués (jamais les
+  // overrides God Mode) vers le backend, pour qu'ils apparaissent sur le
+  // profil public consulté par les amis. Dédupliqué par un ref (déclenche au
+  // plus une requête par changement réel de l'ensemble débloqué).
+  const lastSyncedRef = useRef('');
+  useEffect(() => {
+    const unlockedIds = evaluatedTrophies.filter((t) => t.naturalUnlocked).map((t) => t.id);
+    const key = [...unlockedIds].sort().join(',');
+    if (key === lastSyncedRef.current || unlockedIds.length === 0) return;
+    lastSyncedRef.current = key;
+    syncLocalAchievements(unlockedIds).catch(() => { lastSyncedRef.current = ''; });
+  }, [evaluatedTrophies]);
+
   // Active profile theme (null when 'auto' or not set)
   const activeTheme = useMemo(() => {
     const t = getTheme(profileThemeId);
@@ -146,9 +161,10 @@ export default function ProfileScreen({ navigation }) {
   }, [profileThemeId]);
 
   // Background variant: theme overrides level-based flags
-  const isElite  = activeTheme ? ['elite','legend','god'].includes(activeTheme.bgVariant) : level >= 91;
-  const isLegend = activeTheme ? ['legend','god'].includes(activeTheme.bgVariant)         : level >= 171;
-  const isGod    = activeTheme ? activeTheme.bgVariant === 'god'                          : level >= 200;
+  const isElite  = activeTheme ? ['elite','legend','god','blood'].includes(activeTheme.bgVariant) : level >= 91;
+  const isLegend = activeTheme ? ['legend','god','blood'].includes(activeTheme.bgVariant)         : level >= 171;
+  const isGod    = activeTheme ? activeTheme.bgVariant === 'god'                                  : level >= 200;
+  const isBlood  = activeTheme?.bgVariant === 'blood';
 
   // rank is used for QuickBtn accent — also override with theme
   const rank = useMemo(() => {
@@ -156,7 +172,7 @@ export default function ProfileScreen({ navigation }) {
     return { ...realRank, color: activeTheme.accentColor || realRank.color };
   }, [activeTheme, realRank]);
 
-  const bgColors = buildBgGradient(isGod, isLegend, isElite);
+  const bgColors = buildBgGradient(isGod, isLegend, isElite, isBlood);
   const topPad   = insets.top + 16;
 
   if (profileLoading && !user && logsLoading) {
@@ -221,7 +237,7 @@ export default function ProfileScreen({ navigation }) {
             />
             <EmberParticles
               visible={activeTheme ? activeTheme.shimmer : isLegend}
-              color={isGod || activeTheme?.bgVariant === 'god' ? '#FFD700' : '#C084FC'}
+              color={isBlood ? Colors.uniqueBloodBright : (isGod || activeTheme?.bgVariant === 'god' ? '#FFD700' : '#C084FC')}
             />
           </View>
 
@@ -319,6 +335,7 @@ export default function ProfileScreen({ navigation }) {
         currentShapeId={shapeId}
         currentColorId={colorId}
         playerLevel={level}
+        unlockedCosmetics={user?.unlockedCosmetics ?? []}
         userInitial={userInitial}
         onSelectShape={selectShape}
         onSelectColor={selectColor}

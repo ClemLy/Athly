@@ -17,3 +17,11 @@ export async function getAchievements() {
   const res = await API.get('/rewards/achievements');
   return res.data;
 }
+
+// Synchronise les trophées du catalogue LOCAL (V1, évalués depuis les logs de
+// séances AsyncStorage) débloqués côté client, pour qu'ils apparaissent sur
+// le profil public consulté par les amis. Additif — jamais destructeur.
+export async function syncLocalAchievements(ids) {
+  const res = await API.put('/rewards/achievements/sync', { ids });
+  return res.data;
+}

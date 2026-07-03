@@ -67,6 +67,30 @@ class UserService {
     return updatedUser;
   }
 
+  /**
+   * Met à jour la vitrine de trophées mis en avant sur le profil public.
+   * Filtre contre le catalogue combiné (backend + miroir local) : impossible
+   * de mettre en avant un id inexistant. Le Joi validator borne déjà à 3 ids.
+   * @param {string} userId
+   * @param {string[]} achievementIds
+   */
+  async updateShowcase(userId, achievementIds) {
+    const { ACHIEVEMENT_CATALOG } = require('../controllers/reward.controller');
+    const { LOCAL_TROPHY_CATALOG } = require('../data/localTrophyCatalog');
+
+    const validIds = achievementIds.filter(
+      (id) => Object.prototype.hasOwnProperty.call(ACHIEVEMENT_CATALOG, id) || Object.prototype.hasOwnProperty.call(LOCAL_TROPHY_CATALOG, id),
+    );
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: { showcasedAchievements: validIds.slice(0, 3) } },
+      { new: true, runValidators: true },
+    ).select('showcasedAchievements');
+    if (!updatedUser) throw new Error('Utilisateur non trouvé.');
+    return updatedUser;
+  }
+
   async addExperience(userId, xpAmount) {
     const user = await User.findById(userId);
     user.xp += xpAmount;

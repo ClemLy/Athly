@@ -1,4 +1,5 @@
 import API from '../api/api';
+import { Colors } from '../constants/theme';
 
 // ─── Inventaire & Coffres (Brique II) ─────────────────────────────────────────
 
@@ -40,17 +41,30 @@ export const ITEM_CATALOG = {
   },
   PROFILE_FRAME_BLOOD_BOND: {
     name: 'Cadre "Lien de Sang"', icon: 'shield', rarity: 'unique',
-    description: "Cosmétique Unique (niveau d'amitié 5). Introuvable en coffre.", usable: false,
+    description: "Cosmétique Unique (niveau d'amitié 5). Introuvable en coffre.",
+    usable: false, claimable: true,
+  },
+  FRAME_COLOR_BLOOD_SANG: {
+    name: 'Couleur "Rouge Sang"', icon: 'color-palette', rarity: 'unique',
+    description: "Cosmétique Unique (streak de groupe 30 jours à 5). Introuvable en coffre.",
+    usable: false, claimable: true,
+  },
+  THEME_UNLOCK_BLOOD_SANG: {
+    name: 'Thème "Rouge Sang"', icon: 'color-wand', rarity: 'unique',
+    description: "Cosmétique Unique (100 coffres ouverts). Introuvable en coffre.",
+    usable: false, claimable: true,
   },
 };
 
-// Couleurs par rareté — alignées sur la palette du jeu (theme.js)
+// Couleurs par rareté — alignées sur la palette du jeu (theme.js).
+// unique = Rouge Sang premium (voir Colors.uniqueBlood*), pas or : distingue
+// visuellement le palier ultime de tout ce qui est légendaire/doré.
 export const RARITY_META = {
   common:    { label: 'Commun',     color: '#9AA0AE' },
   rare:      { label: 'Rare',       color: '#3B82F6' },
   epic:      { label: 'Épique',     color: '#A855F7' },
   legendary: { label: 'Légendaire', color: '#FE7439' },
-  unique:    { label: 'Unique',     color: '#FFD700' },
+  unique:    { label: 'Unique',     color: Colors.uniqueBlood, gradient: [Colors.uniqueBloodBright, Colors.uniqueBlood, Colors.uniqueBloodDeep], glow: Colors.uniqueBloodGlow },
 };
 
 export async function openChest() {
@@ -60,5 +74,13 @@ export async function openChest() {
 
 export async function useItem(itemType) {
   const res = await API.post('/inventory/item/use', { itemType });
+  return res.data;
+}
+
+// Réclame un cosmétique Unique en attente (consomme l'item d'inventaire,
+// débloque définitivement le cosmétique et l'équipe automatiquement côté
+// backend). Voir back/controllers/inventory.controller.js → claimUniqueItem.
+export async function claimUniqueItem(itemType) {
+  const res = await API.post('/inventory/claim', { itemType });
   return res.data;
 }

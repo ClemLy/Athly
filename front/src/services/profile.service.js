@@ -7,3 +7,9 @@ export async function updateEquippedFrame(shapeId, colorId) {
   const res = await API.put('/users/me/frame', { shapeId, colorId });
   return res.data;
 }
+
+// Met à jour la vitrine de trophées mis en avant sur le profil public (max 3).
+export async function updateShowcase(achievementIds) {
+  const res = await API.put('/users/me/showcase', { achievementIds });
+  return res.data;
+}

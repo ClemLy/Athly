@@ -40,7 +40,9 @@ const ShapeItem = React.memo(function ShapeItem({ shape, previewColor, selected,
       <Text style={[styles.itemName, { color: locked ? Colors.textMuted : Colors.textPrimary }]} numberOfLines={1}>
         {shape.name}
       </Text>
-      <Text style={styles.itemUnlock}>{shape.unlockLevel === 0 ? 'Dispo' : `Niv. ${shape.unlockLevel}`}</Text>
+      <Text style={[styles.itemUnlock, shape.special && !locked && styles.itemUnlockUnique]}>
+        {shape.special ? 'Unique' : (shape.unlockLevel === 0 ? 'Dispo' : `Niv. ${shape.unlockLevel}`)}
+      </Text>
     </TouchableOpacity>
   );
 });
@@ -68,7 +70,9 @@ const ColorItem = React.memo(function ColorItem({ colorDef, selected, locked, on
       <Text style={[styles.itemName, { color: locked ? Colors.textMuted : Colors.textPrimary }]} numberOfLines={1}>
         {colorDef.name}
       </Text>
-      <Text style={styles.itemUnlock}>{colorDef.unlockLevel === 0 ? 'Dispo' : `Niv. ${colorDef.unlockLevel}`}</Text>
+      <Text style={[styles.itemUnlock, colorDef.special && !locked && styles.itemUnlockUnique]}>
+        {colorDef.special ? 'Unique' : (colorDef.unlockLevel === 0 ? 'Dispo' : `Niv. ${colorDef.unlockLevel}`)}
+      </Text>
     </TouchableOpacity>
   );
 });
@@ -81,6 +85,7 @@ export default function BorderPicker({
   currentShapeId = 'circle',
   currentColorId = 'none',
   playerLevel = 0,
+  unlockedCosmetics = [],
   userInitial = 'A',
   onSelectShape,
   onSelectColor,
@@ -105,8 +110,15 @@ export default function BorderPicker({
     if (onSelectColor) onSelectColor(id);
   }, [onSelectColor]);
 
-  const unlockedShapes = SHAPE_DEFS.filter((s) => playerLevel >= s.unlockLevel).length;
-  const unlockedColors = COLOR_DEFS.filter((c) => playerLevel >= c.unlockLevel).length;
+  // Cosmétiques "special" (Croc de Dragon, Rouge Sang…) ne sont jamais
+  // gérés par le niveau : ils dépendent d'un flag réclamé côté backend
+  // (voir inventory.controller.js → claimUniqueItem).
+  const isLocked = useCallback((def) => (
+    def.special ? !unlockedCosmetics.includes(def.specialFlag) : playerLevel < def.unlockLevel
+  ), [playerLevel, unlockedCosmetics]);
+
+  const unlockedShapes = SHAPE_DEFS.filter((s) => !isLocked(s)).length;
+  const unlockedColors = COLOR_DEFS.filter((c) => !isLocked(c)).length;
 
   // Build flat FlatList data: no nested ScrollViews → no scroll-grip issues
   const flatData = useMemo(() => {
@@ -128,7 +140,7 @@ export default function BorderPicker({
 
     rows.push({ type: 'spacer' });
     return rows;
-  }, [previewShape, previewColor, playerLevel, unlockedShapes, unlockedColors]);
+  }, [unlockedShapes, unlockedColors]);
 
   const renderItem = useCallback(({ item }) => {
     switch (item.type) {
@@ -182,7 +194,7 @@ export default function BorderPicker({
                 shape={shape}
                 previewColor={previewColor}
                 selected={shape.id === previewShape}
-                locked={playerLevel < shape.unlockLevel}
+                locked={isLocked(shape)}
                 onPress={handleShape}
               />
             ))}
@@ -201,7 +213,7 @@ export default function BorderPicker({
                 key={colorDef.id}
                 colorDef={colorDef}
                 selected={colorDef.id === previewColor}
-                locked={playerLevel < colorDef.unlockLevel}
+                locked={isLocked(colorDef)}
                 onPress={handleColor}
               />
             ))}
@@ -217,7 +229,7 @@ export default function BorderPicker({
       default:
         return null;
     }
-  }, [previewShape, previewColor, playerLevel, userInitial, handleShape, handleColor]);
+  }, [previewShape, previewColor, userInitial, handleShape, handleColor, isLocked]);
 
   return (
     <Modal
@@ -361,4 +373,5 @@ const styles = StyleSheet.create({
   },
   itemName:   { fontSize: 9, fontWeight: '700', textAlign: 'center', color: Colors.textPrimary },
   itemUnlock: { color: Colors.textMuted, fontSize: 8, fontWeight: '500', marginTop: 1, textAlign: 'center' },
+  itemUnlockUnique: { color: Colors.uniqueBlood, fontWeight: '800' },
 });

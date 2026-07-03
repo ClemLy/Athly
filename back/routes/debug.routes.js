@@ -13,7 +13,11 @@ router.use(auth);
 router.post('/sync-level',            debug.syncLevel);
 
 // ── God Mode : sandbox de test (voir controllers/debug.controller.js) ────────
-router.post('/godmode/give-chests',   debug.giveChests);
-router.post('/godmode/mock-social',   debug.mockSocial);
+router.post('/godmode/give-chests',             debug.giveChests);
+router.post('/godmode/give-all-items',          debug.giveAllItems);
+router.post('/godmode/simulate-chests-opened',  debug.simulateChestsOpened);
+router.post('/godmode/simulate-referral',       debug.simulateReferral);
+router.post('/godmode/simulate-birthday',       debug.simulateBirthday);
+router.post('/godmode/mock-social',             debug.mockSocial);
 
 module.exports = router;

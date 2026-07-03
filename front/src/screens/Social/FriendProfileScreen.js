@@ -15,6 +15,7 @@ import HeroLevelCard        from '../../components/profile/HeroLevelCard';
 import StreakBadge          from '../../components/profile/StreakBadge';
 import EmberParticles       from '../../components/profile/EmberParticles';
 import AchievementShowcase  from '../../components/profile/AchievementShowcase';
+import FriendShowcaseGrid   from '../../components/profile/FriendShowcaseGrid';
 
 // ─── FriendProfileScreen ──────────────────────────────────────────────────────
 // Profil public d'un ami (Brique III) : miroir en lecture seule de notre propre
@@ -107,6 +108,11 @@ export default function FriendProfileScreen({ route, navigation }) {
 
   const equippedFrame = profile.user.equippedFrame || { shapeId: 'circle', colorId: 'none' };
 
+  // Vitrine : IDs mis en avant résolus en entrées complètes du catalogue unifié
+  const showcasedEntries = (profile.showcasedAchievements || [])
+    .map((id) => (profile.achievements || []).find((a) => a.id === id))
+    .filter(Boolean);
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
@@ -151,6 +157,9 @@ export default function FriendProfileScreen({ route, navigation }) {
               <StreakBadge streak={profile.stats.streak} />
             </View>
           )}
+
+          {/* ── Vitrine de l'ami : ses trophées mis en avant (mêmes TrophySlot que le profil) ── */}
+          <FriendShowcaseGrid pseudo={profile.user.pseudo} entries={showcasedEntries} />
 
           {/* ── Statut d'amitié ── */}
           <View style={styles.friendshipCard}>

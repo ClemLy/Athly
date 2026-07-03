@@ -31,6 +31,12 @@ const StreakGroupSchema = new mongoose.Schema(
     // Dernier jour où tous les membres ont validé une séance.
     // null = groupe créé mais aucune journée validée encore.
     lastValidatedDate: { type: Date, default: null },
+
+    // Garde d'octroi unique : passe à true la première fois que ce groupe
+    // atteint 30 jours de streak à 5 membres (récompense cosmétique "Rouge
+    // Sang Unique"). Ne redescend jamais, même si la streak est ensuite
+    // remise à 0 — évite un ré-octroi si le groupe rebâtit une streak.
+    bloodSangAwarded: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
