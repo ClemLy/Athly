@@ -13,6 +13,9 @@ const { exerciseRecordSchema } = require("../validators/exercise.validator");
 // Ajouter une nouvelle performance (ex: 3 séries de Squat)
 router.post("/", auth, validate(exerciseRecordSchema), exerciseController.addRecord);
 
+// Classement par exercice au sein du réseau d'amis (?exercise=Nom)
+router.get("/leaderboard", auth, exerciseController.getExerciseLeaderboard);
+
 // Obtenir l'historique de progression d'un exercice précis par son nom
 router.get("/history/:name", auth, exerciseController.getExerciseHistory);
 

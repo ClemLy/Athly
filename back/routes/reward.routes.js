@@ -14,7 +14,11 @@ router.post('/birthdate',       reward.setBirthdate);
 router.post('/birthday/check',  reward.checkBirthday);
 
 // ── Trophées / Succès ─────────────────────────────────────────────────────────
-router.get('/achievements',  reward.getUserAchievements);
+router.get('/achievements',           reward.getUserAchievements);
+
+// Synchronisation des trophées locaux (évalués côté client) vers la BDD —
+// additive, allowlistée sur le catalogue local (data/localTrophyCatalog.js)
+router.put('/achievements/sync',      reward.syncLocalAchievements);
 
 // Vérification manuelle — à appeler aussi depuis les autres contrôleurs
 // (openChest, acceptFriendRequest, checkAndUpdateGroupStreaks…)

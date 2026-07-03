@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  StatusBar, Switch, Alert, TextInput, ActivityIndicator, Modal,
+  StatusBar, Switch, Alert, TextInput, ActivityIndicator, Modal, Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -50,7 +50,7 @@ const DEV_TAP_TARGET = 10;
 
 export default function SettingsScreen({ navigation }) {
   const { signOut }                       = useAuth();
-  const { setUser, refetch: refetchUser } = useUser();
+  const { user, setUser, refetch: refetchUser } = useUser();
   const { showToast }                     = useToast();
   const { totalXP, sessionLogs, activityLogs, refresh, clearAll: clearWorkoutLogs } = useWorkoutLogs();
   const { clearAll: clearSavedWorkouts }  = useSavedWorkouts();
@@ -192,6 +192,21 @@ export default function SettingsScreen({ navigation }) {
       try { await AsyncStorage.setItem('athly:dev:devVisible:v1', 'true'); } catch (_) {}
     }
   }, [tapCount, devVisible]);
+
+  // Récupère le profil backend au montage : garantit que referralCode est
+  // présent (généré paresseusement par getMe pour les comptes existants).
+  useEffect(() => { refetchUser(); }, [refetchUser]);
+
+  const handleShareReferral = useCallback(async () => {
+    if (!user?.referralCode) return;
+    try {
+      await Share.share({
+        message: `Rejoins-moi sur Athly ! Utilise mon code de parrainage ${user.referralCode} à l'inscription : on gagne chacun un Gel de Streak et un Coupon de Niveau.`,
+      });
+    } catch (_) {
+      // Partage annulé ou indisponible : rien à faire
+    }
+  }, [user?.referralCode]);
 
   const handleNotifToggle = useCallback(async (val) => {
     if (val) {
@@ -409,6 +424,29 @@ export default function SettingsScreen({ navigation }) {
             <Ionicons name="create-outline" size={16} color={Colors.textMuted} />
           </SettingsRow>
         </SettingsGroup>
+
+        {/* ═══ PARRAINAGE ═══════════════════════════════════════════════════════ */}
+        <SectionLabel label="Parrainage" />
+        <SettingsGroup>
+          <SettingsRow label="Mon code" last>
+            <View style={styles.referralRow}>
+              <Text style={styles.referralCode}>{user?.referralCode || '…'}</Text>
+              <TouchableOpacity
+                style={styles.referralShareBtn}
+                onPress={handleShareReferral}
+                disabled={!user?.referralCode}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="share-social-outline" size={16} color={Colors.primary} />
+              </TouchableOpacity>
+            </View>
+          </SettingsRow>
+        </SettingsGroup>
+        <Text style={styles.referralHint}>
+          Partage ton code : ton filleul et toi recevez chacun un Gel de Streak et un Coupon
+          de Niveau, et vous devenez amis automatiquement.
+        </Text>
 
         {/* ═══ UNITÉS ═══════════════════════════════════════════════════════════ */}
         <SectionLabel label="Unités" />
@@ -972,6 +1010,22 @@ const styles = StyleSheet.create({
   valueText:    { color: Colors.textMuted, fontSize: 14, fontWeight: '500' },
 
   segRow:        { flexDirection: 'row', gap: 6 },
+
+  // ── Parrainage ──
+  referralRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  referralCode: {
+    color: Colors.gold, fontSize: 14, fontWeight: '800', letterSpacing: 1.2,
+  },
+  referralShareBtn: {
+    width: 32, height: 32, borderRadius: 10,
+    backgroundColor: 'rgba(254,116,57,0.12)',
+    borderWidth: 1, borderColor: 'rgba(254,116,57,0.30)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  referralHint: {
+    color: Colors.textMuted, fontSize: 11, lineHeight: 16,
+    marginTop: 8, marginHorizontal: 4,
+  },
   seg:           { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: GRP_BDR, backgroundColor: 'rgba(255,255,255,0.04)' },
   segActive:     { backgroundColor: Colors.primary, borderColor: Colors.primary },
   segText:       { color: Colors.textSecondary, fontSize: 12, fontWeight: '700' },

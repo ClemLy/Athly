@@ -42,6 +42,12 @@ export async function getLeaderboard() {
   return res.data;
 }
 
+// Classement par exercice au sein du réseau d'amis (meilleur poids soulevé).
+export async function getExerciseLeaderboard(exercise) {
+  const res = await API.get(`/exercises/leaderboard?exercise=${encodeURIComponent(exercise)}`);
+  return res.data;
+}
+
 // ─── Groupes de Streak (Brique IV) ────────────────────────────────────────────
 
 export async function getMyGroup() {

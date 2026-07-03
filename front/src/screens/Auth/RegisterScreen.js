@@ -205,6 +205,7 @@ export default function RegisterScreen({ navigation }) {
   const [pseudo,   setPseudo]   = useState('');
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [confirm,  setConfirm]  = useState('');
   const [loading,  setLoading]  = useState(false);
 
@@ -259,7 +260,7 @@ export default function RegisterScreen({ navigation }) {
     try {
       setLoading(true);
       setGlobalErr('');
-      await register({ pseudo, email, password });
+      await register({ pseudo, email, password, referralCode: referralCode.trim() });
       navigation.navigate('EmailVerification', { email });
     } catch (error) {
       const status = error?.status;
@@ -270,6 +271,9 @@ export default function RegisterScreen({ navigation }) {
       } else if (status >= 500) {
         setErrType('info');
         setGlobalErr('Une erreur est survenue, notre équipe est sur le coup.');
+      } else if (msg.toLowerCase().includes('parrainage')) {
+        setErrType('error');
+        setGlobalErr('Code de parrainage invalide. Vérifie-le ou laisse le champ vide.');
       } else if (msg.toLowerCase().includes('email')) {
         setErrType('error');
         setGlobalErr('Cet email est déjà utilisé.');
@@ -280,7 +284,7 @@ export default function RegisterScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [pseudo, email, password, navigation]);
+  }, [pseudo, email, password, referralCode, navigation]);
 
   // ── Soumission : validation + vérification de force ───────────────────────
   const handleSubmit = useCallback(() => {
@@ -378,6 +382,16 @@ export default function RegisterScreen({ navigation }) {
             showPassword={showConfirm}
             setShowPassword={setShowConfirm}
             error={confirmErr}
+          />
+
+          <AuthInput
+            label="Code de parrainage (optionnel)"
+            icon="gift-outline"
+            placeholder="ATH-XXXXX"
+            value={referralCode}
+            onChangeText={(v) => setReferralCode(v.toUpperCase())}
+            autoCapitalize="characters"
+            autoCorrect={false}
           />
 
           {globalErr ? <NotificationBanner message={globalErr} type={errType} /> : null}

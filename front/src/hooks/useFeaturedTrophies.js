@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { updateShowcase } from '../services/profile.service';
 
 const FEATURED_KEY = 'athly:pref:featuredTrophies:v1';
 export const MAX_FEATURED = 3;
@@ -28,6 +29,9 @@ export function useFeaturedTrophies() {
         next = [...prev.slice(1), trophyId];
       }
       AsyncStorage.setItem(FEATURED_KEY, JSON.stringify(next)).catch(() => {});
+      // Synchro backend fire-and-forget : la vitrine devient visible sur le
+      // profil public — un échec réseau ne casse jamais l'affichage local.
+      updateShowcase(next).catch(() => {});
       return next;
     });
   }, []);

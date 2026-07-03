@@ -17,3 +17,11 @@ export async function getAchievements() {
   const res = await API.get('/rewards/achievements');
   return res.data;
 }
+
+// Synchronise les trophées LOCAUX débloqués (trophyCatalog.js, évalués sur les
+// logs AsyncStorage) vers la BDD, pour qu'ils soient visibles sur le profil
+// public. Additif et allowlisté côté serveur.
+export async function syncLocalAchievements(ids) {
+  const res = await API.put('/rewards/achievements/sync', { ids });
+  return res.data;
+}
