@@ -29,8 +29,8 @@ export function useFeaturedTrophies() {
         next = [...prev.slice(1), trophyId];
       }
       AsyncStorage.setItem(FEATURED_KEY, JSON.stringify(next)).catch(() => {});
-      // Synchro backend fire-and-forget : la vitrine devient visible sur le
-      // profil public — un échec réseau ne casse jamais l'affichage local.
+      // Fire-and-forget : la vitrine locale (soi-même) ne doit jamais dépendre
+      // du réseau. Le backend ne sert qu'à exposer la vitrine aux amis.
       updateShowcase(next).catch(() => {});
       return next;
     });

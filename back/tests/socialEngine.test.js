@@ -257,18 +257,18 @@ describe('Moteur RPG & Social Athly — Briques II, III, IV', () => {
         .send({ durationSeconds });
     }
 
-    it('✅ Franchir un palier de 300 min au niveau 11+ attribue une CHEST_KEY', async () => {
+    it('✅ Franchir un palier de 120 min au niveau 11+ attribue une CHEST_KEY', async () => {
       await User.updateOne(
         { _id: alice.userId },
-        { level: 11, xp: 2000, totalWorkoutMinutes: 290 },
+        { level: 11, xp: 2000, totalWorkoutMinutes: 100 },
       );
 
-      const res = await finalizeWorkoutOf(alice, 1200); // +20 min → 310 total
+      const res = await finalizeWorkoutOf(alice, 1200); // +20 min → 120 total
       expect(res.statusCode).toBe(200);
       expect(res.body.stats.chestsAwarded).toBe(1);
 
       const user = await User.findById(alice.userId);
-      expect(user.totalWorkoutMinutes).toBe(310);
+      expect(user.totalWorkoutMinutes).toBe(120);
       const key = user.inventory.find((i) => i.itemType === 'CHEST_KEY');
       expect(key).toBeDefined();
       expect(key.quantity).toBe(1);
@@ -277,7 +277,7 @@ describe('Moteur RPG & Social Athly — Briques II, III, IV', () => {
     it('🔒 Sous le niveau 11 : les minutes s\'accumulent mais AUCUN coffre ne drop', async () => {
       await User.updateOne(
         { _id: alice.userId },
-        { level: 5, xp: 500, totalWorkoutMinutes: 290 },
+        { level: 5, xp: 500, totalWorkoutMinutes: 100 },
       );
 
       const res = await finalizeWorkoutOf(alice, 1200);
@@ -285,7 +285,7 @@ describe('Moteur RPG & Social Athly — Briques II, III, IV', () => {
       expect(res.body.stats.chestsAwarded).toBe(0);
 
       const user = await User.findById(alice.userId);
-      expect(user.totalWorkoutMinutes).toBe(310);
+      expect(user.totalWorkoutMinutes).toBe(120);
       expect(user.inventory.find((i) => i.itemType === 'CHEST_KEY')).toBeUndefined();
     });
 

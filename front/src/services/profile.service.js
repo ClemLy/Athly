@@ -8,8 +8,7 @@ export async function updateEquippedFrame(shapeId, colorId) {
   return res.data;
 }
 
-// Synchronise la vitrine de trophées (max 3 IDs) vers le backend, pour
-// qu'elle soit visible en haut du profil public par les amis.
+// Met à jour la vitrine de trophées mis en avant sur le profil public (max 3).
 export async function updateShowcase(achievementIds) {
   const res = await API.put('/users/me/showcase', { achievementIds });
   return res.data;

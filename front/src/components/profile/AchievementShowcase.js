@@ -3,15 +3,15 @@ import { View, Text, StyleSheet, Modal, ScrollView, TouchableOpacity, Pressable,
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { RARITY_META } from '../../services/inventory.service';
-import { FeaturedModal } from './TrophySlot';
+import { FeaturedModal, TrophyIcon } from './TrophySlot';
 
 // ─── AchievementShowcase ──────────────────────────────────────────────────────
-// Résumé compact (X/50 débloqués + barre de progression) avec un bouton
+// Résumé compact (X/55 débloqués + barre de progression) avec un bouton
 // "Voir le détail" qui ouvre le catalogue complet dans une modale, groupé par
-// catégorie — évite de dérouler 50 badges directement sur le profil.
+// catégorie — évite de dérouler 55 badges directement sur le profil.
 //
 // Couvre les deux catalogues fusionnés côté back (buildAchievementsView) :
-// le V2 backend ({name, description}, ~9 trophées) et le miroir du V1 local
+// le V2 backend ({name, description}, ~14 trophées) et le miroir du V1 local
 // ({label, condition, epicDesc, gradientColors}, ~41 trophées).
 //
 // Props :
@@ -25,9 +25,14 @@ const ICON_BY_ID = {
   FIRST_RARE_ITEM:      'cube',
   FIRST_EPIC_ITEM:      'diamond',
   FIRST_LEGENDARY_ITEM: 'flame',
-  FIRST_UNIQUE_ITEM:    'star',
+  FIRST_UNIQUE_ITEM:    'dragon',
   FIRST_REFERRAL:       'person-add',
   FRIENDSHIP_LEVEL_5:   'heart',
+  CHEST_1:              'cube-outline',
+  CHEST_10:             'cube',
+  CHEST_50:             'gift',
+  CHEST_100:            'trophy',
+  CHEST_200:            'diamond',
 };
 
 const RARITY_BY_ID = {
@@ -36,6 +41,33 @@ const RARITY_BY_ID = {
   FIRST_EPIC_ITEM:      'epic',
   FIRST_LEGENDARY_ITEM: 'legendary',
   FIRST_UNIQUE_ITEM:    'unique',
+};
+
+// Palier de rareté (glow + intensité visuelle) — sans cette table, tous les
+// trophées backend retombaient sur le tier par défaut ("bronze"), écrasant
+// toute lecture de progression/difficulté dans la Salle des Trophées.
+const TIER_BY_ID = {
+  BIRTHDAY_SET:         'bronze',
+  BIRTHDAY_CELEBRATED:  'gold',
+  FIRST_COMMON_ITEM:    'bronze',
+  FIRST_RARE_ITEM:      'silver',
+  FIRST_EPIC_ITEM:      'gold',
+  FIRST_LEGENDARY_ITEM: 'platinum',
+  FIRST_UNIQUE_ITEM:    'diamond',
+  FIRST_REFERRAL:       'silver',
+  FRIENDSHIP_LEVEL_5:   'diamond',
+  CHEST_1:              'bronze',
+  CHEST_10:             'silver',
+  CHEST_50:             'gold',
+  CHEST_100:            'platinum',
+  CHEST_200:            'diamond',
+};
+
+// FRIENDSHIP_LEVEL_5 ("Lien de Sang") est la même récompense Rareté Unique
+// que le cadre cosmétique — même identité Rouge Sang, pas la couleur sociale
+// générique.
+const COLOR_OVERRIDE_BY_ID = {
+  FRIENDSHIP_LEVEL_5: Colors.uniqueBlood,
 };
 
 const CATEGORY_COLOR = {
@@ -78,6 +110,9 @@ const CATEGORY_ORDER = [
 const SHEET_MAX_HEIGHT = Math.round(Dimensions.get('window').height * 0.82);
 
 function colorFor(achievement) {
+  // Les trophées du catalogue local synchronisé portent leur couleur ;
+  // les trophées backend historiques passent par les maps de repli.
+  if (COLOR_OVERRIDE_BY_ID[achievement.id]) return COLOR_OVERRIDE_BY_ID[achievement.id];
   if (achievement.color) return achievement.color;
   const rarity = RARITY_BY_ID[achievement.id];
   if (rarity) return RARITY_META[rarity].color;
@@ -98,7 +133,7 @@ export function normalizeAchievement(a) {
     color,
     gradientColors: a.gradientColors || [color, color, color],
     icon: hiddenLocked ? 'help-circle' : (a.icon || ICON_BY_ID[a.id] || 'trophy'),
-    tier: a.tier || 'bronze',
+    tier: a.tier || TIER_BY_ID[a.id] || 'bronze',
   };
 }
 
@@ -185,7 +220,7 @@ function AchievementBadge({ achievement, onPress }) {
             : styles.badgeIconWrapLocked,
         ]}
       >
-        <Ionicons name={icon} size={22} color={unlocked ? color : Colors.textMuted} />
+        <TrophyIcon name={icon} size={22} color={unlocked ? color : Colors.textMuted} />
       </View>
       <Text style={[styles.badgeName, unlocked && { color: Colors.textPrimary }]} numberOfLines={2}>
         {label}

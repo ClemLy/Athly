@@ -21,6 +21,24 @@ import { useFeaturedTrophies, MAX_FEATURED } from '../../hooks/useFeaturedTrophi
 import { useFocusEffect } from '@react-navigation/native';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
+import { getAchievements } from '../../services/reward.service';
+import { normalizeAchievement } from '../../components/profile/AchievementShowcase';
+import { TrophyIcon } from '../../components/profile/TrophySlot';
+import { COLLECTION_CATEGORY, BACKEND_CATEGORY_MAP } from '../../data/backendTrophyCategories';
+
+// Masque un trophée "secret" tant qu'il n'est pas débloqué — même logique que
+// le masquage backend (buildAchievementsView) appliqué au profil d'un ami :
+// la surprise doit rester entière, y compris pour soi-même.
+function maskIfSecret(trophy) {
+  if (trophy.category !== 'secret' || trophy.unlocked) return trophy;
+  return {
+    ...trophy,
+    label: '???',
+    condition: 'Trophée secret',
+    epicDesc: 'Ce trophée est encore secret. Continuez à vous entraîner pour le découvrir.',
+    icon: 'help-circle',
+  };
+}
 
 // ─── Glow config per tier ─────────────────────────────────────────────────────
 
@@ -34,7 +52,7 @@ const TIER_GLOW = {
 
 // ─── UltimateTile ─────────────────────────────────────────────────────────────
 
-function UltimateTile({ unlocked, onPress }) {
+function UltimateTile({ unlocked, unlockedCount, totalCount, onPress }) {
   const scale   = useRef(new Animated.Value(1)).current;
   const gleamX  = useRef(new Animated.Value(-140)).current;
   const glow    = useRef(new Animated.Value(0)).current;
@@ -141,7 +159,7 @@ function UltimateTile({ unlocked, onPress }) {
 
         {!unlocked && (
           <Text style={styles.ultimateHint}>
-            {TROPHY_CATALOG.length - 0} trophées requis · Progressez pour débloquer
+            {unlockedCount}/{totalCount} trophées débloqués · Progressez pour tous les débloquer
           </Text>
         )}
       </Animated.View>
@@ -157,6 +175,7 @@ export default function TrophyRoomScreen({ navigation }) {
   const { toggleFeatured, isFeatured } = useFeaturedTrophies();
   const [selected, setSelected]   = useState(null);
   const [activeFilter, setFilter] = useState('all');
+  const [backendAchievements, setBackendAchievements] = useState([]);
 
   const { level } = useMemo(() => xpToLevel(totalXP), [totalXP]);
   const totalSessions = logs.length;
@@ -166,16 +185,60 @@ export default function TrophyRoomScreen({ navigation }) {
     [level, totalSessions, logs, totalXP, trophyOverrides],
   );
 
-  const unlockedCount   = evaluated.filter((t) => t.unlocked).length;
-  const ultimateUnlocked = evaluated.every((t) => t.unlocked);
+  // Trophées backend V2 (anniversaire, collection d'objets, coffres, social) —
+  // chargés à part car ils dépendent du compte serveur, pas des logs locaux.
+  // Échec silencieux : la Salle des Trophées reste utilisable hors-ligne avec
+  // uniquement le catalogue local.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      getAchievements()
+        .then((res) => { if (!cancelled) setBackendAchievements(res.achievements ?? []); })
+        .catch(() => {});
+      return () => { cancelled = true; };
+    }, []),
+  );
+
+  const normalizedBackend = useMemo(
+    () => backendAchievements.map((a) => ({
+      ...normalizeAchievement(a),
+      category: BACKEND_CATEGORY_MAP[a.category] || 'collection',
+      isBackend: true,
+    })),
+    [backendAchievements],
+  );
+
+  // Vue combinée (catalogue local + backend) pour l'affichage par catégorie.
+  // Les trophées "secret" verrouillés sont masqués (mêmes égards que le
+  // profil d'un ami : on ne se spoile pas soi-même la surprise).
+  const fullEvaluated = useMemo(
+    () => [...evaluated.map(maskIfSecret), ...normalizedBackend],
+    [evaluated, normalizedBackend],
+  );
+
+  const unlockedCount    = fullEvaluated.filter((t) => t.unlocked).length;
+  const totalCatalogSize = TROPHY_CATALOG.length + backendAchievements.length;
+  // Le Trophée Ultime exige DÉSORMAIS la collection complète (local + backend) —
+  // tant que les trophées backend n'ont pas fini de charger, on le laisse
+  // verrouillé plutôt que de l'unlock prématurément sur le seul catalogue local.
+  const ultimateUnlocked = backendAchievements.length > 0 && fullEvaluated.every((t) => t.unlocked);
   const ultimateTrophy   = useMemo(() => ({ ...ULTIMATE_TROPHY, unlocked: ultimateUnlocked }), [ultimateUnlocked]);
 
+  const allCategories = useMemo(() => [...TROPHY_CATEGORIES, COLLECTION_CATEGORY], []);
+
+  // Rattache "Collection" au filtre "Spécial", sans muter les données source.
+  const filterTabs = useMemo(() => TROPHY_FILTER_TABS.map((tab) => (
+    tab.id === 'special' && tab.categories
+      ? { ...tab, categories: [...tab.categories, 'collection'] }
+      : tab
+  )), []);
+
   const visibleCategories = useMemo(() => {
-    if (activeFilter === 'all') return TROPHY_CATEGORIES;
-    const tab = TROPHY_FILTER_TABS.find(t => t.id === activeFilter);
-    if (!tab || !tab.categories) return TROPHY_CATEGORIES;
-    return TROPHY_CATEGORIES.filter(c => tab.categories.includes(c.id));
-  }, [activeFilter]);
+    if (activeFilter === 'all') return allCategories;
+    const tab = filterTabs.find(t => t.id === activeFilter);
+    if (!tab || !tab.categories) return allCategories;
+    return allCategories.filter(c => tab.categories.includes(c.id));
+  }, [activeFilter, allCategories, filterTabs]);
 
   // ─── Tutorial ───────────────────────────────────────────────────────────
   const {
@@ -190,9 +253,9 @@ export default function TrophyRoomScreen({ navigation }) {
   const firstTrophyId = useMemo(() => {
     if (visibleCategories.length === 0) return null;
     const firstCat     = visibleCategories[0];
-    const catTrophies  = evaluated.filter((t) => t.category === firstCat.id);
+    const catTrophies  = fullEvaluated.filter((t) => t.category === firstCat.id);
     return catTrophies.length > 0 ? catTrophies[0].id : null;
-  }, [visibleCategories, evaluated]);
+  }, [visibleCategories, fullEvaluated]);
 
   const scrollRef = useRef(null);
 
@@ -226,14 +289,14 @@ export default function TrophyRoomScreen({ navigation }) {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Salle des Trophées</Text>
-          <Text style={styles.headerSub}>{unlockedCount}/{TROPHY_CATALOG.length} débloqués</Text>
+          <Text style={styles.headerSub}>{unlockedCount}/{totalCatalogSize} débloqués</Text>
         </View>
         <View style={{ width: 38 }} />
       </View>
 
       {/* Filter tabs */}
       <View style={styles.filterRow} ref={filtersRef} onLayout={onFiltersLayout} collapsable={false}>
-        {TROPHY_FILTER_TABS.map((tab) => {
+        {filterTabs.map((tab) => {
           const active = activeFilter === tab.id;
           return (
             <TouchableOpacity
@@ -265,14 +328,14 @@ export default function TrophyRoomScreen({ navigation }) {
               <Text style={styles.categoryCount}>{ultimateUnlocked ? '1/1' : '0/1'}</Text>
             </View>
             <View ref={ultimateRef} onLayout={onUltimateLayout} collapsable={false}>
-              <UltimateTile unlocked={ultimateUnlocked} onPress={() => setSelected(ultimateTrophy)} />
+              <UltimateTile unlocked={ultimateUnlocked} unlockedCount={unlockedCount} totalCount={totalCatalogSize} onPress={() => setSelected(ultimateTrophy)} />
             </View>
           </View>
         )}
 
         {/* ── Catégories standard ── */}
         {visibleCategories.map((cat) => {
-          const catTrophies = evaluated.filter((t) => t.category === cat.id);
+          const catTrophies = fullEvaluated.filter((t) => t.category === cat.id);
           if (catTrophies.length === 0) return null;
           const catUnlocked = catTrophies.filter((t) => t.unlocked).length;
           return (
@@ -345,7 +408,7 @@ function GalleryTile({ trophy, onPress, tutorialRef, tutorialOnLayout }) {
       ]}>
         {unlocked ? (
           <LinearGradient colors={gradientColors} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.tileIconGrad}>
-            <Ionicons name={icon} size={22} color="#fff" />
+            <TrophyIcon name={icon} size={22} color="#fff" />
           </LinearGradient>
         ) : (
           <View style={styles.tileIconLocked}>
@@ -367,7 +430,7 @@ function GalleryTile({ trophy, onPress, tutorialRef, tutorialOnLayout }) {
 // ─── TrophyDetailModal ────────────────────────────────────────────────────────
 
 function TrophyDetailModal({ trophy, onClose, isFeatured = false, onToggleFeatured }) {
-  const { icon, label, condition, epicDesc, color, gradientColors, unlocked, tier } = trophy;
+  const { icon, label, condition, epicDesc, color, gradientColors, unlocked, tier, isBackend } = trophy;
   const scale   = useRef(new Animated.Value(0.88)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -388,7 +451,7 @@ function TrophyDetailModal({ trophy, onClose, isFeatured = false, onToggleFeatur
             <View style={[styles.modalIconShadow, { shadowColor: color, shadowOpacity: glow.opacity, shadowRadius: glow.radius + 8 }]}>
               <LinearGradient colors={gradientColors} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.modalIconGrad}>
                 {unlocked
-                  ? <Ionicons name={icon} size={52} color="#fff" />
+                  ? <TrophyIcon name={icon} size={52} color="#fff" />
                   : <Ionicons name="lock-closed" size={36} color="rgba(255,255,255,0.3)" />}
               </LinearGradient>
             </View>
@@ -408,7 +471,7 @@ function TrophyDetailModal({ trophy, onClose, isFeatured = false, onToggleFeatur
             <Text style={[styles.epicDesc, !unlocked && { color: Colors.textMuted, fontStyle: 'italic' }]}>
               {unlocked ? epicDesc : "Accomplissez encore — ce trophée attend le guerrier que vous deviendrez."}
             </Text>
-            {unlocked && (
+            {unlocked && !isBackend && (
               <TouchableOpacity
                 style={[styles.featuredBtn, isFeatured && { backgroundColor: color + '18', borderColor: color + '55' }]}
                 onPress={() => { onToggleFeatured?.(); onClose(); }}
@@ -419,6 +482,12 @@ function TrophyDetailModal({ trophy, onClose, isFeatured = false, onToggleFeatur
                   {isFeatured ? 'Retirer de la vitrine' : 'Mettre en avant sur le profil'}
                 </Text>
               </TouchableOpacity>
+            )}
+            {unlocked && isBackend && (
+              <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.10)', marginBottom: 10 }]}>
+                <Ionicons name="server-outline" size={12} color={Colors.textMuted} />
+                <Text style={[styles.badgeText, { color: Colors.textMuted }]}>Trophée de compte</Text>
+              </View>
             )}
 
             <TouchableOpacity style={[styles.closeBtn, { borderColor: color + '50' }]} onPress={onClose} activeOpacity={0.75}>

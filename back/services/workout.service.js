@@ -5,9 +5,10 @@ const { addItemAtomic } = require("./inventory.service");
 
 // ── Coffres à l'effort (Brique II) ───────────────────────────────────────────
 // 1 coffre (CHEST_KEY) tous les CHEST_MINUTES_THRESHOLD minutes de séance
-// légitime cumulées. Le drop est verrouillé sous le niveau 11 (Rang Initié),
+// légitime cumulées — soit 1 coffre toutes les ~2 séances pour une séance
+// moyenne d'1h. Le drop est verrouillé sous le niveau 11 (Rang Initié),
 // comme l'ouverture des coffres.
-const CHEST_MINUTES_THRESHOLD = 300;
+const CHEST_MINUTES_THRESHOLD = 120;
 const MIN_LEVEL_FOR_CHEST_DROP = 11;
 
 /**

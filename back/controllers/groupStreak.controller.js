@@ -13,6 +13,10 @@ const { levelFromXP, getRankForLevel } = require('../utils/levelHelpers');
 
 const MAX_GROUP_SIZE = 5;
 
+// Streak de groupe (jours consécutifs) requise, à taille maximale (5 membres),
+// pour débloquer la couleur cosmétique Unique "Rouge Sang Unique".
+const BLOOD_SANG_STREAK_THRESHOLD = 30;
+
 // Champs publics exposés pour un membre de groupe
 const MEMBER_PUBLIC_FIELDS = 'pseudo level rank xp';
 
@@ -463,6 +467,26 @@ exports.checkAndUpdateGroupStreaks = async (req, res, next) => {
     const xpBonus = computeGroupXpBonus(memberIds.length, group.currentStreak);
     await Promise.all(memberIds.map((id) => grantGroupXpBonus(id, xpBonus.bonusXp)));
 
+    // Récompense cosmétique Unique "Rouge Sang Unique" : streak de groupe de
+    // 30 jours validée à taille MAXIMALE (5 membres). Octroi unique (garde
+    // bloodSangAwarded) — chaque membre reçoit l'item à réclamer depuis son
+    // inventaire (voir inventory.controller.js → claimUniqueItem).
+    let bloodSangUnlocked = false;
+    if (
+      !group.bloodSangAwarded &&
+      memberIds.length === MAX_GROUP_SIZE &&
+      group.currentStreak >= BLOOD_SANG_STREAK_THRESHOLD
+    ) {
+      await Promise.all(memberIds.map((id) => addUniqueItemOnce(id, 'FRAME_COLOR_BLOOD_SANG', 'unique')));
+      group.bloodSangAwarded = true;
+      await group.save();
+      bloodSangUnlocked = true;
+      // FIRST_UNIQUE_ITEM peut se débloquer ici si c'est le tout premier objet
+      // Unique du membre — doit être vérifié pendant que l'item est encore en
+      // inventaire (avant toute réclamation qui le consommerait).
+      await Promise.all(memberIds.map((id) => checkAndUnlockAchievements(id)));
+    }
+
     return res.status(200).json({
       success:       true,
       allValidated:  true,
@@ -471,6 +495,7 @@ exports.checkAndUpdateGroupStreaks = async (req, res, next) => {
       xpGain,
       xpUpdates,
       groupBonus: { ...xpBonus, memberCount: memberIds.length },
+      bloodSangUnlocked,
     });
   } catch (err) {
     next(err);

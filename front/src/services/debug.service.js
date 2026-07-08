@@ -20,3 +20,30 @@ export async function generateMockSocial() {
   const res = await API.post('/debug/godmode/mock-social');
   return res.data;
 }
+
+// Injecte 1 exemplaire de CHAQUE objet existant (consommables + cosmétiques
+// Uniques réclamables) dans l'inventaire, pour tout tester en un clic.
+export async function giveAllItems() {
+  const res = await API.post('/debug/godmode/give-all-items');
+  return res.data;
+}
+
+// Simule `amount` coffres ouverts (sans vraies ouvertures) — débloque les
+// trophées gradués CHEST_1…CHEST_200 et le thème Rouge Sang au palier 100.
+export async function simulateChestsOpened(amount = 1) {
+  const res = await API.post('/debug/godmode/simulate-chests-opened', { amount });
+  return res.data;
+}
+
+// Crée un filleul factice (referredBy) pour débloquer FIRST_REFERRAL.
+export async function simulateReferral() {
+  const res = await API.post('/debug/godmode/simulate-referral');
+  return res.data;
+}
+
+// Force la date de naissance à aujourd'hui pour débloquer BIRTHDAY_SET
+// et BIRTHDAY_CELEBRATED sans attendre le vrai jour J.
+export async function simulateBirthday() {
+  const res = await API.post('/debug/godmode/simulate-birthday');
+  return res.data;
+}

@@ -8,9 +8,9 @@ const ExerciseRecord = require('../models/ExerciseRecord');
 const { ACHIEVEMENT_CATALOG } = require('./reward.controller');
 const { LOCAL_TROPHY_CATALOG } = require('../data/localTrophyCatalog');
 
-// Catalogue UNIFIÉ : 9 trophées backend (évalués serveur) + 41 trophées locaux
-// (évalués client, synchronisés via /rewards/achievements/sync). C'est la
-// totalité de ce qu'un ami peut voir sur un profil public.
+// Catalogue combiné : backend (achievements serveur) + miroir du catalogue
+// LOCAL (V1, synchronisé via PUT /rewards/achievements/sync). Un profil
+// d'ami affiche ainsi les 2 systèmes de trophées d'Athly en une seule vue.
 const FULL_ACHIEVEMENT_CATALOG = { ...ACHIEVEMENT_CATALOG, ...LOCAL_TROPHY_CATALOG };
 const FULL_CATALOG_SIZE        = Object.keys(FULL_ACHIEVEMENT_CATALOG).length;
 
@@ -459,8 +459,8 @@ exports.getFriendProfile = async (req, res, next) => {
         },
         achievements,
         achievementsStats,
-        // Vitrine : IDs mis en avant, restreints aux trophées réellement
-        // débloqués (au cas où un trophée aurait été retiré/désynchronisé)
+        // Restreint aux trophées réellement débloqués — défense en profondeur
+        // contre un désync (ex: trophée retiré après avoir été mis en vitrine).
         showcasedAchievements: (friend.showcasedAchievements || []).filter((id) =>
           friend.achievements.some((a) => a.achievementId === id),
         ),

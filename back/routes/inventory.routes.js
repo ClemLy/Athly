@@ -14,4 +14,7 @@ router.post('/chest/open', inventory.openChest);
 // ── Consommables ──────────────────────────────────────────────────────────────
 router.post('/item/use', inventory.useItem);
 
+// ── Cosmétiques Uniques (cadre/couleur/thème) ─────────────────────────────────
+router.post('/claim', inventory.claimUniqueItem);
+
 module.exports = router;

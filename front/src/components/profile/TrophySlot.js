@@ -3,9 +3,21 @@ import {
   View, Text, StyleSheet, Animated,
   Modal, TouchableOpacity, Pressable,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../constants/theme';
+
+// Certains trophées utilisent une glyphe hors du set Ionicons (ex: "dragon"
+// pour ATHLY UNIQUE — Ionicons n'a pas d'équivalent cornes/dragon correct).
+// TrophyIcon route vers le bon set en un seul endroit, partagé par tous les
+// rendus de trophée (vitrine, salle des trophées, badges).
+const CUSTOM_ICON_SETS = { dragon: FontAwesome5 };
+
+export function TrophyIcon({ name, size, color }) {
+  const CustomSet = CUSTOM_ICON_SETS[name];
+  if (CustomSet) return <CustomSet name={name} size={size * 0.86} color={color} />;
+  return <Ionicons name={name} size={size} color={color} />;
+}
 
 // Rendu partagé entre la Vitrine du profil (ProfileScreen/TrophyGrid) et la
 // vitrine d'un ami (FriendProfileScreen) — un seul composant, un seul style.
@@ -54,7 +66,7 @@ export function TrophySlot({ trophy, onPress }) {
         {unlocked ? (
           <LinearGradient colors={gradientColors} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.iconGradient}>
             <Animated.View pointerEvents="none" style={[styles.gleam, { transform: [{ translateX: gleamX }, { rotate: '22deg' }] }]} />
-            <Ionicons name={icon} size={28} color="#fff" />
+            <TrophyIcon name={icon} size={28} color="#fff" />
           </LinearGradient>
         ) : (
           <View style={styles.iconLocked}>
@@ -106,7 +118,7 @@ export function FeaturedModal({ trophy, onClose, onUnfeature }) {
           <Pressable style={styles.modalInner} onPress={() => {}}>
             <View style={[styles.modalIconShadow, { shadowColor: color }]}>
               <LinearGradient colors={gradientColors} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.modalIconGradient}>
-                <Ionicons name={icon} size={52} color="#fff" />
+                <TrophyIcon name={icon} size={52} color="#fff" />
               </LinearGradient>
             </View>
 

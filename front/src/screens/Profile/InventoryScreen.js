@@ -9,12 +9,23 @@ import { Colors } from '../../constants/theme';
 import { useUser } from '../../context/UserContext';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import { useToast } from '../../context/ToastContext';
-import { openChest, useItem, ITEM_CATALOG, RARITY_META } from '../../services/inventory.service';
+import { openChest, useItem, claimUniqueItem, ITEM_CATALOG, RARITY_META } from '../../services/inventory.service';
 import { xpForLevel, xpToLevel } from '../../services/stats.service';
+import { useAvatarFrame } from '../../hooks/useAvatarFrame';
+import { useDevSettings } from '../../hooks/useDevSettings';
 import ChestOpeningModal from '../../components/inventory/ChestOpeningModal';
 
 const MIN_LEVEL_FOR_CHEST = 11;
 const RARITY_ORDER = ['unique', 'legendary', 'epic', 'rare', 'common'];
+
+// Auto-équipement du cosmétique Unique juste après sa réclamation — même
+// logique que l'équipement manuel (useAvatarFrame persiste en local +
+// synchronise le backend ; setProfileThemeId reste une préférence locale).
+const CLAIM_EQUIP_ACTION = {
+  PROFILE_FRAME_BLOOD_BOND: (ctx) => ctx.selectShape('dragonfang'),
+  FRAME_COLOR_BLOOD_SANG:   (ctx) => ctx.selectColor('bloodsang'),
+  THEME_UNLOCK_BLOOD_SANG:  (ctx) => ctx.setProfileThemeId('blood_sang'),
+};
 
 // ─── InventoryScreen ──────────────────────────────────────────────────────────
 // Inventaire RPG (Brique II) : coffres à ouvrir, consommables par rareté,
@@ -24,6 +35,8 @@ export default function InventoryScreen({ navigation }) {
   const { user, refetch } = useUser();
   const { addBonusXp, totalXP } = useWorkoutLogs();
   const { showToast } = useToast();
+  const { selectShape, selectColor } = useAvatarFrame();
+  const { setProfileThemeId } = useDevSettings();
 
   const [busy, setBusy]         = useState(false);
   const [chestModal, setChestModal] = useState({ visible: false, drawnItem: null });
@@ -91,6 +104,28 @@ export default function InventoryScreen({ navigation }) {
     }
   };
 
+  // Réclame un cosmétique Unique (cadre/couleur/thème) : consomme l'item côté
+  // backend, débloque définitivement le cosmétique, puis l'équipe/sélectionne
+  // aussitôt côté front pour un retour immédiat.
+  const handleClaimItem = async (itemType) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await claimUniqueItem(itemType);
+      if (res.success) {
+        showToast(`${ITEM_CATALOG[itemType]?.name ?? itemType} réclamé !`, 'success');
+        const equip = CLAIM_EQUIP_ACTION[itemType];
+        if (equip) await equip({ selectShape, selectColor, setProfileThemeId });
+        refetch();
+      }
+    } catch (error) {
+      if (error.isSessionExpired) return;
+      showToast(error.data?.message || 'Impossible de réclamer cet objet.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const closeChestModal = () => {
     setChestModal({ visible: false, drawnItem: null });
     refetch();
@@ -136,6 +171,7 @@ export default function InventoryScreen({ navigation }) {
               index={index}
               busy={busy}
               onUse={() => handleUseItem(entry.itemType)}
+              onClaim={() => handleClaimItem(entry.itemType)}
             />
           ))
         )}
@@ -184,7 +220,7 @@ function ChestCard({ count, locked, busy, onOpen }) {
         <Text style={styles.chestSub}>
           {locked
             ? `Atteins le niveau ${MIN_LEVEL_FOR_CHEST} (Rang Initié) pour les débloquer.`
-            : 'Cumule 5 h de séance pour gagner un coffre.'}
+            : 'Cumule 2 h de séance pour gagner un coffre.'}
         </Text>
       </View>
 
@@ -204,7 +240,7 @@ function ChestCard({ count, locked, busy, onOpen }) {
 
 // ─── Carte item avec entrée en cascade ───────────────────────────────────────
 
-function StaggeredItemCard({ entry, index, busy, onUse }) {
+function StaggeredItemCard({ entry, index, busy, onUse, onClaim }) {
   const slide = useRef(new Animated.Value(24)).current;
   const fade  = useRef(new Animated.Value(0)).current;
 
@@ -225,11 +261,20 @@ function StaggeredItemCard({ entry, index, busy, onUse }) {
 
   return (
     <Animated.View
-      style={[styles.itemCard, {
-        borderColor: `${rarity.color}55`,
-        opacity: fade,
-        transform: [{ translateY: slide }],
-      }]}
+      style={[
+        styles.itemCard,
+        {
+          borderColor: `${rarity.color}55`,
+          opacity: fade,
+          transform: [{ translateY: slide }],
+        },
+        // Lueur pulsée réservée à la rareté Unique — signale le prestige des
+        // cosmétiques Rouge Sang sans dépendre d'un composant à part.
+        rarity.glow && {
+          shadowColor: rarity.glow, shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.9, shadowRadius: 14, elevation: 10,
+        },
+      ]}
     >
       <View style={[styles.itemIconBox, { backgroundColor: `${rarity.color}18` }]}>
         <Ionicons name={meta.icon ?? 'help-circle-outline'} size={24} color={rarity.color} />
@@ -252,6 +297,17 @@ function StaggeredItemCard({ entry, index, busy, onUse }) {
           activeOpacity={0.8}
         >
           <Text style={[styles.useBtnTxt, { color: rarity.color }]}>Utiliser</Text>
+        </TouchableOpacity>
+      )}
+
+      {meta.claimable && (
+        <TouchableOpacity
+          style={[styles.useBtn, { borderColor: rarity.color, backgroundColor: `${rarity.color}14` }, busy && { opacity: 0.4 }]}
+          onPress={onClaim}
+          disabled={busy}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.useBtnTxt, { color: rarity.color }]}>Réclamer</Text>
         </TouchableOpacity>
       )}
     </Animated.View>
