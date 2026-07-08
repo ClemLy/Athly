@@ -43,6 +43,18 @@ const StreakGroupSchema = new mongoose.Schema(
     // dans groupStreak.controller.js). Vidé dès qu'une nouvelle streak est
     // validée avec succès — reste affiché jusque-là.
     shameBreakers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+
+    // Historique des secousses (bouton "Secouer") — limite chaque paire
+    // (from, to) à 1 secousse par jour civil, et permet au front de griser
+    // le bouton pour les membres déjà secoués aujourd'hui (voir shakeMember
+    // et getMyGroup dans groupStreak.controller.js).
+    shakes: [
+      {
+        from: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        to:   { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        date: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true }
 );

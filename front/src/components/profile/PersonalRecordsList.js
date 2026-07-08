@@ -3,18 +3,31 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, MUSCLE_GROUP_COLORS } from '../../constants/theme';
 
-// Liste des records personnels pour les exos majeurs.
-// `records` : sortie de stats.service.getPersonalRecords()
+// Liste des records personnels — utilisée à l'identique sur son propre profil
+// ET sur le profil d'un ami (Section III), pour une présentation cohérente.
+// `records` : sortie de stats.service.getPersonalRecords() OU construite
+// depuis les records mis en avant (ProfileScreen.js / FriendProfileScreen.js)
 //
 // Props :
-//   - records : Array<{ name, group, icon, prWeight, prEstimate1RM, totalSessions, hasData }>
+//   - records : Array<{ name, group, icon, prWeight, prEstimate1RM, totalSessions,
+//                        hasData, subtitle? }>
+//     `subtitle`, si fourni, remplace le texte "N sessions"/"Pas encore fait"
+//     (utilisé quand le nombre de séances n'est pas connu — profil d'ami).
+//   - emptyLabel : titre de l'état vide quand `records` est vide (aucun record
+//     mis en avant) — personnalisable ("Aucun record mis en avant" côté soi,
+//     "Aucun record pour l'instant" côté ami).
 //   - onPressItem : (record) => void  → navigation vers ExerciseStatsScreen
 //
-export default function PersonalRecordsList({ records = [], onPressItem }) {
+export default function PersonalRecordsList({ records = [], onPressItem, emptyLabel = 'Aucun record mis en avant' }) {
   const hasAny = records.some((r) => r.hasData);
 
   if (records.length === 0) {
-    return null;
+    return (
+      <View style={styles.empty}>
+        <Ionicons name="trophy-outline" size={32} color={Colors.textMuted} />
+        <Text style={styles.emptyTitle}>{emptyLabel}</Text>
+      </View>
+    );
   }
 
   if (!hasAny) {
@@ -58,14 +71,16 @@ function RecordRow({ record, isLast, onPress }) {
       <View style={styles.content}>
         <Text style={styles.name} numberOfLines={1}>{record.name}</Text>
         <Text style={[styles.group, { color: tone }]} numberOfLines={1}>
-          {record.totalSessions > 0 ? `${record.totalSessions} session${record.totalSessions > 1 ? 's' : ''}` : 'Pas encore fait'}
+          {record.subtitle
+            ? record.subtitle
+            : record.totalSessions > 0 ? `${record.totalSessions} session${record.totalSessions > 1 ? 's' : ''}` : 'Pas encore fait'}
         </Text>
       </View>
       <View style={styles.valueBlock}>
         {record.hasData ? (
           <>
             <Text style={styles.value}>{record.prWeight} kg</Text>
-            <Text style={styles.valueSub}>1RM ~{record.prEstimate1RM}</Text>
+            {record.prEstimate1RM != null && <Text style={styles.valueSub}>1RM ~{record.prEstimate1RM}</Text>}
           </>
         ) : (
           <Text style={styles.valueEmpty}>—</Text>

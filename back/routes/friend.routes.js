@@ -11,7 +11,11 @@ router.use(auth);
 // ── Demandes ──────────────────────────────────────────────────────────────────
 router.post('/request',            friend.sendFriendRequest);    // Envoyer une demande
 router.put('/accept/:requestId',   friend.acceptFriendRequest);  // Accepter
-router.put('/decline/:requestId',  friend.declineFriendRequest); // Refuser
+router.put('/decline/:requestId',  friend.declineFriendRequest); // Refuser (reçue)
+router.delete('/request/:requestId', friend.cancelFriendRequest); // Annuler (envoyée)
+
+// ── Rupture d'amitié ────────────────────────────────────────────────────────────
+router.delete('/:friendshipId',    friend.removeFriend);         // Retirer un ami
 
 // ── Consultation ──────────────────────────────────────────────────────────────
 router.get('/list',        friend.getFriendsList);      // Tous mes amis (accepted)

@@ -282,3 +282,204 @@ describe('POST /api/debug/godmode/mock-social — outil dev (génère un faux r�
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// God Mode — Vague 1 (groupe, météo, activité, Hall of Shame, secouer)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('God Mode — outils de test Vague 1', () => {
+  const StreakGroup   = require('../models/StreakGroup');
+  const ActivityEvent = require('../models/ActivityEvent');
+  const Workout       = require('../models/Workout');
+  let alice;
+
+  beforeAll(async () => {
+    if (mongoose.connection.readyState === 0) {
+      await mongoose.connect(process.env.MONGO_URI);
+    }
+  });
+
+  afterAll(async () => {
+    await User.deleteMany({});
+    await Friendship.deleteMany({});
+    await StreakGroup.deleteMany({});
+    await ActivityEvent.deleteMany({});
+    await Workout.deleteMany({});
+    await mongoose.connection.close();
+  });
+
+  beforeEach(async () => {
+    await User.deleteMany({});
+    await Friendship.deleteMany({});
+    await StreakGroup.deleteMany({});
+    await ActivityEvent.deleteMany({});
+    await Workout.deleteMany({});
+    alice = await createAndLoginUser('AliceFit', 'alice@athly.fr');
+  });
+
+  describe('POST /api/debug/godmode/simulate-group', () => {
+    it('✅ Crée un groupe avec 3 coéquipiers (ready/active/done) et une streak', async () => {
+      const res = await request(app)
+        .post('/api/debug/godmode/simulate-group')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(201);
+      expect(res.body.groupId).toBeTruthy();
+
+      const groupRes = await request(app)
+        .get('/api/groups/my-group')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(groupRes.body.group.members).toHaveLength(4); // moi + 3 coéquipiers
+      expect(groupRes.body.group.currentStreak).toBe(5);
+
+      const statuses = groupRes.body.group.members
+        .filter((m) => m.pseudo !== 'AliceFit')
+        .map((m) => m.weatherStatus)
+        .sort();
+      expect(statuses).toEqual(['active', 'done', 'ready']);
+    });
+
+    it('🔁 Idempotent : rejouer ne crée pas de doublons de coéquipiers', async () => {
+      await request(app).post('/api/debug/godmode/simulate-group').set('Authorization', `Bearer ${alice.token}`);
+      await request(app).post('/api/debug/godmode/simulate-group').set('Authorization', `Bearer ${alice.token}`);
+
+      const groups = await StreakGroup.find({ members: alice.userId });
+      expect(groups).toHaveLength(1);
+      expect(groups[0].members).toHaveLength(4);
+    });
+
+    it('❌ 401 sans token', async () => {
+      const res = await request(app).post('/api/debug/godmode/simulate-group');
+      expect(res.statusCode).toBe(401);
+    });
+  });
+
+  describe('POST /api/debug/godmode/simulate-activity-event', () => {
+    it("❌ 400 si l'utilisateur n'a pas de groupe", async () => {
+      const res = await request(app)
+        .post('/api/debug/godmode/simulate-activity-event')
+        .set('Authorization', `Bearer ${alice.token}`);
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('✅ Publie un événement au nom d\'un coéquipier, visible dans le feed', async () => {
+      await request(app).post('/api/debug/godmode/simulate-group').set('Authorization', `Bearer ${alice.token}`);
+
+      const res = await request(app)
+        .post('/api/debug/godmode/simulate-activity-event')
+        .set('Authorization', `Bearer ${alice.token}`)
+        .send({ type: 'chest_legendary' });
+
+      expect(res.statusCode).toBe(201);
+      expect(res.body.eventId).toBeTruthy();
+
+      const feedRes = await request(app)
+        .get('/api/activity/feed')
+        .set('Authorization', `Bearer ${alice.token}`);
+      expect(feedRes.body.events).toHaveLength(1);
+      expect(feedRes.body.events[0].actor.pseudo).not.toBe('AliceFit');
+    });
+  });
+
+  describe('POST /api/debug/godmode/simulate-streak-break', () => {
+    it("❌ 400 si l'utilisateur n'a pas de groupe", async () => {
+      const res = await request(app)
+        .post('/api/debug/godmode/simulate-streak-break')
+        .set('Authorization', `Bearer ${alice.token}`);
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('✅ Déclenche le Hall of Shame au prochain getMyGroup', async () => {
+      await request(app).post('/api/debug/godmode/simulate-group').set('Authorization', `Bearer ${alice.token}`);
+
+      const res = await request(app)
+        .post('/api/debug/godmode/simulate-streak-break')
+        .set('Authorization', `Bearer ${alice.token}`);
+      expect(res.statusCode).toBe(200);
+
+      const groupRes = await request(app)
+        .get('/api/groups/my-group')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(groupRes.body.group.currentStreak).toBe(0);
+      expect(groupRes.body.group.shameBreakers.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('POST /api/debug/godmode/simulate-shake-self', () => {
+    it('❌ 400 si aucun token push enregistré', async () => {
+      const res = await request(app)
+        .post('/api/debug/godmode/simulate-shake-self')
+        .set('Authorization', `Bearer ${alice.token}`);
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('✅ 200 avec pushed=false si le token est enregistré mais invalide', async () => {
+      await User.updateOne({ _id: alice.userId }, { $set: { pushToken: 'not-a-real-expo-token' } });
+
+      const res = await request(app)
+        .post('/api/debug/godmode/simulate-shake-self')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.pushed).toBe(false);
+    });
+  });
+
+  describe('POST /api/debug/godmode/simulate-searchable-friend', () => {
+    it('✅ Crée un compte de test cherchable (relationStatus none)', async () => {
+      const res = await request(app)
+        .post('/api/debug/godmode/simulate-searchable-friend')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(201);
+      expect(res.body.tag).toMatch(/^TestAmi#\d{4}$/);
+
+      const searchRes = await request(app)
+        .get(`/api/friends/search?q=${encodeURIComponent(res.body.tag)}`)
+        .set('Authorization', `Bearer ${alice.token}`);
+      expect(searchRes.body.count).toBe(1);
+      expect(searchRes.body.results[0].relationStatus).toBe('none');
+    });
+
+    it('🔁 Idempotent : rejouer renvoie le même tag tant qu\'aucune relation n\'existe', async () => {
+      const first = await request(app)
+        .post('/api/debug/godmode/simulate-searchable-friend')
+        .set('Authorization', `Bearer ${alice.token}`);
+      const second = await request(app)
+        .post('/api/debug/godmode/simulate-searchable-friend')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(second.body.tag).toBe(first.body.tag);
+
+      const count = await User.countDocuments({ pseudo: 'TestAmi' });
+      expect(count).toBe(1);
+    });
+
+    it('✅ Recrée un compte frais si le précédent est devenu ami', async () => {
+      const first = await request(app)
+        .post('/api/debug/godmode/simulate-searchable-friend')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      const searchRes = await request(app)
+        .get(`/api/friends/search?q=${encodeURIComponent(first.body.tag)}`)
+        .set('Authorization', `Bearer ${alice.token}`);
+      const testAmiId = searchRes.body.results[0].user._id;
+
+      await Friendship.create({ requester: alice.userId, recipient: testAmiId, status: 'accepted' });
+
+      const second = await request(app)
+        .post('/api/debug/godmode/simulate-searchable-friend')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(second.statusCode).toBe(201); // nouveau compte créé
+      expect(second.body.tag).not.toBe(first.body.tag);
+    });
+
+    it('❌ 401 sans token', async () => {
+      const res = await request(app).post('/api/debug/godmode/simulate-searchable-friend');
+      expect(res.statusCode).toBe(401);
+    });
+  });
+});

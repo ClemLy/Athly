@@ -20,4 +20,13 @@ router.post('/godmode/simulate-referral',       debug.simulateReferral);
 router.post('/godmode/simulate-birthday',       debug.simulateBirthday);
 router.post('/godmode/mock-social',             debug.mockSocial);
 
+// ── God Mode : Vague 1 (groupe, météo, activité, Hall of Shame, secouer) ────
+router.post('/godmode/simulate-group',          debug.simulateGroup);
+router.post('/godmode/simulate-activity-event', debug.simulateActivityEvent);
+router.post('/godmode/simulate-streak-break',   debug.simulateStreakBreak);
+router.post('/godmode/simulate-shake-self',     debug.simulateShakeSelf);
+
+// ── God Mode : Vague 2 (tag Discord, ajout d'ami) ────────────────────────────
+router.post('/godmode/simulate-searchable-friend', debug.simulateSearchableFriend);
+
 module.exports = router;

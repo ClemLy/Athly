@@ -40,6 +40,8 @@ import {
 import {
   syncBackendLevel, giveChests, generateMockSocial, giveAllItems,
   simulateChestsOpened, simulateReferral, simulateBirthday,
+  simulateGroup, simulateActivityEvent, simulateStreakBreak, simulateShakeSelf,
+  simulateSearchableFriend,
 } from '../../services/debug.service';
 
 const UNIT_WEIGHT_KEY   = 'athly:unit:weight:v1';
@@ -157,6 +159,7 @@ export default function SettingsScreen({ navigation }) {
   const [simLoading,      setSimLoading]      = useState(false);
   const [simFeedback,     setSimFeedback]     = useState('');
   const [trophyExpanded,  setTrophyExpanded]  = useState(false);
+  const [testFriendTag,   setTestFriendTag]   = useState(null);
 
   const [deleteModal1,  setDeleteModal1]  = useState(false);
   const [deleteModal2,  setDeleteModal2]  = useState(false);
@@ -370,6 +373,31 @@ export default function SettingsScreen({ navigation }) {
     }
   }, [showFeedback]);
 
+  // Crée un compte de test PAS déjà ami — seul moyen de tester en solo le
+  // parcours complet "Ajouter un ami" (recherche par tag, preview, envoi).
+  // Bloqué en production (404).
+  const handleSimulateSearchableFriend = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await simulateSearchableFriend();
+      // Le tag doit rester lisible le temps de changer d'écran (Réglages →
+      // Social) pour le saisir dans "Ajouter un ami" — le feedback normal
+      // s'efface après 2,5s, largement trop court pour ça. Affiché à part,
+      // de façon persistante, tant que ce compte de test reste valide.
+      if (res.tag) {
+        setTestFriendTag(res.tag);
+        showFeedback('Compte de test créé — tag affiché ci-dessous ↓');
+      } else {
+        showFeedback(res.message || 'Compte de test créé');
+      }
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback]);
+
   // Injecte 1 exemplaire de CHAQUE objet existant (consommables + cosmétiques
   // Uniques réclamables) pour tout tester en un clic. Bloqué en production (404).
   const handleGiveAllItems = useCallback(async () => {
@@ -445,6 +473,73 @@ export default function SettingsScreen({ navigation }) {
       setSimLoading(false);
     }
   }, [showFeedback, refetchUser, feedbackWithUnlocks]);
+
+  // ── Vague 1 : groupe, météo, activité, Hall of Shame, secouer ────────────
+  // Ces 4 outils sont le SEUL moyen de tester ces fonctionnalités en solo :
+  // elles dépendent toutes d'un groupe à plusieurs membres et/ou d'un second
+  // appareil, ce qu'un testeur seul ne peut pas reproduire manuellement.
+
+  // Crée un groupe de test avec 3 coéquipiers factices (Prêt/Actif/Validé) —
+  // teste la Météo des séances, le multiplicateur de groupe et sert de base
+  // aux 3 autres outils ci-dessous. Bloqué en production (404).
+  const handleSimulateGroup = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await simulateGroup();
+      showFeedback(res.message || 'Groupe de test créé');
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback]);
+
+  // Publie un événement factice au nom d'un coéquipier — teste l'ActivityFeedModal
+  // et les réactions. Nécessite d'avoir d'abord lancé "Simuler un groupe".
+  const handleSimulateActivityEvent = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await simulateActivityEvent();
+      showFeedback(res.message || 'Événement simulé');
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback]);
+
+  // Recule lastValidatedDate du groupe pour déclencher le Hall of Shame au
+  // prochain chargement de l'onglet Groupe.
+  const handleSimulateStreakBreak = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await simulateStreakBreak();
+      showFeedback(res.message || 'Rupture de streak simulée');
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback]);
+
+  // Envoie une vraie notification push au propre appareil du testeur — seul
+  // moyen de vérifier de bout en bout que l'infra push fonctionne sans
+  // second compte/appareil pour recevoir la notification.
+  const handleSimulateShakeSelf = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await simulateShakeSelf();
+      showFeedback(res.message || (res.pushed ? 'Notification envoyée' : 'Échec d\'envoi'));
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback]);
 
   const handleLockDevSection = useCallback(async () => {
     setDevVisible(false);
@@ -688,222 +783,289 @@ export default function SettingsScreen({ navigation }) {
                   <DevStat label="Séances" value={sessionLogs.length} />
                 </View>
 
-                {/* ── NIVEAU & XP ── */}
-                <DevSectionTitle title="NIVEAU & XP" />
-                <View style={styles.devInputRow}>
-                  <TextInput style={styles.devInput} value={targetLevel} onChangeText={setTargetLevel}
-                    keyboardType="number-pad" placeholder={`${level}`}
-                    placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
-                  <DevBtn label="Set niveau" onPress={handleSetLevel} disabled={simLoading} />
-                </View>
-                <View style={styles.devBtnRow}>
-                  <DevBtn label="+1000 XP" onPress={handleAddXP} disabled={simLoading} flex />
-                  <DevBtn label="+1 Niv"   onPress={handlePlusLevel}  disabled={simLoading || level >= 200} flex />
-                  <DevBtn label="-1 Niv"   onPress={handleMinusLevel} disabled={simLoading || level <= 0} flex variant="dim" />
-                </View>
-                <View style={styles.devInputRow}>
-                  <TextInput style={styles.devInput} value={targetXP} onChangeText={setTargetXP}
-                    keyboardType="number-pad" placeholder="XP à ajouter"
-                    placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
-                  <DevBtn label="+ XP" onPress={handleAddCustomXP} disabled={simLoading} />
-                </View>
-                <Text style={styles.devHint}>XP requis Niv.{level + 1} : {xpForLevel(level + 1).toLocaleString('fr-FR')}</Text>
+                {/* ── PROGRESSION (Niveau, XP, sync backend) ── */}
+                <DevSection title="Progression" icon="trending-up" defaultOpen>
+                  <View style={styles.devInputRow}>
+                    <TextInput style={styles.devInput} value={targetLevel} onChangeText={setTargetLevel}
+                      keyboardType="number-pad" placeholder={`${level}`}
+                      placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
+                    <DevBtn label="Set niveau" onPress={handleSetLevel} disabled={simLoading} />
+                  </View>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="+1000 XP" onPress={handleAddXP} disabled={simLoading} flex />
+                    <DevBtn label="+1 Niv"   onPress={handlePlusLevel}  disabled={simLoading || level >= 200} flex />
+                    <DevBtn label="-1 Niv"   onPress={handleMinusLevel} disabled={simLoading || level <= 0} flex variant="dim" />
+                  </View>
+                  <View style={styles.devInputRow}>
+                    <TextInput style={styles.devInput} value={targetXP} onChangeText={setTargetXP}
+                      keyboardType="number-pad" placeholder="XP à ajouter"
+                      placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
+                    <DevBtn label="+ XP" onPress={handleAddCustomXP} disabled={simLoading} />
+                  </View>
+                  <Text style={styles.devHint}>XP requis Niv.{level + 1} : {xpForLevel(level + 1).toLocaleString('fr-FR')}</Text>
 
-                {/* ── SYNC BACKEND ── */}
-                <DevSectionTitle title="SYNC BACKEND" />
-                <Text style={styles.devHint}>
-                  Le niveau ci-dessus est local uniquement. Les coffres et fonctionnalités
-                  serveur (niveau 11+) lisent le niveau backend, synchronise pour les tester.
-                </Text>
-                <View style={styles.devBtnRow}>
-                  <DevBtn
-                    label={`Pousser niveau ${level} vers le backend`}
-                    onPress={handleSyncBackendLevel}
-                    disabled={simLoading}
-                    flex
-                  />
-                </View>
+                  <View style={styles.devSubDivider} />
+                  <Text style={styles.devHint}>
+                    Le niveau ci-dessus est local uniquement. Les coffres et fonctionnalités
+                    serveur (niveau 11+) lisent le niveau backend, synchronise pour les tester.
+                  </Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn
+                      label={`Pousser niveau ${level} vers le backend`}
+                      onPress={handleSyncBackendLevel}
+                      disabled={simLoading}
+                      flex
+                    />
+                  </View>
+                </DevSection>
 
-                {/* ── SANDBOX INVENTAIRE & SOCIAL ── */}
-                <DevSectionTitle title="SANDBOX INVENTAIRE & SOCIAL" />
-                <Text style={styles.devHint}>
-                  Coffres et faux amis générés directement en base, pour tester
-                  l'Inventaire et l'écran Social sans dizaines de vraies actions.
-                </Text>
-                <View style={styles.devInputRow}>
-                  <TextInput style={styles.devInput} value={targetChests} onChangeText={setTargetChests}
-                    keyboardType="number-pad" placeholder="1"
-                    placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
-                  <DevBtn label="+ Coffre(s)" onPress={handleGiveChests} disabled={simLoading} />
-                  <DevBtn label="Simuler ouverts" onPress={handleSimulateChests} disabled={simLoading} />
-                </View>
-                <Text style={styles.devHint}>
-                  « + Coffre(s) » ajoute des CHEST_KEY à ouvrir manuellement. « Simuler ouverts »
-                  incrémente directement le compteur de coffres ouverts (trophées CHEST_1…CHEST_200,
-                  thème Rouge Sang à 100).
-                </Text>
-                <View style={styles.devBtnRow}>
-                  <DevBtn
-                    label="Générer un réseau social de test"
-                    onPress={handleMockSocial}
-                    disabled={simLoading}
-                    flex
-                  />
-                </View>
-                <Text style={styles.devHint}>
-                  Crée FauxAmi_1 et FauxAmi_2 (amis acceptés, pour Classement et Groupe)
-                  et FauxAmi_3 (demande en attente, pour Accepter/Refuser). Rejouable sans doublons.
-                </Text>
-                <View style={styles.devBtnRow}>
-                  <DevBtn
-                    label="Tout obtenir (All Items)"
-                    onPress={handleGiveAllItems}
-                    disabled={simLoading}
-                    variant="violet"
-                    flex
-                  />
-                </View>
-                <Text style={styles.devHint}>
-                  Ajoute 1 exemplaire de chaque objet (consommables + cosmétiques Uniques
-                  réclamables) dans l'inventaire, pour tout tester d'un coup.
-                </Text>
-                <View style={styles.devBtnRow}>
-                  <DevBtn label="Simuler un parrainage" onPress={handleSimulateReferral} disabled={simLoading} flex />
-                  <DevBtn label="Simuler un anniversaire" onPress={handleSimulateBirthday} disabled={simLoading} flex />
-                </View>
-                <Text style={styles.devHint}>
-                  Débloquent respectivement le trophée « Recruteur Athly » (parrainage) et les
-                  trophées anniversaire, sans attendre un vrai filleul ou le vrai jour J.
-                </Text>
+                {/* ── INVENTAIRE & COFFRES ── */}
+                <DevSection title="Inventaire & coffres" icon="cube">
+                  <Text style={styles.devHint}>
+                    Coffres injectés directement en base, pour tester l'Inventaire
+                    sans dizaines de vraies actions.
+                  </Text>
+                  <View style={styles.devInputRow}>
+                    <TextInput style={styles.devInput} value={targetChests} onChangeText={setTargetChests}
+                      keyboardType="number-pad" placeholder="1"
+                      placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
+                    <DevBtn label="+ Coffre(s)" onPress={handleGiveChests} disabled={simLoading} />
+                    <DevBtn label="Simuler ouverts" onPress={handleSimulateChests} disabled={simLoading} />
+                  </View>
+                  <Text style={styles.devHint}>
+                    « + Coffre(s) » ajoute des CHEST_KEY à ouvrir manuellement. « Simuler ouverts »
+                    incrémente directement le compteur de coffres ouverts (trophées CHEST_1…CHEST_200,
+                    thème Rouge Sang à 100).
+                  </Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn
+                      label="Tout obtenir (All Items)"
+                      onPress={handleGiveAllItems}
+                      disabled={simLoading}
+                      variant="violet"
+                      flex
+                    />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Ajoute 1 exemplaire de chaque objet (consommables + cosmétiques Uniques
+                    réclamables) dans l'inventaire, pour tout tester d'un coup.
+                  </Text>
+                </DevSection>
 
-                {/* ── SIMULATION ── */}
-                <DevSectionTitle title="SIMULATION" />
-                <View style={styles.devBtnRow}>
-                  <DevBtn label="50 séances" onPress={handleGenSessions} disabled={simLoading} flex />
-                  <DevBtn label="3000 reps"  onPress={handleSimReps}     disabled={simLoading} flex />
-                </View>
-                <Text style={styles.devHint}>Injecte des logs réalistes sur les N derniers jours.</Text>
+                {/* ── RÉSEAU SOCIAL ── */}
+                <DevSection title="Réseau social" icon="people">
+                  <Text style={styles.devHint}>
+                    Faux amis générés directement en base, pour tester l'écran Social
+                    sans dépendre de vrais comptes tiers.
+                  </Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn
+                      label="Générer un réseau social de test"
+                      onPress={handleMockSocial}
+                      disabled={simLoading}
+                      flex
+                    />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Crée FauxAmi_1 et FauxAmi_2 (amis acceptés, pour Classement et Groupe)
+                    et FauxAmi_3 (demande en attente, pour Accepter/Refuser). Rejouable sans doublons.
+                  </Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Simuler un parrainage" onPress={handleSimulateReferral} disabled={simLoading} flex />
+                    <DevBtn label="Simuler un anniversaire" onPress={handleSimulateBirthday} disabled={simLoading} flex />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Débloquent respectivement le trophée « Recruteur Athly » (parrainage) et les
+                    trophées anniversaire, sans attendre un vrai filleul ou le vrai jour J.
+                  </Text>
 
-                {/* ── STREAK ── */}
-                <DevSectionTitle title="STREAK" />
-                <View style={styles.devInputRow}>
-                  <TextInput style={styles.devInput} value={targetStreak} onChangeText={setTargetStreak}
-                    keyboardType="number-pad" placeholder={`${streak}`}
-                    placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
-                  <DevBtn label="Set streak" onPress={handleSetStreak} disabled={simLoading} />
-                </View>
+                  <View style={styles.devSubDivider} />
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Créer un ami cherchable (test)" onPress={handleSimulateSearchableFriend} disabled={simLoading} flex />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Crée un compte "TestAmi" PAS déjà ami avec un # généré aléatoirement.
+                    Le tag exact reste affiché juste en dessous (pas le message temporaire,
+                    trop court pour changer d'écran) — saisis-le tel quel dans "Ajouter un
+                    ami" côté Social. Ne tape jamais "0000", ce n'est qu'un exemple de format.
+                  </Text>
+                  {testFriendTag && (
+                    <View style={styles.testTagBox}>
+                      <Text style={styles.testTagLabel}>TAG DU COMPTE DE TEST</Text>
+                      <Text style={styles.testTagValue}>{testFriendTag}</Text>
+                    </View>
+                  )}
+                </DevSection>
+
+                {/* ── GROUPE DE STREAK (V2) ── */}
+                <DevSection title="Groupe de streak" icon="flame" badge="V2">
+                  <Text style={styles.devHint}>
+                    Ces outils sont le seul moyen de tester la Météo des séances, le flux
+                    d'activité, le Hall of Shame et le bouton Secouer sans un second
+                    compte/appareil.
+                  </Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Simuler un groupe" onPress={handleSimulateGroup} disabled={simLoading} flex />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Crée un groupe avec 3 coéquipiers factices, un par statut de Météo des
+                    séances testable (🔥 Prêt / ⚡ Actif / ✅ Validé — le 4e, 💤 En sommeil,
+                    s'obtient en ne touchant à aucun des trois). Rejouable sans doublons.
+                  </Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Simuler un événement d'activité" onPress={handleSimulateActivityEvent} disabled={simLoading} flex />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Publie un PR battu ou un coffre Légendaire au nom d'un coéquipier —
+                    déclenche l'ActivityFeedModal au prochain lancement. Nécessite d'avoir
+                    d'abord simulé un groupe.
+                  </Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Simuler une rupture de streak" onPress={handleSimulateStreakBreak} disabled={simLoading} flex />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Recule la dernière validation du groupe pour déclencher le Hall of Shame
+                    dès le prochain chargement de l'onglet Groupe.
+                  </Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Me secouer (push réel)" onPress={handleSimulateShakeSelf} disabled={simLoading} flex variant="orange" />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Envoie une vraie notification push à ton propre appareil, avec le texte
+                    troll du bouton Secouer — vérifie l'infra push de bout en bout.
+                  </Text>
+                </DevSection>
+
+                {/* ── SIMULATION DE SÉANCES ── */}
+                <DevSection title="Simulation de séances" icon="barbell">
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="50 séances" onPress={handleGenSessions} disabled={simLoading} flex />
+                    <DevBtn label="3000 reps"  onPress={handleSimReps}     disabled={simLoading} flex />
+                  </View>
+                  <Text style={styles.devHint}>Injecte des logs réalistes sur les N derniers jours.</Text>
+
+                  <View style={styles.devSubDivider} />
+                  <View style={styles.devInputRow}>
+                    <TextInput style={styles.devInput} value={targetStreak} onChangeText={setTargetStreak}
+                      keyboardType="number-pad" placeholder={`${streak}`}
+                      placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
+                    <DevBtn label="Set streak perso" onPress={handleSetStreak} disabled={simLoading} />
+                  </View>
+                </DevSection>
 
                 {/* ── TROPHÉES ── */}
-                <DevSectionTitle title="TROPHÉES" />
+                <DevSection title="Trophées" icon="trophy">
+                  {/* Statut Trophée Ultime */}
+                  <View style={styles.trophyUltimateRow}>
+                    <Ionicons name="infinite" size={14} color={ultimateUnlocked ? Colors.gold : Colors.textMuted} />
+                    <Text style={[styles.trophyUltimateLabel, { color: ultimateUnlocked ? Colors.gold : Colors.textMuted }]}>
+                      {ULTIMATE_TROPHY.label}
+                    </Text>
+                    <Text style={[styles.trophyUltimateSub, { color: ultimateUnlocked ? Colors.success : Colors.textMuted }]}>
+                      {ultimateUnlocked ? '✓ Débloqué !' : `${fullTrophyList.filter(t => t.unlocked).length}/${fullTrophyList.length}`}
+                    </Text>
+                  </View>
 
-                {/* Statut Trophée Ultime */}
-                <View style={styles.trophyUltimateRow}>
-                  <Ionicons name="infinite" size={14} color={ultimateUnlocked ? Colors.gold : Colors.textMuted} />
-                  <Text style={[styles.trophyUltimateLabel, { color: ultimateUnlocked ? Colors.gold : Colors.textMuted }]}>
-                    {ULTIMATE_TROPHY.label}
-                  </Text>
-                  <Text style={[styles.trophyUltimateSub, { color: ultimateUnlocked ? Colors.success : Colors.textMuted }]}>
-                    {ultimateUnlocked ? '✓ Débloqué !' : `${fullTrophyList.filter(t => t.unlocked).length}/${fullTrophyList.length}`}
-                  </Text>
-                </View>
+                  {/* Actions de masse */}
+                  <View style={styles.devBtnRow}>
+                    <DevBtn
+                      label="Tout débloquer"
+                      onPress={() => {
+                        TROPHY_CATALOG.forEach(t => setTrophyOverride(t.id, true));
+                        showFeedback('Tous les trophées débloqués ✓');
+                      }}
+                      disabled={simLoading}
+                      flex
+                    />
+                    <DevBtn
+                      label="Tout réinitialiser"
+                      onPress={() => { clearTrophyOverrides(); showFeedback('Overrides réinitialisés ✓'); }}
+                      disabled={simLoading}
+                      flex
+                      variant="dim"
+                    />
+                  </View>
 
-                {/* Actions de masse */}
-                <View style={styles.devBtnRow}>
-                  <DevBtn
-                    label="Tout débloquer"
-                    onPress={() => {
-                      TROPHY_CATALOG.forEach(t => setTrophyOverride(t.id, true));
-                      showFeedback('Tous les trophées débloqués ✓');
-                    }}
-                    disabled={simLoading}
-                    flex
-                  />
-                  <DevBtn
-                    label="Tout réinitialiser"
-                    onPress={() => { clearTrophyOverrides(); showFeedback('Overrides réinitialisés ✓'); }}
-                    disabled={simLoading}
-                    flex
-                    variant="dim"
-                  />
-                </View>
+                  {/* Accordéon — liste individuelle */}
+                  <TouchableOpacity
+                    style={styles.trophyAccordionHeader}
+                    onPress={() => setTrophyExpanded(v => !v)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.trophyAccordionLabel}>
+                      Gestion individuelle des trophées
+                    </Text>
+                    <Ionicons
+                      name={trophyExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={14}
+                      color="rgba(255,215,0,0.5)"
+                    />
+                  </TouchableOpacity>
 
-                {/* Accordéon — liste individuelle */}
-                <TouchableOpacity
-                  style={styles.trophyAccordionHeader}
-                  onPress={() => setTrophyExpanded(v => !v)}
-                  activeOpacity={0.75}
-                >
-                  <Text style={styles.trophyAccordionLabel}>
-                    Gestion individuelle des trophées
-                  </Text>
-                  <Ionicons
-                    name={trophyExpanded ? 'chevron-up' : 'chevron-down'}
-                    size={14}
-                    color="rgba(255,215,0,0.5)"
-                  />
-                </TouchableOpacity>
-
-                {trophyExpanded && allTrophyCategories.map((cat) => {
-                  const catTrophies = fullTrophyList.filter((t) => t.category === cat.id);
-                  if (catTrophies.length === 0) return null;
-                  return (
-                    <View key={cat.id}>
-                      <Text style={[styles.trophyCatLabel, { color: cat.color }]}>{cat.label}</Text>
-                      {catTrophies.map((t) => (
-                        <View key={t.id} style={styles.trophyRow}>
-                          <View style={[styles.trophyIconDot, { backgroundColor: t.color + '30', borderColor: t.color + '60' }]}>
-                            <TrophyIcon name={t.icon} size={10} color={t.unlocked ? t.color : Colors.textMuted} />
-                          </View>
-                          <View style={styles.trophyTextCol}>
-                            <Text style={[styles.trophyName, { color: t.unlocked ? Colors.textPrimary : Colors.textMuted }]} numberOfLines={1}>
-                              {t.label}
-                            </Text>
-                            <Text style={styles.trophyCond} numberOfLines={1}>{t.condition}</Text>
-                          </View>
-                          {t.isBackend ? (
-                            // Trophée de compte (serveur) : pas d'override dev possible,
-                            // affiche uniquement le statut réel.
-                            <View style={styles.trophySwitchWrap}>
-                              <Ionicons
-                                name={t.unlocked ? 'checkmark-circle' : 'lock-closed'}
-                                size={16}
-                                color={t.unlocked ? t.color : Colors.textMuted}
-                              />
+                  {trophyExpanded && allTrophyCategories.map((cat) => {
+                    const catTrophies = fullTrophyList.filter((t) => t.category === cat.id);
+                    if (catTrophies.length === 0) return null;
+                    return (
+                      <View key={cat.id}>
+                        <Text style={[styles.trophyCatLabel, { color: cat.color }]}>{cat.label}</Text>
+                        {catTrophies.map((t) => (
+                          <View key={t.id} style={styles.trophyRow}>
+                            <View style={[styles.trophyIconDot, { backgroundColor: t.color + '30', borderColor: t.color + '60' }]}>
+                              <TrophyIcon name={t.icon} size={10} color={t.unlocked ? t.color : Colors.textMuted} />
                             </View>
-                          ) : (
-                            <View style={styles.trophySwitchWrap}>
-                              {!t.naturalUnlocked && trophyOverrides[t.id] === true && (
-                                <Text style={styles.trophyOverrideTag}>DEV</Text>
-                              )}
-                              <Switch
-                                value={t.unlocked}
-                                onValueChange={(val) => setTrophyOverride(t.id, val === t.naturalUnlocked ? null : val)}
-                                trackColor={{ false: 'rgba(255,255,255,0.10)', true: t.color + 'AA' }}
-                                thumbColor={t.unlocked ? t.color : '#888'}
-                                style={styles.trophySwitch}
-                              />
+                            <View style={styles.trophyTextCol}>
+                              <Text style={[styles.trophyName, { color: t.unlocked ? Colors.textPrimary : Colors.textMuted }]} numberOfLines={1}>
+                                {t.label}
+                              </Text>
+                              <Text style={styles.trophyCond} numberOfLines={1}>{t.condition}</Text>
                             </View>
-                          )}
-                        </View>
-                      ))}
-                    </View>
-                  );
-                })}
+                            {t.isBackend ? (
+                              // Trophée de compte (serveur) : pas d'override dev possible,
+                              // affiche uniquement le statut réel.
+                              <View style={styles.trophySwitchWrap}>
+                                <Ionicons
+                                  name={t.unlocked ? 'checkmark-circle' : 'lock-closed'}
+                                  size={16}
+                                  color={t.unlocked ? t.color : Colors.textMuted}
+                                />
+                              </View>
+                            ) : (
+                              <View style={styles.trophySwitchWrap}>
+                                {!t.naturalUnlocked && trophyOverrides[t.id] === true && (
+                                  <Text style={styles.trophyOverrideTag}>DEV</Text>
+                                )}
+                                <Switch
+                                  value={t.unlocked}
+                                  onValueChange={(val) => setTrophyOverride(t.id, val === t.naturalUnlocked ? null : val)}
+                                  trackColor={{ false: 'rgba(255,255,255,0.10)', true: t.color + 'AA' }}
+                                  thumbColor={t.unlocked ? t.color : '#888'}
+                                  style={styles.trophySwitch}
+                                />
+                              </View>
+                            )}
+                          </View>
+                        ))}
+                      </View>
+                    );
+                  })}
+                </DevSection>
 
                 {/* ── NOTIFICATIONS ── */}
-                <DevSectionTitle title="NOTIFICATIONS" />
-                <Text style={styles.devHint}>Déclenche une notification de test dans 3 secondes. Passe l'app en arrière-plan.</Text>
-                <View style={styles.devBtnRow}>
-                  <DevBtn label="Notif Orange" onPress={() => runNotifTest('orange')} disabled={simLoading} flex variant="orange" />
-                  <DevBtn label="Notif Violette" onPress={() => runNotifTest('violet')} disabled={simLoading} flex variant="violet" />
-                </View>
+                <DevSection title="Notifications" icon="notifications">
+                  <Text style={styles.devHint}>Déclenche une notification de test dans 3 secondes. Passe l'app en arrière-plan.</Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Notif Orange" onPress={() => runNotifTest('orange')} disabled={simLoading} flex variant="orange" />
+                    <DevBtn label="Notif Violette" onPress={() => runNotifTest('violet')} disabled={simLoading} flex variant="violet" />
+                  </View>
+                </DevSection>
 
-                {/* ── RESET ── */}
-                <DevSectionTitle title="RESET" />
-                <DevBtn label="Reset quota XP quotidien" onPress={handleResetDailyXP} disabled={simLoading} fullWidth />
-                <Text style={styles.devHint}>Décale les séances d'aujourd'hui à hier, relance le gain d'XP.</Text>
-                <DevBtn label="Effacer les logs DEBUG" onPress={handleClearDebug} disabled={simLoading} variant="destructive" fullWidth />
-                <Text style={styles.devHint}>Supprime uniquement les logs [DEBUG], les vraies séances sont conservées.</Text>
+                {/* ── RESET / DANGER ZONE ── */}
+                <DevSection title="Reset" icon="refresh">
+                  <DevBtn label="Reset quota XP quotidien" onPress={handleResetDailyXP} disabled={simLoading} fullWidth />
+                  <Text style={styles.devHint}>Décale les séances d'aujourd'hui à hier, relance le gain d'XP.</Text>
+                  <DevBtn label="Effacer les logs DEBUG" onPress={handleClearDebug} disabled={simLoading} variant="destructive" fullWidth />
+                  <Text style={styles.devHint}>Supprime uniquement les logs [DEBUG], les vraies séances sont conservées.</Text>
+                </DevSection>
 
                 {simLoading && (
                   <View style={styles.devLoader}>
@@ -1118,11 +1280,27 @@ function SegBtn({ label, active, onPress }) {
   );
 }
 
-function DevSectionTitle({ title }) {
+// Section repliable de la console God Mode — chaque nouvel outil se range
+// dans une section existante ou en ouvre une nouvelle, sans jamais allonger
+// un mur de boutons toujours visible. `defaultOpen` réservé aux sections les
+// plus consultées (Progression) ; toutes les autres démarrent repliées.
+function DevSection({ title, icon, badge, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <View style={styles.devSectionRow}>
-      <Text style={styles.devSectionTitle}>{title}</Text>
-      <View style={styles.devSectionLine} />
+    <View style={styles.devSectionWrap}>
+      <TouchableOpacity style={styles.devSectionHeader} onPress={() => setOpen((v) => !v)} activeOpacity={0.75}>
+        <View style={styles.devSectionHeaderLeft}>
+          <Ionicons name={icon} size={13} color="rgba(255,215,0,0.65)" />
+          <Text style={styles.devSectionTitle}>{title.toUpperCase()}</Text>
+          {badge && (
+            <View style={styles.devSectionBadge}>
+              <Text style={styles.devSectionBadgeTxt}>{badge}</Text>
+            </View>
+          )}
+        </View>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color="rgba(255,215,0,0.5)" />
+      </TouchableOpacity>
+      {open && <View style={styles.devSectionBody}>{children}</View>}
     </View>
   );
 }
@@ -1226,9 +1404,30 @@ const styles = StyleSheet.create({
   devStatValue: { color: Colors.textPrimary, fontSize: 16, fontWeight: '800' },
   devStatLabel: { color: Colors.textMuted, fontSize: 9, fontWeight: '600', marginTop: 2, letterSpacing: 0.5 },
 
-  devSectionRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
-  devSectionTitle:{ color: 'rgba(255,215,0,0.6)', fontSize: 9, fontWeight: '800', letterSpacing: 1.4 },
-  devSectionLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: GOLD_BDR },
+  devSectionWrap: {
+    marginTop: 10, borderRadius: 12, borderWidth: 1, borderColor: GOLD_BDR,
+    backgroundColor: 'rgba(0,0,0,0.2)', overflow: 'hidden',
+  },
+  devSectionHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 12, paddingVertical: 11,
+  },
+  devSectionHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  devSectionTitle:{ color: 'rgba(255,215,0,0.75)', fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
+  devSectionBadge: {
+    backgroundColor: 'rgba(254,116,57,0.18)', borderWidth: 1, borderColor: 'rgba(254,116,57,0.4)',
+    borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1,
+  },
+  devSectionBadgeTxt: { color: Colors.primary, fontSize: 9, fontWeight: '800' },
+  devSectionBody: { paddingHorizontal: 12, paddingBottom: 14, gap: 10 },
+  devSubDivider: { height: StyleSheet.hairlineWidth, backgroundColor: GOLD_BDR, marginVertical: 2 },
+  testTagBox: {
+    backgroundColor: 'rgba(254,116,57,0.10)',
+    borderWidth: 1, borderColor: 'rgba(254,116,57,0.35)',
+    borderRadius: 10, paddingVertical: 10, alignItems: 'center',
+  },
+  testTagLabel: { color: 'rgba(255,215,0,0.6)', fontSize: 9.5, fontWeight: '800', letterSpacing: 1 },
+  testTagValue: { color: Colors.primary, fontSize: 17, fontWeight: '800', marginTop: 3 },
 
   devInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   devInput: { flex: 1, height: 40, borderRadius: 10, borderWidth: 1, borderColor: GOLD_BDR, backgroundColor: 'rgba(0,0,0,0.35)', color: Colors.gold, fontSize: 15, fontWeight: '700', paddingHorizontal: 12 },

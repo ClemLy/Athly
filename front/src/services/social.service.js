@@ -22,6 +22,18 @@ export async function declineFriendRequest(requestId) {
   return res.data;
 }
 
+// Annule une demande d'ami que J'AI ENVOYÉE (pendant du "refuser" côté destinataire).
+export async function cancelFriendRequest(requestId) {
+  const res = await API.delete(`/friends/request/${requestId}`);
+  return res.data;
+}
+
+// Retire un ami (rompt une amitié acceptée) — l'un ou l'autre membre peut le faire.
+export async function removeFriend(friendshipId) {
+  const res = await API.delete(`/friends/${friendshipId}`);
+  return res.data;
+}
+
 export async function getFriendsList() {
   const res = await API.get('/friends/list');
   return res.data;
@@ -45,6 +57,13 @@ export async function getLeaderboard() {
 // Classement par exercice au sein du réseau d'amis (meilleur poids soulevé).
 export async function getExerciseLeaderboard(exercise) {
   const res = await API.get(`/exercises/leaderboard?exercise=${encodeURIComponent(exercise)}`);
+  return res.data;
+}
+
+// Tous mes records (un par exercice déjà pratiqué) — alimente le sélecteur
+// "mettre en avant jusqu'à 6 records" du profil.
+export async function getMyRecords() {
+  const res = await API.get('/exercises/my-records');
   return res.data;
 }
 

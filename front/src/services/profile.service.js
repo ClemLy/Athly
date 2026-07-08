@@ -14,6 +14,13 @@ export async function updateShowcase(achievementIds) {
   return res.data;
 }
 
+// Met à jour les records d'exercices mis en avant sur le profil (max 6) —
+// affichés identiquement sur son propre profil et le profil vu par les amis.
+export async function updateRecordsShowcase(exerciseNames) {
+  const res = await API.put('/users/me/records-showcase', { exerciseNames });
+  return res.data;
+}
+
 // Enregistre (ou efface, si null) le token Expo Push de l'appareil courant —
 // nécessaire pour recevoir les notifications réellement envoyées par un
 // autre appareil (bouton Secouer, réactions du flux d'activité...).

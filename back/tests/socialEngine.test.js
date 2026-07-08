@@ -31,6 +31,12 @@ async function makeFriends(a, b) {
   return Friendship.create({ requester: a, recipient: b, status: 'accepted' });
 }
 
+/** Construit le tag complet "Pseudo#1234" à partir de l'ID (recherche exacte). */
+async function tagFor(userId) {
+  const user = await User.findById(userId).select('pseudo discriminator');
+  return `${user.pseudo}#${user.discriminator}`;
+}
+
 async function finishedWorkoutToday(userId) {
   return Workout.create({
     user:   userId,
@@ -75,13 +81,14 @@ describe('Moteur RPG & Social Athly — Briques II, III, IV', () => {
   // ───────────────────────────────────────────────────────────────────────────
   // 1. Recherche d'utilisateurs
   // ───────────────────────────────────────────────────────────────────────────
-  describe('GET /api/friends/search — searchUsers', () => {
+  describe('GET /api/friends/search — searchUsers (tag exact "Pseudo#1234")', () => {
 
-    it('✅ Trouve les pseudos correspondants avec le statut de relation', async () => {
+    it('✅ Trouve exactement le tag complet avec le statut de relation', async () => {
       await makeFriends(alice.userId, bob.userId);
+      const bobTag = await tagFor(bob.userId);
 
       const res = await request(app)
-        .get('/api/friends/search?q=bob')
+        .get(`/api/friends/search?q=${encodeURIComponent(bobTag)}`)
         .set('Authorization', `Bearer ${alice.token}`);
 
       expect(res.statusCode).toBe(200);
@@ -92,35 +99,60 @@ describe('Moteur RPG & Social Athly — Briques II, III, IV', () => {
 
     it("✅ relationStatus pending_sent/received selon le sens de la demande", async () => {
       await Friendship.create({ requester: alice.userId, recipient: carol.userId, status: 'pending' });
+      const carolTag = await tagFor(carol.userId);
+      const aliceTag = await tagFor(alice.userId);
 
       const fromAlice = await request(app)
-        .get('/api/friends/search?q=carol')
+        .get(`/api/friends/search?q=${encodeURIComponent(carolTag)}`)
         .set('Authorization', `Bearer ${alice.token}`);
       expect(fromAlice.body.results[0].relationStatus).toBe('pending_sent');
 
       const fromCarol = await request(app)
-        .get('/api/friends/search?q=alice')
+        .get(`/api/friends/search?q=${encodeURIComponent(aliceTag)}`)
         .set('Authorization', `Bearer ${carol.token}`);
       expect(fromCarol.body.results[0].relationStatus).toBe('pending_received');
     });
 
-    it('✅ Ne se trouve jamais soi-même dans les résultats', async () => {
+    it('✅ Insensible à la casse sur le pseudo, discriminator exact', async () => {
+      const bobTag = await tagFor(bob.userId);
+      const upperTag = bobTag.toUpperCase();
+
       const res = await request(app)
-        .get('/api/friends/search?q=alice')
+        .get(`/api/friends/search?q=${encodeURIComponent(upperTag)}`)
         .set('Authorization', `Bearer ${alice.token}`);
-      expect(res.body.results.every((r) => r.user.pseudo !== 'AliceFit')).toBe(true);
+
+      expect(res.body.count).toBe(1);
+      expect(res.body.results[0].user.pseudo).toBe('BobMuscle');
     });
 
-    it('❌ 400 si la recherche fait moins de 2 caractères', async () => {
+    it('✅ Ne se trouve jamais soi-même dans les résultats', async () => {
+      const aliceTag = await tagFor(alice.userId);
       const res = await request(app)
-        .get('/api/friends/search?q=a')
+        .get(`/api/friends/search?q=${encodeURIComponent(aliceTag)}`)
+        .set('Authorization', `Bearer ${alice.token}`);
+      expect(res.body.count).toBe(0);
+    });
+
+    it('✅ Renvoie 0 résultat si le discriminator ne correspond pas', async () => {
+      const bob2 = await User.findById(bob.userId).select('pseudo discriminator');
+      const wrongDiscriminator = bob2.discriminator === '0000' ? '1111' : '0000';
+
+      const res = await request(app)
+        .get(`/api/friends/search?q=${encodeURIComponent(`${bob2.pseudo}#${wrongDiscriminator}`)}`)
+        .set('Authorization', `Bearer ${alice.token}`);
+      expect(res.body.count).toBe(0);
+    });
+
+    it('❌ 400 si le format "Pseudo#1234" complet n\'est pas respecté', async () => {
+      const res = await request(app)
+        .get('/api/friends/search?q=bob')
         .set('Authorization', `Bearer ${alice.token}`);
       expect(res.statusCode).toBe(400);
     });
 
-    it('🔒 Les caractères regex sont neutralisés (pas d\'injection de pattern)', async () => {
+    it('🔒 Les caractères regex du pseudo sont traités littéralement (pas d\'injection)', async () => {
       const res = await request(app)
-        .get('/api/friends/search?q=' + encodeURIComponent('.*'))
+        .get('/api/friends/search?q=' + encodeURIComponent('.*#1234'))
         .set('Authorization', `Bearer ${alice.token}`);
       expect(res.statusCode).toBe(200);
       expect(res.body.count).toBe(0); // ".*" littéral ne matche aucun pseudo
@@ -239,6 +271,113 @@ describe('Moteur RPG & Social Athly — Briques II, III, IV', () => {
 
       expect(res.body.count).toBe(2);
       expect(res.body.leaderboard.every((e) => e.user.pseudo !== 'CarolGains')).toBe(true);
+    });
+  });
+
+  describe('GET /api/friends/pending — demandes reçues ET envoyées', () => {
+    it('✅ Distingue les demandes reçues des demandes envoyées', async () => {
+      // Alice envoie à Bob (sent, côté Alice) ; Carol envoie à Alice (requests, côté Alice)
+      await Friendship.create({ requester: alice.userId, recipient: bob.userId, status: 'pending' });
+      await Friendship.create({ requester: carol.userId, recipient: alice.userId, status: 'pending' });
+
+      const res = await request(app)
+        .get('/api/friends/pending')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.count).toBe(1);
+      expect(res.body.requests[0].requester.pseudo).toBe('CarolGains');
+      expect(res.body.sentCount).toBe(1);
+      expect(res.body.sent[0].recipient.pseudo).toBe('BobMuscle');
+    });
+  });
+
+  describe("DELETE /api/friends/request/:requestId — cancelFriendRequest", () => {
+    it("✅ L'auteur de la demande peut l'annuler", async () => {
+      const f = await Friendship.create({ requester: alice.userId, recipient: bob.userId, status: 'pending' });
+
+      const res = await request(app)
+        .delete(`/api/friends/request/${f._id}`)
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(await Friendship.findById(f._id)).toBeNull();
+    });
+
+    it("❌ Le destinataire ne peut pas annuler (seul refuser)", async () => {
+      const f = await Friendship.create({ requester: alice.userId, recipient: bob.userId, status: 'pending' });
+
+      const res = await request(app)
+        .delete(`/api/friends/request/${f._id}`)
+        .set('Authorization', `Bearer ${bob.token}`);
+
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('❌ 422 si la demande a déjà été acceptée', async () => {
+      const f = await Friendship.create({ requester: alice.userId, recipient: bob.userId, status: 'accepted' });
+
+      const res = await request(app)
+        .delete(`/api/friends/request/${f._id}`)
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(422);
+    });
+
+    it('❌ 401 sans token', async () => {
+      const f = await Friendship.create({ requester: alice.userId, recipient: bob.userId, status: 'pending' });
+      const res = await request(app).delete(`/api/friends/request/${f._id}`);
+      expect(res.statusCode).toBe(401);
+    });
+  });
+
+  describe('DELETE /api/friends/:friendshipId — removeFriend', () => {
+    it("✅ Le requester peut retirer l'ami", async () => {
+      const f = await makeFriends(alice.userId, bob.userId);
+
+      const res = await request(app)
+        .delete(`/api/friends/${f._id}`)
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(await Friendship.findById(f._id)).toBeNull();
+    });
+
+    it("✅ Le recipient peut aussi retirer l'ami", async () => {
+      const f = await makeFriends(alice.userId, bob.userId);
+
+      const res = await request(app)
+        .delete(`/api/friends/${f._id}`)
+        .set('Authorization', `Bearer ${bob.token}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(await Friendship.findById(f._id)).toBeNull();
+    });
+
+    it("❌ 403 si l'appelant ne fait pas partie de l'amitié", async () => {
+      const f = await makeFriends(alice.userId, bob.userId);
+
+      const res = await request(app)
+        .delete(`/api/friends/${f._id}`)
+        .set('Authorization', `Bearer ${carol.token}`);
+
+      expect(res.statusCode).toBe(403);
+    });
+
+    it("❌ 422 si la relation n'est pas encore acceptée (pending)", async () => {
+      const f = await Friendship.create({ requester: alice.userId, recipient: bob.userId, status: 'pending' });
+
+      const res = await request(app)
+        .delete(`/api/friends/${f._id}`)
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(422);
+    });
+
+    it('❌ 401 sans token', async () => {
+      const f = await makeFriends(alice.userId, bob.userId);
+      const res = await request(app).delete(`/api/friends/${f._id}`);
+      expect(res.statusCode).toBe(401);
     });
   });
 

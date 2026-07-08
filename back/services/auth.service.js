@@ -39,6 +39,26 @@ async function uniqueReferralCode() {
   return `ATH-${Date.now().toString(36).toUpperCase().slice(-6)}`;
 }
 
+// Tag numérique façon Discord (Section III) : "Pseudo#1234". Contrairement au
+// referralCode (unique globalement), le discriminator n'a besoin d'être
+// unique QUE combiné au pseudo — 9000 combinaisons par pseudo suffisent
+// largement avant toute collision réelle.
+function generateDiscriminator() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+async function uniqueDiscriminator(pseudo) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const discriminator = generateDiscriminator();
+    const taken = await User.exists({ pseudo, discriminator })
+      .collation({ locale: "en", strength: 2 });
+    if (!taken) return discriminator;
+  }
+  // Repli quasi-impossible (20 tentatives sur 9000 combinaisons) : dernier
+  // recours horodaté, tronqué à 4 chiffres.
+  return String(Date.now()).slice(-4);
+}
+
 function makeToken(userId) {
   return jwt.sign({ id: userId }, config.jwtSecret, { expiresIn: config.jwtExpires });
 }
@@ -91,6 +111,7 @@ class AuthService {
       codeExpires:     new Date(Date.now() + CODE_TTL_VERIFY),
       verifyAttempts:  0,
       referralCode:    await uniqueReferralCode(),
+      discriminator:   await uniqueDiscriminator(pseudo),
       ...(referrer && {
         referredBy: referrer._id,
         // Récompenses de bienvenue du filleul, directement à la création
@@ -167,6 +188,7 @@ class AuthService {
       user: {
         id:    user._id,
         pseudo: user.pseudo || user.name,
+        discriminator: user.discriminator,
         email: user.email,
         level: user.level,
       },
@@ -216,7 +238,7 @@ class AuthService {
     const token = makeToken(user._id);
     return {
       token,
-      user: { id: user._id, pseudo: user.pseudo || user.name, email: user.email },
+      user: { id: user._id, pseudo: user.pseudo || user.name, discriminator: user.discriminator, email: user.email },
     };
   }
 
@@ -325,3 +347,4 @@ class AuthService {
 module.exports = new AuthService();
 // Réutilisé par user.service (génération lazy pour les comptes existants)
 module.exports.uniqueReferralCode = uniqueReferralCode;
+module.exports.uniqueDiscriminator = uniqueDiscriminator;

@@ -9,19 +9,9 @@ const { addUniqueItemOnce } = require('../services/inventory.service');
 const { checkAndUnlockAchievements } = require('./reward.controller');
 const { levelFromXP, getRankForLevel } = require('../utils/levelHelpers');
 const { sendPushToUser } = require('../services/push.service');
+const { SHAKE_TROLL_MESSAGES } = require('../data/shakeMessages');
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
-
-// Bouton "Secouer" (Section IV) : textes troll/passif-agressif façon Duolingo,
-// tirés au sort à chaque secousse pour ne pas être répétitifs.
-const SHAKE_TROLL_MESSAGES = [
-  "Ah donc tu comptes nous abandonner comme ça ? Ok.",
-  "Tu vas briser la streak de l'équipe... tout le monde attend après toi. 👁️",
-  "On sait que tu es en ligne. On voit tout.",
-  "Ta séance ne va pas se faire toute seule, curieusement.",
-  "Le groupe compte sur toi. Ou pas, si tu préfères tout gâcher.",
-  "Petit rappel amical : tu es le maillon faible aujourd'hui.",
-];
 
 const MAX_GROUP_SIZE = 5;
 
@@ -513,6 +503,15 @@ exports.shakeMember = async (req, res, next) => {
       return next(createError("Ce membre a déjà validé sa séance aujourd'hui — inutile de le secouer !", 422));
     }
 
+    // Limite 1 secousse par jour civil et par cible — évite le harcèlement
+    // et donne un sens au bouton grisé côté front (voir getMyGroup).
+    const alreadyShakenToday = group.shakes.some((s) =>
+      s.from.toString() === myId && s.to.toString() === memberId && s.date >= todayStart && s.date < tomorrow,
+    );
+    if (alreadyShakenToday) {
+      return next(createError("Tu as déjà secoué cette personne aujourd'hui — reviens demain !", 422));
+    }
+
     const target       = await User.findById(memberId).select('pseudo');
     const targetPseudo = target?.pseudo ?? memberId;
     const me           = await User.findById(myId).select('pseudo');
@@ -523,6 +522,9 @@ exports.shakeMember = async (req, res, next) => {
       body:  trollMessage,
       data:  { type: 'shake', fromUserId: myId },
     });
+
+    group.shakes.push({ from: myId, to: memberId, date: new Date() });
+    await group.save();
 
     return res.status(200).json({
       success:  true,
@@ -701,9 +703,20 @@ exports.getMyGroup = async (req, res, next) => {
     const xpBonus = computeGroupXpBonus(group.members.length, group.currentStreak);
     const membersWithWeather = await attachWeatherStatuses(group.members);
 
+    // Membres déjà secoués aujourd'hui par MOI — permet au front de griser
+    // leur bouton "Secouer" plutôt que de laisser échouer un second clic.
+    const todayStart = startOfToday();
+    const tomorrow    = new Date(todayStart);
+    tomorrow.setDate(todayStart.getDate() + 1);
+    const shakenTodayByMe = group.shakes
+      .filter((s) => s.from.toString() === myId && s.date >= todayStart && s.date < tomorrow)
+      .map((s) => s.to.toString());
+
+    const { shakes: _shakes, ...groupPlain } = group.toObject();
+
     return res.status(200).json({
       success: true,
-      group:   { ...group.toObject(), members: membersWithWeather, xpBonus },
+      group:   { ...groupPlain, members: membersWithWeather, xpBonus, shakenTodayByMe },
       invites,
     });
   } catch (err) {

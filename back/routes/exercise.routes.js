@@ -16,6 +16,10 @@ router.post("/", auth, validate(exerciseRecordSchema), exerciseController.addRec
 // Classement par exercice au sein du réseau d'amis (?exercise=Nom)
 router.get("/leaderboard", auth, exerciseController.getExerciseLeaderboard);
 
+// Tous mes records (un par exercice déjà pratiqué) — alimente le sélecteur
+// "mettre en avant jusqu'à 6 records" du profil
+router.get("/my-records", auth, exerciseController.getMyRecords);
+
 // Obtenir l'historique de progression d'un exercice précis par son nom
 router.get("/history/:name", auth, exerciseController.getExerciseHistory);
 

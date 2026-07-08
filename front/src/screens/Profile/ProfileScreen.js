@@ -19,13 +19,13 @@ import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import { useUser } from '../../context/UserContext';
 import { Colors } from '../../constants/theme';
 import {
-  getPersonalRecords,
   aggregateActivityHeatmap,
   xpToLevel,
   computeStreak,
   getRank,
 } from '../../services/stats.service';
-import { MAJOR_EXERCISES } from '../../data/majorExercises';
+import { resolveExerciseMeta } from '../../data/majorExercises';
+import { getMyRecords } from '../../services/social.service';
 import { syncLocalAchievements } from '../../services/reward.service';
 import { useAvatarFrame } from '../../hooks/useAvatarFrame';
 import { useDevSettings } from '../../hooks/useDevSettings';
@@ -38,6 +38,7 @@ import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 import HeroLevelCard    from '../../components/profile/HeroLevelCard';
 import TrophyGrid       from '../../components/profile/TrophyGrid';
 import PersonalRecordsList from '../../components/profile/PersonalRecordsList';
+import RecordsShowcasePicker from '../../components/profile/RecordsShowcasePicker';
 import ActivityHeatmap  from '../../components/profile/ActivityHeatmap';
 import EmberParticles   from '../../components/profile/EmberParticles';
 import StreakBadge      from '../../components/profile/StreakBadge';
@@ -120,8 +121,43 @@ export default function ProfileScreen({ navigation }) {
     }, [refetchUser, reloadFeatured, reloadDevSettings]),
   );
 
+  // ─── Records mis en avant (Section III) ──────────────────────────────────
+  // Source de vérité backend (ExerciseRecord), pas les logs locaux — pour
+  // rester identique à ce que voient les amis sur leur profil (getFriendProfile).
+  const [myRecords, setMyRecords] = useState([]);
+  const [recordsPickerVisible, setRecordsPickerVisible] = useState(false);
+
+  const loadMyRecords = useCallback(async () => {
+    try {
+      const res = await getMyRecords();
+      setMyRecords(Array.isArray(res.records) ? res.records : []);
+    } catch (_) {
+      // Best-effort — ne doit jamais bloquer l'affichage du profil.
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { loadMyRecords(); }, [loadMyRecords]));
+
+  const showcasedRecordNames = user?.showcasedRecords ?? [];
+
+  const records = useMemo(() => {
+    const byName = new Map(myRecords.map((r) => [r.exercice, r]));
+    return showcasedRecordNames.map((name) => {
+      const r = byName.get(name);
+      const meta = resolveExerciseMeta(name);
+      return {
+        name,
+        group: meta.group,
+        icon: meta.icon,
+        prWeight: r ? r.maxPoids : null,
+        prEstimate1RM: r ? Math.round(r.maxPoids * (1 + r.maxReps / 30) * 10) / 10 : null,
+        hasData: !!r,
+        subtitle: r ? `${r.maxReps} reps max` : undefined,
+      };
+    });
+  }, [myRecords, showcasedRecordNames]);
+
   // ─── Computed values ──────────────────────────────────────────────────────
-  const records       = useMemo(() => getPersonalRecords(logs, MAJOR_EXERCISES), [logs]);
   const heatmap       = useMemo(() => aggregateActivityHeatmap(logs), [logs]);
   const totalSessions = logs.length;
   const totalActiveDays = useMemo(() => {
@@ -296,9 +332,9 @@ export default function ProfileScreen({ navigation }) {
           </View>
 
           {/* ── Records personnels ── */}
-          <Section title="Records personnels">
+          <Section title="Records personnels" onSeeAll={() => setRecordsPickerVisible(true)} seeAllLabel="Choisir">
             <GlassCard>
-              <PersonalRecordsList records={records} onPressItem={onPressRecord} />
+              <PersonalRecordsList records={records} onPressItem={onPressRecord} emptyLabel="Aucun record mis en avant" />
             </GlassCard>
           </Section>
 
@@ -344,20 +380,27 @@ export default function ProfileScreen({ navigation }) {
       {activeChapterId === 'profile' && (
         <TutorialOverlay navigation={navigation} />
       )}
+
+      <RecordsShowcasePicker
+        visible={recordsPickerVisible}
+        current={showcasedRecordNames}
+        onSaved={() => { refetchUser(); loadMyRecords(); }}
+        onClose={() => setRecordsPickerVisible(false)}
+      />
     </View>
   );
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function Section({ title, children, onSeeAll }) {
+function Section({ title, children, onSeeAll, seeAllLabel = 'Voir tout' }) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionRow}>
         <Text style={styles.sectionTitle}>{title}</Text>
         {onSeeAll && (
           <TouchableOpacity onPress={onSeeAll} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.seeAllText}>Voir tout</Text>
+            <Text style={styles.seeAllText}>{seeAllLabel}</Text>
           </TouchableOpacity>
         )}
       </View>

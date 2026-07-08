@@ -46,6 +46,16 @@ const UserSchema = new mongoose.Schema(
     // ── Identité ──────────────────────────────────────────────────────────────
     pseudo: { type: String, trim: true },
     name:   { type: String, trim: true }, // conservé pour rétrocompatibilité V1
+
+    // Tag numérique façon Discord (Section III) : "Pseudo#1234". Le pseudo
+    // seul reste libre/non-unique (affiché partout dans l'app) — c'est le
+    // COMBO { pseudo, discriminator } qui doit être unique, pour permettre
+    // l'ajout d'ami sans ambiguïté (voir uniqueDiscriminator dans
+    // auth.service.js et la recherche exacte dans friend.controller.js).
+    // Optionnel au niveau schéma (comptes antérieurs à cette fonctionnalité,
+    // backfillés lazily — voir user.service.js → getUserProfile) : l'index
+    // unique ci-dessous n'agit que sur les documents qui en ont déjà un.
+    discriminator: { type: String, match: /^\d{4}$/ },
     email: {
       type:      String,
       required:  [true, "L'e-mail est obligatoire"],
@@ -162,6 +172,13 @@ const UserSchema = new mongoose.Schema(
     // local (LOCAL_TROPHY_CATALOG) — voir user.service.js → updateShowcase.
     showcasedAchievements: { type: [String], default: [] },
 
+    // ── Records d'exercices mis en avant (Section III) ────────────────────────
+    // Noms d'exercices (max 6, contrôlé par Joi côté validateur) choisis par
+    // l'utilisateur pour son profil — remplace l'ancien top-5 automatique par
+    // poids max, affiché identiquement sur son propre profil et son profil
+    // public vu par ses amis (voir getFriendProfile dans friend.controller.js).
+    showcasedRecords: { type: [String], default: [] },
+
     // ── Cadre de profil équipé ─────────────────────────────────────────────────
     // Synchronisé depuis le choix local (useAvatarFrame.js) pour que les amis
     // voient le même cadre sur le profil public. shapeId/colorId sont des clés
@@ -179,5 +196,19 @@ const UserSchema = new mongoose.Schema(
 // email       : index unique déclaré inline (options du champ)
 // referralCode: index unique + sparse déclaré inline (options du champ)
 //               sparse = tolérance aux anciens documents V1 sans code
+
+// Combo { pseudo, discriminator } unique — insensible à la casse (collation).
+// partialFilterExpression : n'applique la contrainte qu'aux documents qui ONT
+// déjà un discriminator, pour ne jamais bloquer les comptes pré-migration
+// (potentiellement plusieurs pseudos identiques sans discriminator) tant
+// qu'ils n'ont pas été backfillés (voir getUserProfile / scripts/backfillDiscriminators.js).
+UserSchema.index(
+  { pseudo: 1, discriminator: 1 },
+  {
+    unique: true,
+    collation: { locale: "en", strength: 2 },
+    partialFilterExpression: { discriminator: { $type: "string" } },
+  }
+);
 
 module.exports = mongoose.model("User", UserSchema);

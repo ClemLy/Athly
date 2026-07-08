@@ -7,14 +7,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '../../constants/theme';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
+import { useUser } from '../../context/UserContext';
 import { aggregateGlobal } from '../../services/stats.service';
+import { getWeightHistory } from '../../services/weight.service';
 import PeriodSegmentedControl from '../../components/stats/PeriodSegmentedControl';
 import VolumeBarChart from '../../components/stats/VolumeBarChart';
 import MuscleDistributionPieChart from '../../components/stats/MuscleDistributionPieChart';
+import WeightProgressChart from '../../components/stats/WeightProgressChart';
 import WorkoutCalendar from '../../components/stats/WorkoutCalendar';
 import XPProgressBar from '../../components/stats/XPProgressBar';
 import WorkoutHistoryList from '../../components/stats/WorkoutHistoryList';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
+import WeightEntryModal from '../../components/common/WeightEntryModal';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 import { MOCK_TUTORIAL_LOGS } from '../../data/mockTutorialStats';
 
@@ -25,12 +29,28 @@ const TABS = [
 
 export default function StatsScreen({ navigation }) {
   const { sessionLogs: realLogs, totalXP, remove } = useWorkoutLogs();
+  const { user } = useUser();
 
   const handleDelete = useCallback(async (id) => {
     try { await remove(id); } catch (e) {
       Alert.alert('Erreur', e?.message || 'Suppression impossible');
     }
   }, [remove]);
+
+  // ─── Suivi de poids (Section VI) ─────────────────────────────────────────
+  const [weightHistory, setWeightHistory] = useState([]);
+  const [weightEntryVisible, setWeightEntryVisible] = useState(false);
+
+  const loadWeightHistory = useCallback(async () => {
+    try {
+      const res = await getWeightHistory();
+      setWeightHistory(Array.isArray(res.history) ? res.history : []);
+    } catch (_) {
+      // Best-effort — un historique de poids manquant ne doit jamais bloquer l'écran.
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { loadWeightHistory(); }, [loadWeightHistory]));
   const [tab,    setTab]    = useState('performance');
   const [period, setPeriod] = useState('month');
 
@@ -169,6 +189,18 @@ export default function StatsScreen({ navigation }) {
               <Kpi label="Volume"  value={`${Math.round(stats.totalVolume).toLocaleString('fr-FR')} kg`} icon="barbell" wide />
             </View>
 
+            <Card title="Suivi de poids">
+              <WeightProgressChart history={weightHistory} goal={user?.poidsCible} />
+              <TouchableOpacity
+                style={styles.addWeightBtn}
+                onPress={() => setWeightEntryVisible(true)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="add-circle-outline" size={16} color={Colors.primary} style={{ marginRight: 6 }} />
+                <Text style={styles.addWeightBtnTxt}>Ajouter une pesée</Text>
+              </TouchableOpacity>
+            </Card>
+
             <View ref={volumeRef} onLayout={onVolumeLayout} collapsable={false}>
               <Card title="Volume par période">
                 <VolumeBarChart timeline={stats.timeline} />
@@ -207,6 +239,12 @@ export default function StatsScreen({ navigation }) {
       {activeChapterId === 'stats' && (
         <TutorialOverlay navigation={navigation} />
       )}
+
+      <WeightEntryModal
+        visible={weightEntryVisible}
+        onClose={() => setWeightEntryVisible(false)}
+        onSaved={loadWeightHistory}
+      />
     </SafeAreaView>
   );
 }
@@ -273,6 +311,13 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)',
   },
   cardTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: '800', marginBottom: 12 },
+  addWeightBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    marginTop: 12, height: 40, borderRadius: 11,
+    backgroundColor: `${Colors.primary}14`,
+    borderWidth: 1, borderColor: `${Colors.primary}40`,
+  },
+  addWeightBtnTxt: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
 
   emptyText: { color: Colors.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 20, paddingVertical: 12 },
 

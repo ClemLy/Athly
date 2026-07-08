@@ -69,6 +69,27 @@ exports.updateShowcase = async (req, res, next) => {
 };
 
 /**
+ * METTRE À JOUR LES RECORDS MIS EN AVANT
+ * Synchronise la sélection de records d'exercices (max 6) affichée sur le
+ * profil (le sien ET celui vu par les amis) — voir getFriendProfile.
+ * Rejette silencieusement tout exercice jamais pratiqué (ExerciseRecord).
+ */
+exports.updateRecordsShowcase = async (req, res, next) => {
+  try {
+    const { exerciseNames } = req.body;
+    const user = await userService.updateRecordsShowcase(req.user.id, exerciseNames);
+
+    res.status(200).json({
+      success: true,
+      message: "Records mis en avant mis à jour",
+      showcasedRecords: user.showcasedRecords,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * METTRE À JOUR LE CADRE DE PROFIL ÉQUIPÉ
  * Synchronise le choix de cadre (forme + couleur) fait localement
  * (BorderPicker) pour qu'il soit visible sur le profil public par les amis.

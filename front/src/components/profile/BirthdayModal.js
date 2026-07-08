@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import BirthdayConfetti from './BirthdayConfetti';
@@ -8,49 +8,99 @@ import BirthdayConfetti from './BirthdayConfetti';
 // Modale festive violette déclenchée à l'ouverture de l'app le jour de
 // l'anniversaire de l'utilisateur (voir BirthdayCelebration.js).
 //
+// Quand un cadeau vient d'être accordé (rewarded), la modale s'ouvre en mode
+// "cadeau emballé" : il faut appuyer pour l'ouvrir avant de voir le détail
+// des récompenses (déjà créditées en base côté serveur — voir
+// reward.controller.js → checkBirthday — l'ouverture n'est qu'une mise en
+// scène, pas une seconde étape d'octroi).
+//
 // Props :
-//   visible  bool
-//   pseudo   string | null
-//   rewarded bool — true la première ouverture du jour (cadeau tout juste accordé)
-//   onClose  () => void
+//   visible        bool
+//   pseudo         string | null
+//   rewarded       bool — true la première ouverture du jour (cadeau tout juste accordé)
+//   chestKeyAdded  bool — +1 CHEST_KEY déjà crédité en base
+//   trophyUnlocked bool — au moins un trophée déjà débloqué en base
+//   onClose        () => void
 
-export default function BirthdayModal({ visible, pseudo, rewarded, onClose }) {
+export default function BirthdayModal({ visible, pseudo, rewarded, chestKeyAdded, trophyUnlocked, onClose }) {
+  const [opened, setOpened] = useState(false);
+  const giftScale = useRef(new Animated.Value(1)).current;
+  const rewardsOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      setOpened(false);
+      giftScale.setValue(1);
+      rewardsOpacity.setValue(0);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  const handleOpenGift = () => {
+    Animated.sequence([
+      Animated.spring(giftScale, { toValue: 1.25, friction: 4, useNativeDriver: true }),
+      Animated.timing(giftScale, { toValue: 1, duration: 120, useNativeDriver: true }),
+    ]).start();
+    setOpened(true);
+    Animated.timing(rewardsOpacity, { toValue: 1, duration: 320, delay: 100, useNativeDriver: true }).start();
+  };
+
+  const showWrappedGift = rewarded && !opened;
+
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <BirthdayConfetti active={visible} />
+        <BirthdayConfetti active={visible && (!rewarded || opened)} />
 
         <View style={styles.card}>
-          <View style={styles.iconWrap}>
-            <Ionicons name="sparkles" size={34} color={Colors.rankViolet} />
-          </View>
+          <Animated.View style={[styles.iconWrap, { transform: [{ scale: giftScale }] }]}>
+            <Ionicons name={showWrappedGift ? 'gift' : 'sparkles'} size={34} color={Colors.rankViolet} />
+          </Animated.View>
 
           <Text style={styles.title}>
             Joyeux Anniversaire{pseudo ? ` ${pseudo}` : ''} !
           </Text>
 
-          <Text style={styles.body}>
-            {rewarded
-              ? "Toute l'équipe Athly te souhaite une excellente année. Ton coffre et ton trophée t'attendent dans ton inventaire !"
-              : "Toute l'équipe Athly te souhaite une excellente année. Profite bien de ta journée !"}
-          </Text>
+          {showWrappedGift ? (
+            <>
+              <Text style={styles.body}>
+                Toute l'équipe Athly te souhaite une excellente année. Un cadeau t'attend juste en dessous...
+              </Text>
+              <TouchableOpacity style={styles.openBtn} onPress={handleOpenGift} activeOpacity={0.85}>
+                <Ionicons name="gift-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.openBtnTxt}>Ouvrir mon cadeau</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.body}>
+                {rewarded
+                  ? "Toute l'équipe Athly te souhaite une excellente année. Tes récompenses sont déjà dans ton inventaire !"
+                  : "Toute l'équipe Athly te souhaite une excellente année. Profite bien de ta journée !"}
+              </Text>
 
-          {rewarded && (
-            <View style={styles.rewardRow}>
-              <View style={styles.rewardChip}>
-                <Ionicons name="gift-outline" size={14} color={Colors.rankViolet} />
-                <Text style={styles.rewardChipTxt}>+1 Coffre</Text>
-              </View>
-              <View style={styles.rewardChip}>
-                <Ionicons name="trophy-outline" size={14} color={Colors.gold} />
-                <Text style={styles.rewardChipTxt}>Trophée débloqué</Text>
-              </View>
-            </View>
+              {rewarded && (
+                <Animated.View style={[styles.rewardRow, { opacity: rewardsOpacity }]}>
+                  {chestKeyAdded && (
+                    <View style={styles.rewardChip}>
+                      <Ionicons name="gift-outline" size={14} color={Colors.rankViolet} />
+                      <Text style={styles.rewardChipTxt}>+1 Coffre</Text>
+                    </View>
+                  )}
+                  {trophyUnlocked && (
+                    <View style={styles.rewardChip}>
+                      <Ionicons name="trophy-outline" size={14} color={Colors.gold} />
+                      <Text style={styles.rewardChipTxt}>Trophée débloqué</Text>
+                    </View>
+                  )}
+                </Animated.View>
+              )}
+
+              <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.85}>
+                <Text style={styles.closeBtnTxt}>Merci Athly !</Text>
+              </TouchableOpacity>
+            </>
           )}
-
-          <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.85}>
-            <Text style={styles.closeBtnTxt}>Merci Athly !</Text>
-          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -105,6 +155,21 @@ const styles = StyleSheet.create({
     textAlign:  'center',
     marginBottom: 20,
   },
+  openBtn: {
+    flexDirection:    'row',
+    width:            '100%',
+    height:           50,
+    borderRadius:     13,
+    backgroundColor:  Colors.rankViolet,
+    justifyContent:   'center',
+    alignItems:       'center',
+    shadowColor:      Colors.rankViolet,
+    shadowOffset:     { width: 0, height: 6 },
+    shadowOpacity:    0.40,
+    shadowRadius:     12,
+    elevation:        6,
+  },
+  openBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
   rewardRow: {
     flexDirection: 'row',
     gap:           8,

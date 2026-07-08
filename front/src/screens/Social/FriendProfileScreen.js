@@ -16,6 +16,8 @@ import StreakBadge          from '../../components/profile/StreakBadge';
 import EmberParticles       from '../../components/profile/EmberParticles';
 import AchievementShowcase  from '../../components/profile/AchievementShowcase';
 import FriendShowcaseGrid   from '../../components/profile/FriendShowcaseGrid';
+import PersonalRecordsList  from '../../components/profile/PersonalRecordsList';
+import { resolveExerciseMeta } from '../../data/majorExercises';
 
 // ─── FriendProfileScreen ──────────────────────────────────────────────────────
 // Profil public d'un ami (Brique III) : miroir en lecture seule de notre propre
@@ -71,18 +73,40 @@ export default function FriendProfileScreen({ route, navigation }) {
 
   useEffect(() => { load(); }, [load]);
 
+  const alreadyShakenToday = (sharedGroup?.shakenTodayByMe ?? []).includes(friendId);
+
   const handleShake = async () => {
-    if (shaking || !sharedGroup) return;
+    if (shaking || !sharedGroup || alreadyShakenToday) return;
     setShaking(true);
     try {
       const res = await shakeMember(sharedGroup._id, friendId);
       showToast(res.message || `${pseudo} a été secoué !`, 'success');
+      await load();
     } catch (error) {
       if (!error.isSessionExpired) showToast(error.data?.message || 'Action impossible.', 'error');
     } finally {
       setShaking(false);
     }
   };
+
+  // Records mis en avant par l'ami — même forme que PersonalRecordsList
+  // utilisée sur son propre profil (ProfileScreen.js), pour un rendu
+  // identique plutôt qu'une liste texte séparée.
+  const records = useMemo(() => {
+    if (!profile) return [];
+    return (profile.records || []).map((r) => {
+      const meta = resolveExerciseMeta(r.exercice);
+      return {
+        name: r.exercice,
+        group: meta.group,
+        icon: meta.icon,
+        prWeight: r.maxPoids,
+        prEstimate1RM: Math.round(r.maxPoids * (1 + r.maxReps / 30) * 10) / 10,
+        hasData: true,
+        subtitle: `${r.maxReps} reps max`,
+      };
+    });
+  }, [profile]);
 
   const level = useMemo(() => xpToLevel(profile?.user?.xp ?? 0).level, [profile]);
   const rank  = useMemo(() => getRank(level), [level]);
@@ -183,17 +207,26 @@ export default function FriendProfileScreen({ route, navigation }) {
 
           {/* ── Action sociale : Secouer (uniquement si coéquipier de streak) ── */}
           {sharedGroup && (
-            <TouchableOpacity style={styles.shakeBanner} onPress={handleShake} disabled={shaking} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={[styles.shakeBanner, alreadyShakenToday && styles.shakeBannerDisabled]}
+              onPress={handleShake}
+              disabled={shaking || alreadyShakenToday}
+              activeOpacity={alreadyShakenToday ? 1 : 0.85}
+            >
               <View style={styles.shakeIconBox}>
                 {shaking
                   ? <ActivityIndicator size="small" color={Colors.error} />
-                  : <Ionicons name="warning" size={18} color={Colors.error} />}
+                  : <Ionicons name="warning" size={18} color={alreadyShakenToday ? Colors.textMuted : Colors.error} />}
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.shakeTitle}>Coéquipier de streak</Text>
-                <Text style={styles.shakeSub}>Secoue {profile.user.pseudo} s'il n'a pas encore fait sa séance</Text>
+                <Text style={styles.shakeSub}>
+                  {alreadyShakenToday
+                    ? `Tu as déjà secoué ${profile.user.pseudo} aujourd'hui`
+                    : `Secoue ${profile.user.pseudo} s'il n'a pas encore fait sa séance`}
+                </Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={Colors.chevron} />
+              {!alreadyShakenToday && <Ionicons name="chevron-forward" size={16} color={Colors.chevron} />}
             </TouchableOpacity>
           )}
 
@@ -204,21 +237,13 @@ export default function FriendProfileScreen({ route, navigation }) {
             </GlassCard>
           </Section>
 
-          {/* ── Records personnels ── */}
+          {/* ── Records personnels (même composant que sur son propre profil) ── */}
           <Section title="Records">
             <GlassCard>
-              {profile.records.length === 0 ? (
-                <View style={styles.emptyRecords}>
-                  <Ionicons name="barbell-outline" size={28} color={Colors.textMuted} />
-                  <Text style={styles.emptyTxt}>Aucun record enregistré pour le moment.</Text>
-                </View>
-              ) : profile.records.map((r, i) => (
-                <View key={r.exercice} style={[styles.recordRow, i === profile.records.length - 1 && { borderBottomWidth: 0 }]}>
-                  <Ionicons name="barbell" size={16} color={Colors.primary} style={{ marginRight: 10 }} />
-                  <Text style={styles.recordName} numberOfLines={1}>{r.exercice}</Text>
-                  <Text style={styles.recordValue}>{r.maxPoids} kg × {r.maxReps}</Text>
-                </View>
-              ))}
+              <PersonalRecordsList
+                records={records}
+                emptyLabel="Aucun record mis en avant"
+              />
             </GlassCard>
           </Section>
 
@@ -274,6 +299,10 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,77,77,0.28)',
     borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14,
   },
+  shakeBannerDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderColor: Colors.borderSubtle,
+  },
   shakeIconBox: {
     width: 36, height: 36, borderRadius: 11,
     backgroundColor: 'rgba(255,77,77,0.12)',
@@ -293,15 +322,4 @@ const styles = StyleSheet.create({
     borderRadius: 18, padding: 14, overflow: 'hidden',
   },
 
-  recordRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.borderSubtle,
-  },
-  recordName:  { flex: 1, color: Colors.textPrimary, fontSize: 13.5, fontWeight: '600', marginRight: 8 },
-  recordValue: { color: Colors.primary, fontSize: 13, fontWeight: '800' },
-
-  emptyRecords: { alignItems: 'center', paddingVertical: 20, gap: 8 },
-  emptyTxt: { color: Colors.textMuted, fontSize: 12.5, textAlign: 'center' },
 });
