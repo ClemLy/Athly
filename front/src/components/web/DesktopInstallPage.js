@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 const LOGO = require('../../../assets/logo-orange.png');
 
@@ -18,7 +19,7 @@ function MethodCard({ icon, title, platform, steps, accent }) {
   return (
     <View style={[s.method, { borderColor: accent + '30' }]}>
       <View style={[s.methodHeader, { borderBottomColor: accent + '20' }]}>
-        <Text style={s.methodIcon}>{icon}</Text>
+        <Ionicons name={icon} size={24} color={accent} />
         <View>
           <Text style={[s.methodTitle, { color: accent }]}>{title}</Text>
           <Text style={s.methodPlatform}>{platform}</Text>
@@ -56,7 +57,7 @@ export default function DesktopInstallPage() {
 
         <View style={s.methods}>
           <MethodCard
-            icon="🤖"
+            icon="logo-chrome"
             title="Chrome"
             platform="Android"
             accent="#FE7439"
@@ -67,7 +68,7 @@ export default function DesktopInstallPage() {
             ]}
           />
           <MethodCard
-            icon=""
+            icon="logo-apple"
             title="Safari"
             platform="iPhone · iPad"
             accent="#6E6AF0"

@@ -147,7 +147,7 @@ export default function EditProfileScreen({ navigation }) {
     try {
       await setBirthdate(dateObj.toISOString());
       await refetchUser();
-      showToast('Date de naissance enregistrée. Ton coffre est dans ton inventaire ! 🎁', 'success');
+      showToast('Date de naissance enregistrée. Ton coffre est dans ton inventaire !', 'success');
     } catch (error) {
       if (error.isSessionExpired) throw error;
       const msg = error.data?.message || error.message || 'Erreur réseau. Réessaie dans un instant.';

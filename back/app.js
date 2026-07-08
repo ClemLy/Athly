@@ -15,6 +15,7 @@ const groupStreakRoutes   = require("./routes/groupStreak.routes");
 const rewardRoutes        = require("./routes/reward.routes");
 const referralRoutes      = require("./routes/referral.routes");
 const debugRoutes         = require("./routes/debug.routes");
+const activityRoutes      = require("./routes/activity.routes");
 
 // --- Importation des middlewares ---
 const errorMiddleware = require("./middleware/error.middleware");
@@ -94,6 +95,7 @@ app.use("/api/groups",     groupStreakRoutes);
 app.use("/api/rewards",    rewardRoutes);
 app.use("/api/referral",   referralRoutes);
 app.use("/api/debug",      debugRoutes);
+app.use("/api/activity",   activityRoutes);
 
 // --- Gestion des erreurs ---
 // Route 404

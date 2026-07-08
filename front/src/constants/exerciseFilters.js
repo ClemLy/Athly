@@ -6,7 +6,7 @@ export const MUSCLE_GROUPS = [
   {
     id: 'pectoraux',
     label: 'Pectoraux',
-    icon: '💪',
+    icon: 'barbell-outline',
     subMuscles: [
       { id: 'pectoraux-haut', label: 'Pectoraux haut' },
       { id: 'pectoraux-milieu', label: 'Pectoraux milieu' },
@@ -16,7 +16,7 @@ export const MUSCLE_GROUPS = [
   {
     id: 'dos',
     label: 'Dos',
-    icon: '💪',
+    icon: 'barbell-outline',
     subMuscles: [
       { id: 'grand-dorsal', label: 'Grand dorsal' },
       { id: 'rhomboides', label: 'Rhomboïdes' },
@@ -27,7 +27,7 @@ export const MUSCLE_GROUPS = [
   {
     id: 'epaules',
     label: 'Épaules',
-    icon: '💪',
+    icon: 'barbell-outline',
     subMuscles: [
       { id: 'deltoide-anterieur', label: 'Deltoïde antérieur' },
       { id: 'deltoide-lateral', label: 'Deltoïde latéral' },
@@ -37,7 +37,7 @@ export const MUSCLE_GROUPS = [
   {
     id: 'bras',
     label: 'Bras',
-    icon: '💪',
+    icon: 'barbell-outline',
     subMuscles: [
       { id: 'biceps', label: 'Biceps' },
       { id: 'triceps', label: 'Triceps' },
@@ -47,7 +47,7 @@ export const MUSCLE_GROUPS = [
   {
     id: 'jambes',
     label: 'Jambes',
-    icon: '🦵',
+    icon: 'walk-outline',
     subMuscles: [
       { id: 'quadriceps', label: 'Quadriceps' },
       { id: 'ischios', label: 'Ischios' },
@@ -59,7 +59,7 @@ export const MUSCLE_GROUPS = [
   {
     id: 'abdos',
     label: 'Abdos',
-    icon: '💪',
+    icon: 'barbell-outline',
     subMuscles: [
       { id: 'grand-droit', label: 'Grand droit' },
       { id: 'obliques', label: 'Obliques' },
@@ -96,16 +96,17 @@ export const EQUIPMENTS = [
   { id: 'machine', label: 'Machine' },
 ];
 
-// Glyph affiché dans la card (cohérent avec la maquette : 💪 par défaut, 🔥 pour le poids du corps).
+// Icône Ionicons affichée dans la card (barbell-outline par défaut, body-outline
+// pour le poids du corps — pas de matériel, juste le corps).
 export const ICON_FOR_EQUIPMENT = {
-  'poids-du-corps': '🔥',
+  'poids-du-corps': 'body-outline',
 };
 
 export const ICON_FOR_MUSCLE_GROUP = {
-  jambes: '🦵',
+  jambes: 'walk-outline',
 };
 
-export const DEFAULT_ICON = '💪';
+export const DEFAULT_ICON = 'barbell-outline';
 
 // Normalise une chaîne libre (accents, casse) en id stable.
 export function normalizeId(value) {

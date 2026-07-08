@@ -79,7 +79,7 @@ export default function InventoryScreen({ navigation }) {
     try {
       const res = await useItem(itemType);
       if (res.success) {
-        showToast(`${ITEM_CATALOG[itemType]?.name ?? itemType} utilisé ! ✨`, 'success');
+        showToast(`${ITEM_CATALOG[itemType]?.name ?? itemType} utilisé !`, 'success');
         refetch();
 
         // Le Profil affiche un niveau/XP calculé localement (logs de séances),

@@ -26,6 +26,11 @@ const userSchemas = {
   updateShowcase: Joi.object({
     achievementIds: Joi.array().items(Joi.string().max(60)).max(3).required(),
   }),
+
+  registerPushToken: Joi.object({
+    // null explicite = désenregistrement (permissions révoquées côté client)
+    pushToken: Joi.string().max(200).allow(null).required(),
+  }),
 };
 
 module.exports = userSchemas;

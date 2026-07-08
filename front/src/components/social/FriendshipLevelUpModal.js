@@ -60,7 +60,7 @@ export default function FriendshipLevelUpModal({ visible, pseudo, level, onClose
 
           <Text style={styles.body}>
             {isMax
-              ? "Niveau d'amitié maximum atteint ! Une récompense UNIQUE t'attend dans ton inventaire 🎁"
+              ? "Niveau d'amitié maximum atteint ! Une récompense UNIQUE t'attend dans ton inventaire."
               : 'Continuez à vous entraîner ensemble pour renforcer ce lien.'}
           </Text>
 

@@ -80,6 +80,18 @@ export async function leaveGroup() {
   return res.data;
 }
 
+// ─── Flux d'activité « Taquineries & High-Fives » (Brique IV) ─────────────────
+
+export async function getActivityFeed() {
+  const res = await API.get('/activity/feed');
+  return res.data;
+}
+
+export async function reactToActivityEvent(eventId, emoji) {
+  const res = await API.post(`/activity/${eventId}/react`, { emoji });
+  return res.data;
+}
+
 // ─── Parrainage (Brique III) ──────────────────────────────────────────────────
 
 export async function claimReferral(code) {

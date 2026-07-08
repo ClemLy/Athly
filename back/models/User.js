@@ -131,6 +131,21 @@ const UserSchema = new mongoose.Schema(
     // ex. "FRAME_SHAPE_DRAGONFANG", "FRAME_COLOR_BLOODSANG", "THEME_BLOODSANG".
     unlockedCosmetics: { type: [String], default: [] },
 
+    // ── Présence & notifications push ─────────────────────────────────────────
+    // Token Expo Push (ExponentPushToken[...]) enregistré par le front après
+    // acceptation des permissions — voir push.service.js. null = aucun appareil
+    // enregistré (l'envoi est alors silencieusement ignoré, jamais une erreur).
+    pushToken: { type: String, default: null },
+
+    // Dernière activité connue (requête authentifiée quelconque) — alimente le
+    // statut "Prêt" de la Météo des séances (voir groupStreak.controller.js).
+    lastActiveAt: { type: Date, default: null },
+
+    // Dernière consultation du flux d'activité "Taquineries & High-Fives" —
+    // sert de curseur pour ne remonter que les événements nouveaux au
+    // lancement de l'app (voir activity.controller.js).
+    lastActivityFeedCheckAt: { type: Date, default: null },
+
     // ── Parrainage V2 ─────────────────────────────────────────────────────────
     // Code unique généré à la création du compte (ex: "ATH-X7K2P")
     referralCode: { type: String, unique: true, sparse: true },

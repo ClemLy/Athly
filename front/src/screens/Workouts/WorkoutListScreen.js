@@ -32,7 +32,7 @@ function TemplateCard({ template, onPress }) {
       activeOpacity={0.85}
     >
       <View style={styles.iconBox}>
-        <Text style={styles.icon}>{template.icon}</Text>
+        <Ionicons name={template.icon} size={22} color={Colors.primary} />
       </View>
       <View style={styles.content}>
         <Text style={styles.title} numberOfLines={1}>{template.name}</Text>

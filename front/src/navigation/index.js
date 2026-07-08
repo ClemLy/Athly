@@ -18,9 +18,11 @@ import { QuestProvider } from '../context/QuestContext';
 import { UserProvider } from '../context/UserContext';
 import { TutorialProvider } from '../context/TutorialContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { setupNotificationChannels, ensureDailyRemindersScheduled } from '../services/notificationService';
+import { setupNotificationChannels, ensureDailyRemindersScheduled, getExpoPushToken } from '../services/notificationService';
+import { registerPushToken } from '../services/profile.service';
 import BirthdayCelebration from '../components/profile/BirthdayCelebration';
 import LevelUpCelebration from '../components/profile/LevelUpCelebration';
+import ActivityFeedModal from '../components/social/ActivityFeedModal';
 
 const NOTIF_ENABLED_KEY = 'athly:notif:enabled:v1';
 
@@ -36,6 +38,20 @@ export default function AppNavigator() {
       } catch (_) {}
     })();
   }, []);
+
+  // Enregistre le token Expo Push auprès du backend une fois connecté — c'est
+  // ce qui permet aux notifications d'un AUTRE appareil (Secouer, réactions
+  // du flux d'activité) d'atteindre réellement celui-ci. Best-effort : un
+  // échec (permission refusée, web, hors ligne) ne bloque jamais l'app.
+  useEffect(() => {
+    if (!userToken) return;
+    (async () => {
+      const token = await getExpoPushToken();
+      if (token) {
+        try { await registerPushToken(token); } catch (_) {}
+      }
+    })();
+  }, [userToken]);
 
   if (isLoading) {
     return (
@@ -62,6 +78,7 @@ export default function AppNavigator() {
                     <>
                       <BirthdayCelebration />
                       <LevelUpCelebration />
+                      <ActivityFeedModal />
                       <BottomTabs />
                     </>
                   )}

@@ -37,6 +37,12 @@ const StreakGroupSchema = new mongoose.Schema(
     // Sang Unique"). Ne redescend jamais, même si la streak est ensuite
     // remise à 0 — évite un ré-octroi si le groupe rebâtit une streak.
     bloodSangAwarded: { type: Boolean, default: false },
+
+    // Hall of Shame (Section IV) : membre(s) responsables de la dernière
+    // rupture de streak collective détectée (voir detectAndApplyStreakBreak
+    // dans groupStreak.controller.js). Vidé dès qu'une nouvelle streak est
+    // validée avec succès — reste affiché jusque-là.
+    shameBreakers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   },
   { timestamps: true }
 );

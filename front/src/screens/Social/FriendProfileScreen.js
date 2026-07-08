@@ -76,7 +76,7 @@ export default function FriendProfileScreen({ route, navigation }) {
     setShaking(true);
     try {
       const res = await shakeMember(sharedGroup._id, friendId);
-      showToast(res.message || `${pseudo} a été secoué ! 🚨`, 'success');
+      showToast(res.message || `${pseudo} a été secoué !`, 'success');
     } catch (error) {
       if (!error.isSessionExpired) showToast(error.data?.message || 'Action impossible.', 'error');
     } finally {

@@ -248,7 +248,7 @@ export default function SettingsScreen({ navigation }) {
     try {
       setSimLoading(true);
       await fireTestNotification(type);
-      showFeedback(type === 'orange' ? 'Notif orange dans 3 s... 🔥' : 'Notif violette dans 3 s... 👀');
+      showFeedback(type === 'orange' ? 'Notif orange dans 3 s...' : 'Notif violette dans 3 s...');
     } catch (e) {
       showFeedback('Erreur : ' + (e?.message || 'inconnue'));
     } finally {
@@ -258,7 +258,7 @@ export default function SettingsScreen({ navigation }) {
 
   const handleGodMode = useCallback(async (val) => {
     await setGodMode(val);
-    if (val) Alert.alert('God Mode activé 🔥', 'Utilisez la console ci-dessous pour simuler votre progression.');
+    if (val) Alert.alert('God Mode activé', 'Utilisez la console ci-dessous pour simuler votre progression.');
   }, [setGodMode]);
 
   const handleLogout = () => {
@@ -894,8 +894,8 @@ export default function SettingsScreen({ navigation }) {
                 <DevSectionTitle title="NOTIFICATIONS" />
                 <Text style={styles.devHint}>Déclenche une notification de test dans 3 secondes. Passe l'app en arrière-plan.</Text>
                 <View style={styles.devBtnRow}>
-                  <DevBtn label="🔥 Notif Orange" onPress={() => runNotifTest('orange')} disabled={simLoading} flex variant="orange" />
-                  <DevBtn label="👀 Notif Violette" onPress={() => runNotifTest('violet')} disabled={simLoading} flex variant="violet" />
+                  <DevBtn label="Notif Orange" onPress={() => runNotifTest('orange')} disabled={simLoading} flex variant="orange" />
+                  <DevBtn label="Notif Violette" onPress={() => runNotifTest('violet')} disabled={simLoading} flex variant="violet" />
                 </View>
 
                 {/* ── RESET ── */}

@@ -24,6 +24,12 @@ class UserService {
       await user.save();
     }
 
+    // Présence : getMe est appelé à chaque focus d'écran côté front, ce qui
+    // en fait un signal "activité récente" fiable pour la Météo des séances
+    // (statut 🔥 Prêt) sans avoir besoin d'un endpoint de heartbeat dédié.
+    // Fire-and-forget : ne doit jamais retarder ni faire échouer la réponse.
+    User.updateOne({ _id: userId }, { $set: { lastActiveAt: new Date() } }).catch(() => {});
+
     return user;
   }
 
@@ -96,6 +102,21 @@ class UserService {
       { $set: { 'equippedFrame.shapeId': shapeId, 'equippedFrame.colorId': colorId } },
       { new: true, runValidators: true },
     ).select('equippedFrame');
+    if (!updatedUser) throw new Error('Utilisateur non trouvé.');
+    return updatedUser;
+  }
+
+  /**
+   * Enregistre (ou efface, si null) le token Expo Push de l'appareil courant.
+   * @param {string} userId
+   * @param {string|null} pushToken
+   */
+  async registerPushToken(userId, pushToken) {
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: { pushToken } },
+      { new: true },
+    ).select('pushToken');
     if (!updatedUser) throw new Error('Utilisateur non trouvé.');
     return updatedUser;
   }

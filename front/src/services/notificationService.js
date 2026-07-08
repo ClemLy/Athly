@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const DAILY_NOTIF_IDS_KEY = 'athly:notif:daily_ids:v2';
@@ -83,6 +84,31 @@ export async function requestNotificationPermissions() {
   if (Platform.OS === 'web') return false;
   const { status } = await Notifications.requestPermissionsAsync();
   return status === 'granted';
+}
+
+/**
+ * Récupère le token Expo Push de l'appareil courant, en demandant la
+ * permission si besoin. Retourne null sur web (non supporté), en cas de
+ * permission refusée, ou si l'obtention échoue (jamais d'exception qui
+ * remonterait — un push cross-device est un bonus UX, pas une dépendance
+ * bloquante pour le reste de l'app).
+ */
+export async function getExpoPushToken() {
+  if (Platform.OS === 'web') return null;
+  try {
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let status = existing;
+    if (status !== 'granted') {
+      ({ status } = await Notifications.requestPermissionsAsync());
+    }
+    if (status !== 'granted') return null;
+
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+    const { data } = await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
+    return data ?? null;
+  } catch (_) {
+    return null;
+  }
 }
 
 function pickRandom(arr) {
