@@ -4,9 +4,15 @@ const crypto      = require('crypto');
 const bcrypt       = require('bcrypt');
 const User         = require('../models/User');
 const Friendship   = require('../models/Friendship');
+const StreakGroup  = require('../models/StreakGroup');
+const Workout      = require('../models/Workout');
 const { xpForLevel, getRankForLevel } = require('../utils/levelHelpers');
 const { addItemAtomic, addUniqueItemOnce } = require('../services/inventory.service');
 const { checkAndUnlockAchievements } = require('./reward.controller');
+const { recordActivityEvent } = require('../services/activity.service');
+const { sendPushToUser } = require('../services/push.service');
+const { SHAKE_TROLL_MESSAGES } = require('../data/shakeMessages');
+const { uniqueDiscriminator } = require('../services/auth.service');
 
 const MOCK_PASSWORD_ROUNDS = 10; // comptes jetables, jamais utilisés pour se connecter
 
@@ -469,6 +475,290 @@ exports.mockSocial = async (req, res, next) => {
       success: true,
       message: `${created.length} faux profils complets générés (cadres, trophées, vitrines, séances, records).`,
       created,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// simulateGroup  POST /api/debug/godmode/simulate-group
+// ─────────────────────────────────────────────────────────────────────────────
+
+// 3 coéquipiers factices couvrant les 3 statuts non-« sommeil » de la Météo
+// des séances — le 4e statut (💤 En sommeil) s'obtient naturellement en ne
+// touchant à rien pour un membre. Namespacés par l'ObjectId de l'appelant
+// (comme MOCK_FRIEND_SPECS) pour rester idempotent et ne jamais fuiter d'un
+// testeur à l'autre.
+const MOCK_GROUPMATE_WEATHER = [
+  { suffix: 1, pseudo: 'Coequipier_Pret',  weather: 'ready' },
+  { suffix: 2, pseudo: 'Coequipier_Actif', weather: 'active' },
+  { suffix: 3, pseudo: 'Coequipier_Valide', weather: 'done' },
+];
+
+const SIMULATED_GROUP_STREAK = 5;
+
+/**
+ * Outil de test : crée (ou régénère) un groupe de streak complet avec 3
+ * coéquipiers factices, un par statut de Météo des séances testable sans
+ * seconde app/appareil (ready/active/done — le 4e, sleeping, s'obtient en ne
+ * touchant à aucun des trois). Seul moyen de tester weatherStatus, le
+ * multiplicateur de groupe et le bouton "Secouer" en solo.
+ *
+ * Idempotent : le groupe et les coéquipiers précédents de CET utilisateur
+ * (namespacés par son ObjectId) sont supprimés avant recréation.
+ */
+exports.simulateGroup = async (req, res, next) => {
+  try {
+    const myId = req.user.id;
+    const emailPrefix = `mock-group-${myId}-`;
+
+    // ── Nettoyage du groupe et des coéquipiers précédents de CET utilisateur ──
+    const previousMocks = await User.find({ email: { $regex: `^${emailPrefix}` } }).select('_id');
+    const previousIds = previousMocks.map((u) => u._id);
+    if (previousIds.length > 0) {
+      await Workout.deleteMany({ user: { $in: previousIds } });
+      await Friendship.deleteMany({
+        $or: [{ requester: { $in: previousIds } }, { recipient: { $in: previousIds } }],
+      });
+      await User.deleteMany({ _id: { $in: previousIds } });
+    }
+    await StreakGroup.deleteMany({ members: myId });
+
+    const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), MOCK_PASSWORD_ROUNDS);
+    const now = new Date();
+    const todayAt = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d; };
+
+    const memberIds = [myId];
+    for (const spec of MOCK_GROUPMATE_WEATHER) {
+      const mockUser = await User.create({
+        pseudo:     spec.pseudo,
+        email:      `${emailPrefix}${spec.suffix}@athly.dev`,
+        password:   passwordHash,
+        isVerified: true,
+        level:      15,
+        xp:         xpForLevel(15),
+        rank:       getRankForLevel(15),
+        lastActiveAt: spec.weather === 'ready' || spec.weather === 'active' || spec.weather === 'done' ? now : null,
+      });
+
+      if (spec.weather === 'active') {
+        await Workout.create({ user: mockUser._id, status: 'in_progress', date: todayAt(12, 0) });
+      } else if (spec.weather === 'done') {
+        await Workout.create({ user: mockUser._id, status: 'finished', date: todayAt(8, 0) });
+      }
+
+      await Friendship.create({ requester: myId, recipient: mockUser._id, status: 'accepted' });
+      memberIds.push(mockUser._id);
+    }
+
+    const group = await StreakGroup.create({
+      name: 'Groupe de Test (God Mode)',
+      members: memberIds,
+      currentStreak: SIMULATED_GROUP_STREAK,
+      lastValidatedDate: now,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: `Groupe de test créé (3 coéquipiers : Prêt/Actif/Validé, streak ${SIMULATED_GROUP_STREAK}j).`,
+      groupId: group._id,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// simulateActivityEvent  POST /api/debug/godmode/simulate-activity-event
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Outil de test : publie un ActivityEvent factice au nom d'un coéquipier du
+ * groupe de l'utilisateur connecté (jamais en son propre nom — le flux
+ * n'affiche jamais ses propres événements), pour tester ActivityFeedModal et
+ * les réactions sans attendre qu'un vrai coéquipier batte un record ou ouvre
+ * un coffre Légendaire.
+ *
+ * Body : { type?: 'pr_broken' | 'chest_legendary' } — défaut aléatoire.
+ */
+exports.simulateActivityEvent = async (req, res, next) => {
+  try {
+    const myId = req.user.id;
+    const requestedType = (req.body || {}).type;
+    const type = requestedType === 'chest_legendary' ? 'chest_legendary'
+      : requestedType === 'pr_broken' ? 'pr_broken'
+      : (Math.random() < 0.5 ? 'pr_broken' : 'chest_legendary');
+
+    const group = await StreakGroup.findOne({ members: myId });
+    if (!group) {
+      return next(createError('Aucun groupe — utilise "Simuler un groupe" avant de tester le flux d\'activité.', 400));
+    }
+
+    const otherMemberId = group.members.find((m) => m.toString() !== myId);
+    if (!otherMemberId) {
+      return next(createError('Ton groupe ne contient aucun autre membre.', 400));
+    }
+
+    const actor = await User.findById(otherMemberId).select('pseudo');
+    const pseudo = actor?.pseudo ?? 'Un coéquipier';
+
+    const message = type === 'chest_legendary'
+      ? `${pseudo} a ouvert un coffre Légendaire !`
+      : `${pseudo} a brisé son record au Développé couché !`;
+    const payload = type === 'chest_legendary'
+      ? { itemType: 'LEVEL_COUPON' }
+      : { exercise: 'Développé couché', weight: 100 };
+
+    const event = await recordActivityEvent(otherMemberId, type, message, payload);
+
+    return res.status(201).json({
+      success: true,
+      message: `Événement simulé : ${message}`,
+      eventId: event?._id ?? null,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// simulateStreakBreak  POST /api/debug/godmode/simulate-streak-break
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Outil de test : recule artificiellement `lastValidatedDate` du groupe de
+ * l'utilisateur connecté de 2 jours (en gardant currentStreak > 0), pour que
+ * le prochain `getMyGroup` déclenche la détection paresseuse de rupture de
+ * streak (voir detectAndApplyStreakBreak dans groupStreak.controller.js) et
+ * affiche le bandeau Hall of Shame — sans attendre un vrai jour manqué.
+ *
+ * Les coéquipiers factices (créés par "Simuler un groupe") n'ont par
+ * construction aucune séance ni Gel de Streak sur le jour manqué : ils
+ * deviennent naturellement les "briseurs" désignés.
+ */
+exports.simulateStreakBreak = async (req, res, next) => {
+  try {
+    const myId = req.user.id;
+    const group = await StreakGroup.findOne({ members: myId });
+    if (!group) {
+      return next(createError('Aucun groupe — utilise "Simuler un groupe" avant de tester le Hall of Shame.', 400));
+    }
+
+    const twoDaysAgo = new Date();
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+
+    group.currentStreak = group.currentStreak > 0 ? group.currentStreak : SIMULATED_GROUP_STREAK;
+    group.lastValidatedDate = twoDaysAgo;
+    group.shameBreakers = [];
+    await group.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Rupture de streak simulée — recharge l\'onglet Groupe pour voir le Hall of Shame.',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// simulateShakeSelf  POST /api/debug/godmode/simulate-shake-self
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Outil de test : envoie une VRAIE notification push au token Expo enregistré
+ * de l'utilisateur connecté (pas à un autre membre), avec le même texte
+ * troll que le vrai bouton "Secouer" — seul moyen de vérifier de bout en
+ * bout que l'infra push (Expo → appareil) fonctionne réellement en solo,
+ * sans second compte/appareil pour recevoir la notification.
+ */
+exports.simulateShakeSelf = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id).select('pushToken');
+    if (!user?.pushToken) {
+      return next(createError("Aucun token push enregistré sur ce compte — ouvre l'app avec les notifications autorisées d'abord.", 400));
+    }
+
+    const trollMessage = SHAKE_TROLL_MESSAGES[Math.floor(Math.random() * SHAKE_TROLL_MESSAGES.length)];
+    const pushed = await sendPushToUser(req.user.id, {
+      title: 'Athly (Test) t\'a secoué ! 🚨',
+      body:  trollMessage,
+      data:  { type: 'shake', test: true },
+    });
+
+    return res.status(200).json({
+      success: true,
+      pushed,
+      message: pushed ? 'Notification envoyée à ton appareil.' : "Échec d'envoi — le token est peut-être périmé.",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// simulateSearchableFriend  POST /api/debug/godmode/simulate-searchable-friend
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Outil de test : crée un compte factice PAS déjà ami (contrairement à
+ * mockSocial, qui pré-accepte les faux profils) — seul moyen de tester en
+ * solo le parcours complet "Ajouter un ami" : recherche par tag exact,
+ * carte Preview, puis envoi réel de la demande.
+ *
+ * Idempotent : rejouer l'outil retourne le même compte de test (même tag)
+ * plutôt que d'en empiler des dizaines — sauf s'il a depuis été ami ou
+ * mis en pending, auquel cas un nouveau compte "cherchable" est recréé.
+ */
+exports.simulateSearchableFriend = async (req, res, next) => {
+  try {
+    const myId = req.user.id;
+    const emailPrefix = `mock-searchable-${myId}-`;
+
+    const existing = await User.findOne({ email: { $regex: `^${emailPrefix}` } }).select('_id pseudo discriminator');
+    if (existing) {
+      const relation = await Friendship.findOne({
+        $or: [
+          { requester: myId, recipient: existing._id },
+          { requester: existing._id, recipient: myId },
+        ],
+      });
+      if (!relation) {
+        return res.status(200).json({
+          success: true,
+          message: 'Compte de test déjà disponible.',
+          pseudo: existing.pseudo,
+          discriminator: existing.discriminator,
+          tag: `${existing.pseudo}#${existing.discriminator}`,
+        });
+      }
+      // Déjà ami/pending avec ce compte : on le retire pour en recréer un frais
+      // (sinon la recherche renverrait toujours relationStatus != 'none').
+      await Friendship.deleteOne({ _id: relation._id });
+      await User.deleteOne({ _id: existing._id });
+    }
+
+    const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), MOCK_PASSWORD_ROUNDS);
+    const pseudo = 'TestAmi';
+
+    const created = await User.create({
+      pseudo,
+      email: `${emailPrefix}${Date.now()}@athly.dev`,
+      password: passwordHash,
+      isVerified: true,
+      discriminator: await uniqueDiscriminator(pseudo),
+      level: 18,
+      xp: xpForLevel(18),
+      rank: getRankForLevel(18),
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Compte de test créé.',
+      pseudo: created.pseudo,
+      discriminator: created.discriminator,
+      tag: `${created.pseudo}#${created.discriminator}`,
     });
   } catch (err) {
     next(err);

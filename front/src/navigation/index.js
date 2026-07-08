@@ -23,6 +23,7 @@ import { registerPushToken } from '../services/profile.service';
 import BirthdayCelebration from '../components/profile/BirthdayCelebration';
 import LevelUpCelebration from '../components/profile/LevelUpCelebration';
 import ActivityFeedModal from '../components/social/ActivityFeedModal';
+import WeightReminderCheck from '../components/stats/WeightReminderCheck';
 
 const NOTIF_ENABLED_KEY = 'athly:notif:enabled:v1';
 
@@ -79,6 +80,7 @@ export default function AppNavigator() {
                       <BirthdayCelebration />
                       <LevelUpCelebration />
                       <ActivityFeedModal />
+                      <WeightReminderCheck />
                       <BottomTabs />
                     </>
                   )}

@@ -16,6 +16,7 @@ const rewardRoutes        = require("./routes/reward.routes");
 const referralRoutes      = require("./routes/referral.routes");
 const debugRoutes         = require("./routes/debug.routes");
 const activityRoutes      = require("./routes/activity.routes");
+const weightRoutes        = require("./routes/weight.routes");
 
 // --- Importation des middlewares ---
 const errorMiddleware = require("./middleware/error.middleware");
@@ -96,6 +97,7 @@ app.use("/api/rewards",    rewardRoutes);
 app.use("/api/referral",   referralRoutes);
 app.use("/api/debug",      debugRoutes);
 app.use("/api/activity",   activityRoutes);
+app.use("/api/weight",     weightRoutes);
 
 // --- Gestion des erreurs ---
 // Route 404

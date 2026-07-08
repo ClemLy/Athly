@@ -20,7 +20,9 @@ function todayKey() {
 
 export default function BirthdayCelebration() {
   const { userToken } = useAuth();
-  const [state, setState] = useState({ visible: false, pseudo: null, rewarded: false });
+  const [state, setState] = useState({
+    visible: false, pseudo: null, rewarded: false, chestKeyAdded: false, trophyUnlocked: false,
+  });
 
   useEffect(() => {
     if (!userToken) return;
@@ -34,7 +36,13 @@ export default function BirthdayCelebration() {
         if (!res?.isBirthday) return;
 
         await AsyncStorage.setItem(SHOWN_KEY, todayKey());
-        setState({ visible: true, pseudo: res.pseudo || null, rewarded: !!res.rewarded });
+        setState({
+          visible: true,
+          pseudo: res.pseudo || null,
+          rewarded: !!res.rewarded,
+          chestKeyAdded: !!res.chestKeyAdded,
+          trophyUnlocked: Array.isArray(res.newlyUnlocked) && res.newlyUnlocked.length > 0,
+        });
       } catch (_) {
         // Silencieux : ne doit jamais bloquer le démarrage de l'app.
       }
@@ -52,6 +60,8 @@ export default function BirthdayCelebration() {
       visible={state.visible}
       pseudo={state.pseudo}
       rewarded={state.rewarded}
+      chestKeyAdded={state.chestKeyAdded}
+      trophyUnlocked={state.trophyUnlocked}
       onClose={handleClose}
     />
   );

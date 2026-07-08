@@ -131,3 +131,36 @@ exports.getExerciseLeaderboard = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * MES RECORDS (TOUS EXERCICES)
+ * GET /api/exercises/my-records
+ *
+ * Agrège, pour CHAQUE exercice que j'ai déjà pratiqué, mon meilleur poids et
+ * mes répétitions associées — alimente le sélecteur "mettre en avant jusqu'à
+ * 6 records" du profil (Section III) : l'utilisateur choisit parmi les
+ * exercices qu'il a réellement faits, pas le catalogue entier.
+ */
+exports.getMyRecords = async (req, res, next) => {
+  try {
+    const mongoose       = require("mongoose");
+    const ExerciseRecord = require("../models/ExerciseRecord");
+
+    const rows = await ExerciseRecord.aggregate([
+      { $match: { user: new mongoose.Types.ObjectId(req.user.id) } },
+      { $unwind: "$series" },
+      { $group: {
+        _id:      "$exerciceNom",
+        maxPoids: { $max: "$series.poids" },
+        maxReps:  { $max: "$series.repetitions" },
+      } },
+      { $sort: { maxPoids: -1 } },
+    ]);
+
+    const records = rows.map((r) => ({ exercice: r._id, maxPoids: r.maxPoids, maxReps: r.maxReps }));
+
+    return res.status(200).json({ success: true, count: records.length, records });
+  } catch (error) {
+    next(error);
+  }
+};

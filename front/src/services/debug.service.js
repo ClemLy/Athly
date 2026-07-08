@@ -47,3 +47,45 @@ export async function simulateBirthday() {
   const res = await API.post('/debug/godmode/simulate-birthday');
   return res.data;
 }
+
+// ─── Vague 1 : groupe, météo, activité, Hall of Shame, secouer ───────────────
+
+// Crée (ou régénère) un groupe de streak avec 3 coéquipiers factices, un par
+// statut de Météo des séances (Prêt/Actif/Validé) — teste weatherStatus, le
+// multiplicateur de groupe et le bouton Secouer sans second appareil.
+export async function simulateGroup() {
+  const res = await API.post('/debug/godmode/simulate-group');
+  return res.data;
+}
+
+// Publie un ActivityEvent factice au nom d'un coéquipier (jamais soi-même) —
+// teste ActivityFeedModal et les réactions. type: 'pr_broken' | 'chest_legendary'.
+export async function simulateActivityEvent(type) {
+  const res = await API.post('/debug/godmode/simulate-activity-event', type ? { type } : {});
+  return res.data;
+}
+
+// Recule lastValidatedDate du groupe pour déclencher le Hall of Shame au
+// prochain chargement de l'onglet Groupe.
+export async function simulateStreakBreak() {
+  const res = await API.post('/debug/godmode/simulate-streak-break');
+  return res.data;
+}
+
+// Envoie une vraie notification push au token Expo de l'utilisateur connecté
+// (même texte troll que le vrai bouton Secouer) — vérifie l'infra push de
+// bout en bout sans second compte/appareil.
+export async function simulateShakeSelf() {
+  const res = await API.post('/debug/godmode/simulate-shake-self');
+  return res.data;
+}
+
+// ─── Vague 2 : tag Discord, ajout d'ami ───────────────────────────────────────
+
+// Crée un compte de test PAS déjà ami (contrairement à generateMockSocial) —
+// seul moyen de tester en solo le parcours complet "Ajouter un ami" :
+// recherche par tag exact, carte Preview, envoi réel de la demande.
+export async function simulateSearchableFriend() {
+  const res = await API.post('/debug/godmode/simulate-searchable-friend');
+  return res.data;
+}

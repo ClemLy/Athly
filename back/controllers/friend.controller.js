@@ -32,7 +32,7 @@ function isValidId(id) {
  * Champs publics d'un ami renvoyés dans les listes.
  * On n'expose jamais password, verificationCode, resetPasswordCode…
  */
-const FRIEND_PUBLIC_FIELDS = 'pseudo level rank xp';
+const FRIEND_PUBLIC_FIELDS = 'pseudo discriminator level rank xp equippedFrame';
 
 /**
  * Streak courante (jours consécutifs) calculée depuis des dates de séances
@@ -305,25 +305,103 @@ exports.getFriendsList = async (req, res, next) => {
 // getPendingRequests  GET /api/friends/pending
 // ─────────────────────────────────────────────────────────────────────────────
 /**
- * Récupère les demandes d'ami reçues et en attente pour l'utilisateur connecté.
- * Seules les demandes dont JE suis le recipient sont retournées.
+ * Récupère les demandes d'ami en attente pour l'utilisateur connecté, dans
+ * les deux sens :
+ *  - `requests` : demandes REÇUES (je suis recipient) — inchangé, back-compat.
+ *  - `sent`     : demandes ENVOYÉES par moi, toujours en attente de réponse.
  */
 exports.getPendingRequests = async (req, res, next) => {
   try {
     const myId = req.user.id;
 
-    const requests = await Friendship.find({
-      recipient: myId,
-      status:    'pending',
-    })
-      .populate('requester', FRIEND_PUBLIC_FIELDS)
-      .sort({ createdAt: -1 });
+    const [requests, sent] = await Promise.all([
+      Friendship.find({ recipient: myId, status: 'pending' })
+        .populate('requester', FRIEND_PUBLIC_FIELDS)
+        .sort({ createdAt: -1 }),
+      Friendship.find({ requester: myId, status: 'pending' })
+        .populate('recipient', FRIEND_PUBLIC_FIELDS)
+        .sort({ createdAt: -1 }),
+    ]);
 
     return res.status(200).json({
       success:  true,
       count:    requests.length,
       requests,
+      sentCount: sent.length,
+      sent,
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// cancelFriendRequest  DELETE /api/friends/request/:requestId
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Annule une demande d'ami que J'AI ENVOYÉE et qui est toujours en attente —
+ * pendant du "refuser" côté destinataire, mais côté expéditeur.
+ */
+exports.cancelFriendRequest = async (req, res, next) => {
+  try {
+    const myId = req.user.id;
+    const { requestId } = req.params;
+
+    if (!isValidId(requestId)) {
+      return next(createError('requestId invalide.', 400));
+    }
+
+    const friendship = await Friendship.findById(requestId);
+    if (!friendship) {
+      return next(createError('Demande d\'ami introuvable.', 404));
+    }
+    if (friendship.requester.toString() !== myId) {
+      return next(createError('Action non autorisée : vous n\'êtes pas l\'auteur de cette demande.', 403));
+    }
+    if (friendship.status !== 'pending') {
+      return next(createError(`Impossible d'annuler une demande au statut "${friendship.status}".`, 422));
+    }
+
+    await friendship.deleteOne();
+
+    return res.status(200).json({ success: true, message: 'Demande d\'ami annulée.' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// removeFriend  DELETE /api/friends/:friendshipId
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Supprime une amitié ACCEPTÉE (retire un ami) — l'un ou l'autre membre de
+ * la relation peut la rompre. Ne touche pas à un éventuel groupe de streak
+ * partagé (retrait manuel séparé, comme pour n'importe quel autre membre).
+ */
+exports.removeFriend = async (req, res, next) => {
+  try {
+    const myId = req.user.id;
+    const { friendshipId } = req.params;
+
+    if (!isValidId(friendshipId)) {
+      return next(createError('friendshipId invalide.', 400));
+    }
+
+    const friendship = await Friendship.findById(friendshipId);
+    if (!friendship) {
+      return next(createError('Amitié introuvable.', 404));
+    }
+    const isMember = friendship.requester.toString() === myId || friendship.recipient.toString() === myId;
+    if (!isMember) {
+      return next(createError('Action non autorisée : vous ne faites pas partie de cette amitié.', 403));
+    }
+    if (friendship.status !== 'accepted') {
+      return next(createError('Cette relation n\'est pas une amitié active.', 422));
+    }
+
+    await friendship.deleteOne();
+
+    return res.status(200).json({ success: true, message: 'Ami retiré.' });
   } catch (err) {
     next(err);
   }
@@ -333,28 +411,31 @@ exports.getPendingRequests = async (req, res, next) => {
 // searchUsers  GET /api/friends/search?q=
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Format exact "Pseudo#1234" — Section III : plus de recherche floue par
+// substring, on exige le tag complet pour éviter d'ajouter la mauvaise
+// personne (deux comptes peuvent partager le même pseudo).
+const FULL_TAG_PATTERN = /^(.+)#(\d{4})$/;
+
 /**
- * Recherche d'utilisateurs par pseudo (insensible à la casse).
- * Chaque résultat est annoté du statut de relation avec l'utilisateur
- * connecté : none | pending_sent | pending_received | accepted.
- * La regex est échappée : aucune injection de pattern possible.
+ * Recherche d'un utilisateur par tag EXACT "Pseudo#1234" (insensible à la
+ * casse sur le pseudo, discriminator exact). Renvoie 0 ou 1 résultat — sert
+ * la carte "Preview" avant envoi d'invitation, pas une liste de suggestions.
  */
 exports.searchUsers = async (req, res, next) => {
   try {
     const myId = req.user.id;
     const q    = typeof req.query.q === 'string' ? req.query.q.trim() : '';
 
-    if (q.length < 2) {
-      return next(createError('La recherche doit contenir au moins 2 caractères.', 400));
+    const match = q.match(FULL_TAG_PATTERN);
+    if (!match) {
+      return next(createError('Utilise le format complet "Pseudo#1234" pour rechercher un athlète.', 400));
     }
+    const [, pseudo, discriminator] = match;
 
-    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const users = await User.find({
-      _id:    { $ne: myId },
-      pseudo: { $regex: escaped, $options: 'i' },
-    })
+    const users = await User.find({ _id: { $ne: myId }, pseudo, discriminator })
+      .collation({ locale: 'en', strength: 2 })
       .select(FRIEND_PUBLIC_FIELDS)
-      .limit(20);
+      .limit(1);
 
     // Annotation du statut de relation en une seule requête
     const ids = users.map((u) => u._id);
@@ -417,14 +498,21 @@ exports.getFriendProfile = async (req, res, next) => {
     }
 
     const friend = await User.findById(friendId)
-      .select('pseudo level rank xp achievements showcasedAchievements streakGels totalWorkoutMinutes equippedFrame createdAt');
+      .select('pseudo level rank xp achievements showcasedAchievements showcasedRecords streakGels totalWorkoutMinutes equippedFrame createdAt');
     if (!friend) return next(createError('Utilisateur introuvable.', 404));
 
     const friendObjectId = new mongoose.Types.ObjectId(friendId);
 
-    // Top 5 des records par poids max soulevé
+    // Records mis en avant par l'ami lui-même (max 6, ordre choisi) — voir
+    // updateRecordsShowcase. Si jamais configuré (comptes pré-migration),
+    // repli sur l'ancien comportement : top 5 auto par poids max.
+    const hasShowcase = Array.isArray(friend.showcasedRecords) && friend.showcasedRecords.length > 0;
+    const recordsMatch = hasShowcase
+      ? { user: friendObjectId, exerciceNom: { $in: friend.showcasedRecords } }
+      : { user: friendObjectId };
+
     const recordsPromise = ExerciseRecord.aggregate([
-      { $match: { user: friendObjectId } },
+      { $match: recordsMatch },
       { $unwind: '$series' },
       { $group: {
         _id:       '$exerciceNom',
@@ -432,8 +520,14 @@ exports.getFriendProfile = async (req, res, next) => {
         maxReps:   { $max: '$series.repetitions' },
       } },
       { $sort: { maxPoids: -1 } },
-      { $limit: 5 },
-    ]);
+      { $limit: hasShowcase ? 6 : 5 },
+    ]).then((rows) => {
+      if (!hasShowcase) return rows;
+      // Réordonne selon l'ordre choisi par l'ami (l'aggregate trie par poids,
+      // pas par ordre de sélection) — l'ordre de mise en avant doit primer.
+      const byName = new Map(rows.map((r) => [r._id, r]));
+      return friend.showcasedRecords.map((name) => byName.get(name)).filter(Boolean);
+    });
 
     // Séances finalisées synchronisées côté backend (total + dates pour la streak)
     const workoutsPromise = Workout.find({

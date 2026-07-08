@@ -5,6 +5,9 @@
 // Ordre = ordre d'affichage (priorité visuelle décroissante).
 // Garde la liste courte (6-8 exos max) pour préserver la lisibilité du profil.
 
+import { BUILTIN_CATALOG } from './exerciseCatalog';
+import { ICON_FOR_MUSCLE_GROUP, DEFAULT_ICON, normalizeId } from '../constants/exerciseFilters';
+
 export const MAJOR_EXERCISES = [
   { name: 'Développé couché', group: 'pectoraux', icon: 'barbell-outline' },
   { name: 'Squat', group: 'jambes', icon: 'barbell-outline' },
@@ -24,4 +27,24 @@ export function findMajorExerciseByName(name) {
     const k = String(m.name).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
     return k === target;
   }) || null;
+}
+
+// Résout { group, icon } pour N'IMPORTE QUEL nom d'exercice (pas seulement les
+// 7 "phares") — utilisé par les records mis en avant, qui peuvent venir de
+// tout le catalogue. Ordre de résolution : MAJOR_EXERCISES (icône curatée) →
+// BUILTIN_CATALOG (groupe musculaire réel, icône déduite) → repli neutre.
+export function resolveExerciseMeta(name) {
+  const major = findMajorExerciseByName(name);
+  if (major) return { group: major.group, icon: major.icon };
+
+  const targetId = normalizeId(name);
+  const catalogMatch = BUILTIN_CATALOG.find((ex) => normalizeId(ex.name) === targetId);
+  if (catalogMatch) {
+    return {
+      group: catalogMatch.targetMuscleGroup,
+      icon: ICON_FOR_MUSCLE_GROUP[catalogMatch.targetMuscleGroup] || DEFAULT_ICON,
+    };
+  }
+
+  return { group: null, icon: DEFAULT_ICON };
 }

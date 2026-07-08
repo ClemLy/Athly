@@ -27,6 +27,10 @@ const userSchemas = {
     achievementIds: Joi.array().items(Joi.string().max(60)).max(3).required(),
   }),
 
+  updateRecordsShowcase: Joi.object({
+    exerciseNames: Joi.array().items(Joi.string().max(80)).max(6).required(),
+  }),
+
   registerPushToken: Joi.object({
     // null explicite = désenregistrement (permissions révoquées côté client)
     pushToken: Joi.string().max(200).allow(null).required(),

@@ -22,11 +22,23 @@ const REACTION_META = {
   jealous: { icon: 'eye',          label: 'Jalouser' },
 };
 
+// Titres piochés au hasard à chaque ouverture — un seul nom fixe finit par
+// lasser, façon rubrique people plutôt qu'écran technique.
+const FEED_TITLES = [
+  'Radio Vestiaire',
+  'Le Ragot du Jour',
+  'Commérages de la Fonte',
+  'Ça jase au vestiaire',
+  'Le Bureau des Rumeurs',
+  "Les Nouvelles Fraîches (et un peu piquantes)",
+];
+
 export default function ActivityFeedModal() {
   const { userToken } = useAuth();
   const [events, setEvents]   = useState([]);
   const [visible, setVisible] = useState(false);
   const [reactedIds, setReactedIds] = useState({});
+  const [title] = useState(() => FEED_TITLES[Math.floor(Math.random() * FEED_TITLES.length)]);
 
   useEffect(() => {
     if (!userToken) return;
@@ -63,7 +75,7 @@ export default function ActivityFeedModal() {
           <Text style={styles.eyebrow}>QUOI DE NEUF ?</Text>
           <View style={styles.titleRow}>
             <Ionicons name="flame" size={18} color={Colors.primary} />
-            <Text style={styles.title}>Taquineries & High-Fives</Text>
+            <Text style={styles.title}>{title}</Text>
           </View>
 
           <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>

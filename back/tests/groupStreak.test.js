@@ -289,6 +289,33 @@ describe("Streaks de Groupe & Niveaux d'Amitié Athly — V2", () => {
 
       expect(res.statusCode).toBe(403);
     });
+
+    it("❌ Impossible de secouer deux fois la même personne le même jour", async () => {
+      await request(app)
+        .post(`/api/groups/${groupId}/shake/${bob.userId}`)
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      const res = await request(app)
+        .post(`/api/groups/${groupId}/shake/${bob.userId}`)
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(422);
+      expect(res.body.success).toBe(false);
+    });
+
+    it("✅ getMyGroup renvoie shakenTodayByMe après une secousse", async () => {
+      await request(app)
+        .post(`/api/groups/${groupId}/shake/${bob.userId}`)
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      const res = await request(app)
+        .get('/api/groups/my-group')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.body.group.shakenTodayByMe).toEqual([bob.userId]);
+      // Historique brut jamais exposé au front (vie privée / poids de réponse)
+      expect(res.body.group.shakes).toBeUndefined();
+    });
   });
 
   // ───────────────────────────────────────────────────────────────────────────

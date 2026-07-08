@@ -11,12 +11,16 @@ import { useUser } from '../../context/UserContext';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import ConfirmModal from '../../components/common/ConfirmModal';
 import FriendshipLevelUpModal from '../../components/social/FriendshipLevelUpModal';
+import FriendPreviewModal from '../../components/social/FriendPreviewModal';
+import AddFriendModal from '../../components/social/AddFriendModal';
 import {
   searchUsers, sendFriendRequest, acceptFriendRequest, declineFriendRequest,
+  cancelFriendRequest, removeFriend,
   getFriendsList, getPendingRequests, getLeaderboard, getExerciseLeaderboard,
   getMyGroup, inviteToGroup, respondToGroupInvite, shakeMember, checkGroupStreak, leaveGroup,
 } from '../../services/social.service';
 import { MAJOR_EXERCISES } from '../../data/majorExercises';
+import ExercisePickerModal from '../../components/social/ExercisePickerModal';
 
 // Podium / classements : positions 1-3 affichées en médaille colorée plutôt
 // qu'en emoji 🥇🥈🥉.
@@ -40,27 +44,34 @@ const SEGMENTS = [
 
 export default function SocialScreen({ navigation }) {
   const { showToast } = useToast();
-  const { refetch: refetchUser } = useUser();
+  const { user, refetch: refetchUser } = useUser();
   const { addBonusXp } = useWorkoutLogs();
   const [segment, setSegment] = useState('friends');
 
   // ── Données ──
   const [friends,     setFriends]     = useState([]);
   const [pending,     setPending]     = useState([]);
+  const [sentRequests, setSentRequests] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
   const [group,       setGroup]       = useState(null);
   const [groupInvites, setGroupInvites] = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [refreshing,  setRefreshing]  = useState(false);
 
-  // ── Recherche ──
-  const [query,     setQuery]     = useState('');
-  const [results,   setResults]   = useState(null); // null = pas de recherche active
-  const [searching, setSearching] = useState(false);
-  const searchTimer = useRef(null);
+  // ── Ajout d'ami par tag exact "Pseudo#1234" (Section III) ──
+  // Point d'entrée unique : bouton "+ Ajouter un ami" → AddFriendModal
+  // (pseudo + # séparés, affiche aussi mon propre tag) → un résultat trouvé
+  // ferme AddFriendModal et ouvre la carte Preview (FriendPreviewModal).
+  const [addFriendVisible, setAddFriendVisible] = useState(false);
+  const [searching,    setSearching]    = useState(false);
+  const [searchError,  setSearchError]  = useState('');
+  const [previewResult, setPreviewResult] = useState(null);
 
   // ── Confirmation quitter le groupe ──
   const [leaveConfirmVisible, setLeaveConfirmVisible] = useState(false);
+
+  // ── Confirmation retrait d'un ami ──
+  const [removeFriendTarget, setRemoveFriendTarget] = useState(null); // { friendshipId, pseudo }
 
   // ── Célébration montée de niveau d'amitié ──────────────────────────────────
   // Comparaison du niveau d'amitié de chaque ami entre deux loadAll() : toute
@@ -95,6 +106,7 @@ export default function SocialScreen({ navigation }) {
 
       setFriends(incomingFriends);
       setPending(pendingRes.requests ?? []);
+      setSentRequests(pendingRes.sent ?? []);
       setLeaderboard(boardRes.leaderboard ?? []);
       setGroup(groupRes.group ?? null);
       setGroupInvites(groupRes.invites ?? []);
@@ -120,25 +132,27 @@ export default function SocialScreen({ navigation }) {
 
   const onRefresh = () => { setRefreshing(true); loadAll(); };
 
-  // ── Recherche débouncée (400 ms) ──
-  const onQueryChange = (text) => {
-    setQuery(text);
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    if (text.trim().length < 2) { setResults(null); return; }
-    searchTimer.current = setTimeout(async () => {
-      setSearching(true);
-      try {
-        const res = await searchUsers(text.trim());
-        setResults(res.results ?? []);
-      } catch (_) {
-        setResults([]);
-      } finally {
-        setSearching(false);
+  // Recherche déclenchée depuis AddFriendModal, avec le tag déjà construit à
+  // partir des 2 champs séparés (pseudo + # à 4 chiffres) — jamais au fil de
+  // la frappe, pour éviter d'ajouter la mauvaise personne.
+  const onSearchTag = async (fullTag) => {
+    setSearchError('');
+    setSearching(true);
+    try {
+      const res = await searchUsers(fullTag);
+      const found = (res.results ?? [])[0];
+      if (found) {
+        setPreviewResult(found);
+        setAddFriendVisible(false);
+      } else {
+        setSearchError('Aucun athlète ne correspond à ce tag.');
       }
-    }, 400);
+    } catch (error) {
+      setSearchError(error?.data?.message || 'Recherche impossible.');
+    } finally {
+      setSearching(false);
+    }
   };
-
-  useEffect(() => () => searchTimer.current && clearTimeout(searchTimer.current), []);
 
   // ── Actions amis ──
   const doAction = async (fn, successMsg) => {
@@ -146,7 +160,6 @@ export default function SocialScreen({ navigation }) {
       await fn();
       if (successMsg) showToast(successMsg, 'success');
       loadAll();
-      if (query.trim().length >= 2) onQueryChange(query); // rafraîchit la recherche
     } catch (error) {
       if (error.isSessionExpired) return;
       showToast(error.data?.message || 'Action impossible.', 'error');
@@ -196,13 +209,12 @@ export default function SocialScreen({ navigation }) {
             <FriendsSegment
               friends={friends}
               pending={pending}
-              query={query}
-              results={results}
-              searching={searching}
-              onQueryChange={onQueryChange}
-              onSend={(id)    => doAction(() => sendFriendRequest(id), 'Invitation envoyée')}
+              sentRequests={sentRequests}
+              onOpenAddFriend={() => setAddFriendVisible(true)}
               onAccept={(id)  => doAction(() => acceptFriendRequest(id), 'Vous êtes maintenant amis !')}
               onDecline={(id) => doAction(() => declineFriendRequest(id))}
+              onCancelSent={(id) => doAction(() => cancelFriendRequest(id), 'Demande annulée.')}
+              onRemoveFriend={(friendshipId, pseudo) => setRemoveFriendTarget({ friendshipId, pseudo })}
               onOpenProfile={(friend, friendshipLevel) =>
                 navigation.navigate('FriendProfile', { friendId: friend._id, pseudo: friend.pseudo, friendshipLevel })}
             />
@@ -213,6 +225,7 @@ export default function SocialScreen({ navigation }) {
           {segment === 'group' && (
             <GroupSegment
               group={group}
+              myId={user?._id}
               invites={groupInvites}
               friends={friends}
               onInvite={(ids, name) => doAction(() => inviteToGroup(ids, name), 'Demande de Streak de Groupe envoyée')}
@@ -268,6 +281,22 @@ export default function SocialScreen({ navigation }) {
       />
 
       <ConfirmModal
+        visible={!!removeFriendTarget}
+        icon="person-remove-outline"
+        title="Retirer cet ami ?"
+        body={`${removeFriendTarget?.pseudo ?? 'Cette personne'} ne fera plus partie de tes amis. Vous pourrez vous réajouter plus tard si besoin.`}
+        confirmLabel="Retirer"
+        cancelLabel="Annuler"
+        destructive
+        onConfirm={() => {
+          const target = removeFriendTarget;
+          setRemoveFriendTarget(null);
+          doAction(() => removeFriend(target.friendshipId), `${target.pseudo} a été retiré de tes amis.`);
+        }}
+        onCancel={() => setRemoveFriendTarget(null)}
+      />
+
+      <ConfirmModal
         visible={bloodSangUnlockedVisible}
         icon="color-palette"
         title="Couleur Unique débloquée !"
@@ -287,6 +316,25 @@ export default function SocialScreen({ navigation }) {
         level={activeLevelUp?.level}
         onClose={() => setActiveLevelUp(null)}
       />
+
+      <AddFriendModal
+        visible={addFriendVisible}
+        myTag={user?.pseudo && user?.discriminator ? `${user.pseudo}#${user.discriminator}` : null}
+        searching={searching}
+        error={searchError}
+        onSearch={onSearchTag}
+        onClose={() => { setAddFriendVisible(false); setSearchError(''); }}
+      />
+
+      <FriendPreviewModal
+        visible={!!previewResult}
+        result={previewResult}
+        onSend={async () => {
+          await doAction(() => sendFriendRequest(previewResult.user._id), 'Invitation envoyée');
+          setPreviewResult((prev) => prev && { ...prev, relationStatus: 'pending_sent' });
+        }}
+        onClose={() => setPreviewResult(null)}
+      />
     </View>
   );
 }
@@ -294,52 +342,15 @@ export default function SocialScreen({ navigation }) {
 // ═══ Segment Amis ═════════════════════════════════════════════════════════════
 
 function FriendsSegment({
-  friends, pending, query, results, searching,
-  onQueryChange, onSend, onAccept, onDecline, onOpenProfile,
+  friends, pending, sentRequests, onOpenAddFriend, onAccept, onDecline, onCancelSent, onRemoveFriend, onOpenProfile,
 }) {
   return (
     <>
-      {/* ── Recherche ── */}
-      <View style={styles.searchBox}>
-        <Ionicons name="search" size={16} color={Colors.textMuted} />
-        <TextInput
-          style={styles.searchInput}
-          value={query}
-          onChangeText={onQueryChange}
-          placeholder="Chercher un athlète par pseudo…"
-          placeholderTextColor={Colors.textMuted}
-          selectionColor={Colors.primary}
-          autoCapitalize="none"
-        />
-        {searching && <ActivityIndicator size="small" color={Colors.primary} />}
-      </View>
-
-      {results !== null && (
-        <>
-          <Text style={styles.sectionLabel}>RÉSULTATS</Text>
-          {results.length === 0 && !searching ? (
-            <Text style={styles.emptySmall}>Aucun athlète trouvé.</Text>
-          ) : results.map((r, i) => (
-            <AnimatedRow key={r.user._id} index={i}>
-              <UserRow user={r.user}>
-                {r.relationStatus === 'none' && (
-                  <SmallBtn label="Inviter" icon="person-add" color={Colors.primary} onPress={() => onSend(r.user._id)} />
-                )}
-                {r.relationStatus === 'pending_sent' && <Text style={styles.pendingTag}>Envoyée ✓</Text>}
-                {r.relationStatus === 'pending_received' && (
-                  <SmallBtn label="Accepter" icon="checkmark" color={Colors.valid} onPress={() => onAccept(r.requestId)} />
-                )}
-                {r.relationStatus === 'accepted' && (
-                  <View style={styles.friendTagRow}>
-                    <Ionicons name="people" size={12} color={Colors.textMuted} />
-                    <Text style={styles.friendTag}>Ami</Text>
-                  </View>
-                )}
-              </UserRow>
-            </AnimatedRow>
-          ))}
-        </>
-      )}
+      {/* ── Point d'entrée unique pour ajouter un ami (Section III) ── */}
+      <TouchableOpacity style={styles.addFriendBtn} onPress={onOpenAddFriend} activeOpacity={0.85}>
+        <Ionicons name="person-add" size={17} color="#fff" style={{ marginRight: 8 }} />
+        <Text style={styles.addFriendBtnTxt}>Ajouter un nouvel ami</Text>
+      </TouchableOpacity>
 
       {/* ── Demandes reçues ── */}
       {pending.length > 0 && (
@@ -350,6 +361,24 @@ function FriendsSegment({
               <UserRow user={req.requester}>
                 <SmallBtn label="" icon="checkmark" color={Colors.valid} onPress={() => onAccept(req._id)} />
                 <SmallBtn label="" icon="close" color={Colors.error} onPress={() => onDecline(req._id)} />
+              </UserRow>
+            </AnimatedRow>
+          ))}
+        </>
+      )}
+
+      {/* ── Demandes envoyées, en attente de réponse ── */}
+      {(sentRequests ?? []).length > 0 && (
+        <>
+          <Text style={styles.sectionLabel}>DEMANDES ENVOYÉES</Text>
+          {sentRequests.map((req, i) => (
+            <AnimatedRow key={req._id} index={i}>
+              <UserRow user={req.recipient}>
+                <View style={styles.sentTagRow}>
+                  <Ionicons name="time-outline" size={12} color={Colors.textMuted} />
+                  <Text style={styles.sentTag}>En attente</Text>
+                </View>
+                <SmallBtn label="" icon="close" color={Colors.error} onPress={() => onCancelSent(req._id)} />
               </UserRow>
             </AnimatedRow>
           ))}
@@ -368,6 +397,13 @@ function FriendsSegment({
           <TouchableOpacity activeOpacity={0.75} onPress={() => onOpenProfile(f.user, f.friendshipLevel)}>
             <UserRow user={f.user}>
               <FriendshipHearts level={f.friendshipLevel ?? 1} />
+              <TouchableOpacity
+                onPress={() => onRemoveFriend(f.friendshipId, f.user.pseudo)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={{ marginLeft: 6 }}
+              >
+                <Ionicons name="person-remove-outline" size={17} color={Colors.textMuted} />
+              </TouchableOpacity>
               <Ionicons name="chevron-forward" size={16} color={Colors.chevron} />
             </UserRow>
           </TouchableOpacity>
@@ -445,7 +481,7 @@ function XpLeaderboard({ leaderboard }) {
           {rest.map((entry, i) => (
             <AnimatedRow key={entry.user._id} index={i}>
               <View style={[styles.boardRow, entry.isMe && styles.boardRowMe]}>
-                <Text style={styles.boardPos}>#{entry.position}</Text>
+                <Text style={[styles.boardPos, styles.boardPosTxt]}>#{entry.position}</Text>
                 <Text style={[styles.boardPseudo, entry.isMe && { color: Colors.primary }]}>
                   {entry.user.pseudo}{entry.isMe ? ' (moi)' : ''}
                 </Text>
@@ -465,6 +501,7 @@ function RecordsLeaderboard() {
   const [exercise, setExercise] = useState(MAJOR_EXERCISES[0].name);
   const [rows, setRows]         = useState([]);
   const [loading, setLoading]   = useState(true);
+  const [pickerVisible, setPickerVisible] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -478,8 +515,16 @@ function RecordsLeaderboard() {
 
   return (
     <>
-      {/* ── Choix de l'exercice ── */}
+      {/* ── Suggestions rapides + accès au catalogue complet (~100+ exercices) ── */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.exoChipRow}>
+        <TouchableOpacity
+          style={[styles.exoChip, styles.exoChipMore]}
+          onPress={() => setPickerVisible(true)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="search" size={13} color={Colors.primary} style={{ marginRight: 4 }} />
+          <Text style={[styles.exoChipTxt, { color: Colors.primary, fontWeight: '800' }]}>Tous les exercices</Text>
+        </TouchableOpacity>
         {MAJOR_EXERCISES.map((exo) => {
           const active = exo.name === exercise;
           return (
@@ -494,6 +539,13 @@ function RecordsLeaderboard() {
           );
         })}
       </ScrollView>
+
+      <ExercisePickerModal
+        visible={pickerVisible}
+        value={exercise}
+        onSelect={setExercise}
+        onClose={() => setPickerVisible(false)}
+      />
 
       {loading ? (
         <View style={styles.recordsLoading}><ActivityIndicator size="small" color={Colors.primary} /></View>
@@ -554,7 +606,7 @@ function PodiumColumn({ entry, height, color, delay }) {
 
 // ═══ Segment Groupe ═══════════════════════════════════════════════════════════
 
-function GroupSegment({ group, invites, friends, onInvite, onRespond, onShake, onCheckStreak, onLeaveGroup }) {
+function GroupSegment({ group, myId, invites, friends, onInvite, onRespond, onShake, onCheckStreak, onLeaveGroup }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [groupName, setGroupName]     = useState('');
 
@@ -580,7 +632,7 @@ function GroupSegment({ group, invites, friends, onInvite, onRespond, onShake, o
       ))}
 
       {group ? (
-        <GroupCard group={group} onShake={onShake} onCheckStreak={onCheckStreak} onLeaveGroup={onLeaveGroup} />
+        <GroupCard group={group} myId={myId} onShake={onShake} onCheckStreak={onCheckStreak} onLeaveGroup={onLeaveGroup} />
       ) : (
         <>
           <Text style={styles.sectionLabel}>CRÉER UN GROUPE DE STREAK (MAX 5)</Text>
@@ -647,7 +699,7 @@ const REGULARITY_SCALE = [0, 7, 14, 21, 28, 35, 42, 49, 56].map((days) => ({
   multiplier: 1 + Math.min(0.6, 0.08 * Math.floor(days / 7)),
 }));
 
-function GroupCard({ group, onShake, onCheckStreak, onLeaveGroup }) {
+function GroupCard({ group, myId, onShake, onCheckStreak, onLeaveGroup }) {
   const flame = useRef(new Animated.Value(1)).current;
   const [showScale, setShowScale] = useState(false);
 
@@ -743,18 +795,27 @@ function GroupCard({ group, onShake, onCheckStreak, onLeaveGroup }) {
       </View>
 
       <Text style={styles.sectionLabel}>MEMBRES ({memberCount}/5)</Text>
-      {(group.members ?? []).map((m) => (
-        <UserRow key={m._id} user={m}>
-          <TouchableOpacity
-            style={styles.shakeBtn}
-            onPress={() => onShake(group._id, m._id, m.pseudo)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="warning" size={12} color={Colors.error} style={{ marginRight: 4 }} />
-            <Text style={styles.shakeTxt}>Secouer</Text>
-          </TouchableOpacity>
-        </UserRow>
-      ))}
+      {(group.members ?? []).map((m) => {
+        const isMe = myId && m._id === myId;
+        const alreadyShaken = (group.shakenTodayByMe ?? []).includes(m._id);
+        return (
+          <UserRow key={m._id} user={m}>
+            {!isMe && (
+              <TouchableOpacity
+                style={[styles.shakeBtn, alreadyShaken && styles.shakeBtnDisabled]}
+                onPress={() => onShake(group._id, m._id, m.pseudo)}
+                activeOpacity={alreadyShaken ? 1 : 0.8}
+                disabled={alreadyShaken}
+              >
+                <Ionicons name="warning" size={12} color={alreadyShaken ? Colors.textMuted : Colors.error} style={{ marginRight: 4 }} />
+                <Text style={[styles.shakeTxt, alreadyShaken && styles.shakeTxtDisabled]}>
+                  {alreadyShaken ? 'Secoué' : 'Secouer'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </UserRow>
+        );
+      })}
 
       <TouchableOpacity style={styles.ctaBtn} onPress={() => onCheckStreak(group._id)} activeOpacity={0.85}>
         <Ionicons name="flash" size={16} color="#fff" style={{ marginRight: 7 }} />
@@ -888,14 +949,17 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8, marginTop: 20, marginBottom: 8, marginLeft: 4,
   },
 
-  // ── Recherche ──
-  searchBox: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
-    borderRadius: 12, paddingHorizontal: 12, height: 44,
+  // ── Ajout d'ami ──
+  addFriendBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.primary,
+    borderRadius: 13, height: 48, marginBottom: 4,
+    shadowColor: Colors.primary, shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35, shadowRadius: 10, elevation: 5,
   },
-  searchInput: { flex: 1, color: Colors.textPrimary, fontSize: 14 },
+  addFriendBtnTxt: { color: '#fff', fontSize: 14.5, fontWeight: '700' },
+  sentTagRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 8 },
+  sentTag:    { color: Colors.textMuted, fontSize: 12, fontWeight: '600' },
 
   // ── Lignes utilisateur ──
   userRow: {
@@ -920,9 +984,6 @@ const styles = StyleSheet.create({
   userPseudo: { color: Colors.textPrimary, fontSize: 14, fontWeight: '700' },
   userMeta:   { color: Colors.textMuted, fontSize: 11.5, marginTop: 1 },
   userActions:{ flexDirection: 'row', alignItems: 'center', gap: 6 },
-  pendingTag: { color: Colors.textMuted, fontSize: 12, fontWeight: '600' },
-  friendTagRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  friendTag:  { color: Colors.textMuted, fontSize: 12, fontWeight: '700' },
   hearts:     { flexDirection: 'row', alignItems: 'center' },
 
   smallBtn: {
@@ -953,7 +1014,7 @@ const styles = StyleSheet.create({
   },
   boardRowMe:  { borderColor: 'rgba(254,116,57,0.45)', backgroundColor: 'rgba(254,116,57,0.06)' },
   boardPos:    { width: 36 },
-  boardPosTxt: { color: Colors.textMuted, fontSize: 13, fontWeight: '800' },
+  boardPosTxt: { color: Colors.textPrimary, fontSize: 13, fontWeight: '800' },
   boardPseudo: { flex: 1, color: Colors.textPrimary, fontSize: 13.5, fontWeight: '600' },
   boardXp:     { color: Colors.textSecondary, fontSize: 12.5, fontWeight: '700' },
   boardKg:     { color: Colors.primary, fontSize: 13.5, fontWeight: '800' },
@@ -979,6 +1040,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
   exoChipActive:    { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  exoChipMore:      { flexDirection: 'row', alignItems: 'center', borderColor: `${Colors.primary}50`, backgroundColor: `${Colors.primary}12` },
   exoChipTxt:       { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' },
   exoChipTxtActive: { color: '#fff' },
   recordsLoading:   { paddingVertical: 30, alignItems: 'center' },
@@ -1060,7 +1122,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,77,77,0.40)',
     borderRadius: 9, paddingHorizontal: 10, height: 32, justifyContent: 'center',
   },
+  shakeBtnDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderColor: Colors.borderSubtle,
+  },
   shakeTxt: { color: Colors.error, fontSize: 11.5, fontWeight: '800' },
+  shakeTxtDisabled: { color: Colors.textMuted },
 
   leaveBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

@@ -24,6 +24,14 @@ class UserService {
       await user.save();
     }
 
+    // Génération lazy du tag Discord (Section III) pour les comptes créés
+    // avant cette fonctionnalité — même idiome que referralCode ci-dessus.
+    if (!user.discriminator) {
+      const { uniqueDiscriminator } = require("./auth.service");
+      user.discriminator = await uniqueDiscriminator(user.pseudo);
+      await user.save();
+    }
+
     // Présence : getMe est appelé à chaque focus d'écran côté front, ce qui
     // en fait un signal "activité récente" fiable pour la Météo des séances
     // (statut 🔥 Prêt) sans avoir besoin d'un endpoint de heartbeat dédié.
@@ -86,6 +94,31 @@ class UserService {
       { $set: { showcasedAchievements: validIds } },
       { new: true, runValidators: true },
     ).select('showcasedAchievements');
+    if (!updatedUser) throw new Error('Utilisateur non trouvé.');
+    return updatedUser;
+  }
+
+  /**
+   * Met à jour atomiquement les records d'exercices mis en avant (max 6).
+   * Seuls des exercices pour lesquels l'utilisateur a AU MOINS un
+   * ExerciseRecord sont acceptés — impossible de mettre en avant un
+   * exercice jamais pratiqué. L'ordre saisi est conservé (ordre d'affichage).
+   * @param {string} userId
+   * @param {string[]} exerciseNames
+   */
+  async updateRecordsShowcase(userId, exerciseNames) {
+    const ExerciseRecord = require('../models/ExerciseRecord');
+
+    const dedup = [...new Set(exerciseNames)].slice(0, 6);
+    const owned = await ExerciseRecord.distinct('exerciceNom', { user: userId, exerciceNom: { $in: dedup } });
+    const ownedSet = new Set(owned);
+    const validNames = dedup.filter((n) => ownedSet.has(n));
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: { showcasedRecords: validNames } },
+      { new: true, runValidators: true },
+    ).select('showcasedRecords');
     if (!updatedUser) throw new Error('Utilisateur non trouvé.');
     return updatedUser;
   }
