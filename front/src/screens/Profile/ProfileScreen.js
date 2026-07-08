@@ -32,7 +32,6 @@ import { useDevSettings } from '../../hooks/useDevSettings';
 import { useFeaturedTrophies } from '../../hooks/useFeaturedTrophies';
 import { getTheme } from '../../data/profileThemes';
 import { evaluateTrophies, ULTIMATE_TROPHY } from '../../data/trophyCatalog';
-import { syncLocalAchievements } from '../../services/reward.service';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 

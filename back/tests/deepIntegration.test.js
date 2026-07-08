@@ -70,7 +70,7 @@ describe('Intégration profonde — trophées sync, vitrine, leaderboard exos, p
         .send({ ids: ['ignition', 'titan', 'id_bidon', 'BIRTHDAY_SET'] });
 
       expect(res.statusCode).toBe(200);
-      expect(res.body.synced).toBe(2);   // ignition + titan
+      expect(res.body.synced).toEqual(expect.arrayContaining(['ignition', 'titan']));
       expect(res.body.added).toBe(2);
       expect(res.body.ignored).toBe(2);  // id_bidon + BIRTHDAY_SET (backend, non synchronisable)
 

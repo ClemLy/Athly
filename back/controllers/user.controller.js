@@ -87,22 +87,3 @@ exports.updateFrame = async (req, res, next) => {
     next(error);
   }
 };
-
-/**
- * METTRE À JOUR LA VITRINE DE TROPHÉES
- * Trophées mis en avant sur le profil public (max 3, catalogue combiné).
- */
-exports.updateShowcase = async (req, res, next) => {
-  try {
-    const { achievementIds } = req.body;
-    const user = await userService.updateShowcase(req.user.id, achievementIds);
-
-    res.status(200).json({
-      success: true,
-      message: "Vitrine mise à jour avec succès",
-      showcasedAchievements: user.showcasedAchievements,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
