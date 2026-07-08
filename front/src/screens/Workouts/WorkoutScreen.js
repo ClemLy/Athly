@@ -29,6 +29,7 @@ import AddExerciseSheet from '../../components/workouts/AddExerciseSheet';
 import WorkoutRecapModal from '../../components/workouts/WorkoutRecapModal';
 import ShortSessionWarningModal from '../../components/workouts/ShortSessionWarningModal';
 import QuestToast from '../../components/common/QuestToast';
+import ConfirmModal from '../../components/common/ConfirmModal';
 
 const DEFAULT_FILTERS = { muscles: [], levels: [], equipment: [] };
 
@@ -68,6 +69,14 @@ export default function WorkoutScreen({ route, navigation }) {
   const [recapVisible, setRecapVisible] = useState(false);
   const [recapData, setRecapData] = useState(null);
 
+  // Popup d'abandon de séance : intercepte toute sortie de l'écran (geste,
+  // bouton retour matériel, action programmatique) tant qu'une progression
+  // réelle existe. `allowExitRef` sert d'échappatoire pour les sorties déjà
+  // voulues par l'utilisateur (fin de séance validée via closeRecap).
+  const [abandonModalVisible, setAbandonModalVisible] = useState(false);
+  const allowExitRef = useRef(false);
+  const pendingNavActionRef = useRef(null);
+
   // Quest toast queue
   const [currentToast, setCurrentToast] = useState(null);
   const toastQueueRef   = useRef([]);
@@ -94,6 +103,36 @@ export default function WorkoutScreen({ route, navigation }) {
   const sourceExercises = state.exercises || [];
   const filteredExercises = useExerciseSorting(sourceExercises, filters);
   const visibleExercises = filterActive ? filteredExercises : sourceExercises;
+
+  // Popup d'abandon de séance : dès qu'un exercice a été ajouté, quitter
+  // l'écran (geste retour, bouton matériel Android, navigation programmatique)
+  // annule une vraie progression — on l'intercepte pour confirmer.
+  useEffect(() => {
+    if (!navigation) return undefined;
+    const listener = (e) => {
+      if (allowExitRef.current || sourceExercises.length === 0) return;
+      e.preventDefault();
+      pendingNavActionRef.current = e.data.action;
+      setAbandonModalVisible(true);
+    };
+    const unsubscribe = navigation.addListener('beforeRemove', listener);
+    return unsubscribe;
+  }, [navigation, sourceExercises.length]);
+
+  const confirmAbandon = useCallback(() => {
+    setAbandonModalVisible(false);
+    allowExitRef.current = true;
+    actions.reset();
+    if (pendingNavActionRef.current) {
+      navigation.dispatch(pendingNavActionRef.current);
+      pendingNavActionRef.current = null;
+    }
+  }, [navigation, actions]);
+
+  const cancelAbandon = useCallback(() => {
+    setAbandonModalVisible(false);
+    pendingNavActionRef.current = null;
+  }, []);
 
   const displayItems = useMemo(() => {
     if (!Array.isArray(visibleExercises) || visibleExercises.length === 0) return [];
@@ -293,6 +332,9 @@ export default function WorkoutScreen({ route, navigation }) {
     // Reset the workout context so the next session starts clean
     actions.reset();
     if (navigation) {
+      // Séance déjà validée : cette sortie ne doit jamais déclencher la popup
+      // d'abandon (voir le listener 'beforeRemove' plus haut).
+      allowExitRef.current = true;
       // Pop the entire WorkoutStack back to WorkoutList (the root screen),
       // then switch to Stats tab. Without popToTop(), WorkoutScreen stays on the
       // stack and the user lands back here when they tap "Séances" again.
@@ -499,6 +541,18 @@ export default function WorkoutScreen({ route, navigation }) {
         onModify={() => setShortWarningVisible(false)}
         onForce={handleForceFinish}
         elapsedSeconds={elapsed}
+      />
+
+      <ConfirmModal
+        visible={abandonModalVisible}
+        icon="warning"
+        title="Abandonner la séance ?"
+        body="Êtes-vous sûr de vouloir quitter la séance ? Cela va annuler toute votre progression actuelle !"
+        confirmLabel="Quitter la séance"
+        cancelLabel="Continuer la séance"
+        destructive
+        onConfirm={confirmAbandon}
+        onCancel={cancelAbandon}
       />
 
     </SafeAreaView>

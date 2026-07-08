@@ -216,7 +216,7 @@ export default function WorkoutBuilderScreen({ navigation }) {
             preview.exercises.map((ex, i) => (
               <View key={`prev-${i}-${ex.id || ''}`} style={styles.previewItem}>
                 <View style={styles.previewIconBox}>
-                  <Text style={styles.previewIcon}>{pickExerciseIcon(ex)}</Text>
+                  <Ionicons name={pickExerciseIcon(ex)} size={18} color={Colors.primary} />
                 </View>
                 <View style={styles.previewItemContent}>
                   <Text style={styles.previewItemName} numberOfLines={1}>{ex.name}</Text>

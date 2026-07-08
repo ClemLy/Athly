@@ -452,4 +452,190 @@ describe("Streaks de Groupe & Niveaux d'Amitié Athly — V2", () => {
       expect(res.statusCode).toBe(401);
     });
   });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 6. Météo des séances — weatherStatus par membre dans getMyGroup
+  // ───────────────────────────────────────────────────────────────────────────
+  describe('GET /api/groups/my-group — Météo des séances (weatherStatus)', () => {
+    afterEach(async () => {
+      await User.updateMany({}, { $set: { lastActiveAt: null } });
+    });
+
+    it("✅ done : membre avec une séance 'finished' aujourd'hui", async () => {
+      await StreakGroup.create({ members: [alice.userId, bob.userId] });
+      await Workout.create({ user: alice.userId, status: 'finished', date: new Date() });
+
+      const res = await request(app)
+        .get('/api/groups/my-group')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      const aliceMember = res.body.group.members.find((m) => m._id === alice.userId);
+      expect(aliceMember.weatherStatus).toBe('done');
+    });
+
+    it("✅ active : membre avec une séance 'in_progress' mise à jour il y a moins de 4h", async () => {
+      await StreakGroup.create({ members: [alice.userId, bob.userId] });
+      await Workout.create({ user: bob.userId, status: 'in_progress', date: new Date() });
+
+      const res = await request(app)
+        .get('/api/groups/my-group')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      const bobMember = res.body.group.members.find((m) => m._id === bob.userId);
+      expect(bobMember.weatherStatus).toBe('active');
+    });
+
+    it("✅ sleeping : séance 'in_progress' du jour mais oubliée depuis plus de 4h", async () => {
+      await StreakGroup.create({ members: [alice.userId, bob.userId] });
+      const stale = await Workout.create({ user: bob.userId, status: 'in_progress', date: new Date() });
+      await Workout.updateOne(
+        { _id: stale._id },
+        { $set: { updatedAt: new Date(Date.now() - 5 * 60 * 60 * 1000) } },
+        { timestamps: false },
+      );
+
+      const res = await request(app)
+        .get('/api/groups/my-group')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      const bobMember = res.body.group.members.find((m) => m._id === bob.userId);
+      expect(bobMember.weatherStatus).toBe('sleeping');
+    });
+
+    it("✅ ready : aucune séance du jour mais lastActiveAt aujourd'hui", async () => {
+      await StreakGroup.create({ members: [alice.userId, bob.userId] });
+      await User.updateOne({ _id: bob.userId }, { $set: { lastActiveAt: new Date() } });
+
+      const res = await request(app)
+        .get('/api/groups/my-group')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      const bobMember = res.body.group.members.find((m) => m._id === bob.userId);
+      expect(bobMember.weatherStatus).toBe('ready');
+    });
+
+    it("✅ sleeping : aucun signal d'activité aujourd'hui", async () => {
+      await StreakGroup.create({ members: [alice.userId, bob.userId] });
+
+      const res = await request(app)
+        .get('/api/groups/my-group')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      const bobMember = res.body.group.members.find((m) => m._id === bob.userId);
+      expect(bobMember.weatherStatus).toBe('sleeping');
+    });
+
+    it("✅ done l'emporte sur active si les deux signaux sont présents", async () => {
+      await StreakGroup.create({ members: [alice.userId, bob.userId] });
+      await Workout.create({ user: alice.userId, status: 'in_progress', date: new Date() });
+      await Workout.create({ user: alice.userId, status: 'finished', date: new Date() });
+
+      const res = await request(app)
+        .get('/api/groups/my-group')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      const aliceMember = res.body.group.members.find((m) => m._id === alice.userId);
+      expect(aliceMember.weatherStatus).toBe('done');
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 7. Hall of Shame — détection paresseuse de rupture de streak
+  // ───────────────────────────────────────────────────────────────────────────
+  describe('GET /api/groups/my-group — Hall of Shame (rupture de streak)', () => {
+    afterEach(async () => {
+      await User.updateMany({}, { $set: { streakGels: 0 } });
+    });
+
+    it("✅ Reset à 0 et Bob désigné briseur s'il n'a pas validé hier et n'a aucun Gel", async () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      const group = await StreakGroup.create({
+        members: [alice.userId, bob.userId],
+        currentStreak: 5,
+        lastValidatedDate: new Date(yesterday.getTime() - 24 * 60 * 60 * 1000), // avant-hier
+      });
+      // Alice a validé hier, Bob non, et Bob n'a aucun gel
+      await Workout.create({ user: alice.userId, status: 'finished', date: yesterday });
+
+      const res = await request(app)
+        .get('/api/groups/my-group')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.body.group.currentStreak).toBe(0);
+      expect(res.body.group.shameBreakers.map((b) => b._id)).toEqual([bob.userId]);
+
+      const updated = await StreakGroup.findById(group._id);
+      expect(updated.currentStreak).toBe(0);
+      expect(updated.shameBreakers.map(String)).toEqual([bob.userId]);
+    });
+
+    it("✅ Streak préservée si le membre absent avait un Gel de Streak (consommé)", async () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      await User.updateOne({ _id: bob.userId }, { $set: { streakGels: 2 } });
+
+      const group = await StreakGroup.create({
+        members: [alice.userId, bob.userId],
+        currentStreak: 5,
+        lastValidatedDate: new Date(yesterday.getTime() - 24 * 60 * 60 * 1000),
+      });
+      await Workout.create({ user: alice.userId, status: 'finished', date: yesterday });
+
+      const res = await request(app)
+        .get('/api/groups/my-group')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.body.group.currentStreak).toBe(5);
+      expect(res.body.group.shameBreakers).toEqual([]);
+
+      const bobAfter = await User.findById(bob.userId).select('streakGels');
+      expect(bobAfter.streakGels).toBe(1); // 1 gel consommé automatiquement
+
+      const updated = await StreakGroup.findById(group._id);
+      expect(updated.currentStreak).toBe(5);
+    });
+
+    it("✅ Le bandeau est vidé dès qu'une nouvelle streak est validée avec succès", async () => {
+      const group = await StreakGroup.create({
+        members: [alice.userId, bob.userId],
+        currentStreak: 0,
+        shameBreakers: [bob.userId],
+      });
+
+      const today = new Date();
+      await Workout.create({ user: alice.userId, status: 'finished', date: today });
+      await Workout.create({ user: bob.userId,   status: 'finished', date: today });
+
+      await request(app)
+        .post(`/api/groups/${group._id}/check-streak`)
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      const updated = await StreakGroup.findById(group._id);
+      expect(updated.shameBreakers).toEqual([]);
+      expect(updated.currentStreak).toBe(1);
+    });
+
+    it("✅ Aucune rupture détectée si tout le monde avait validé la veille (juste pas cliqué)", async () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      await StreakGroup.create({
+        members: [alice.userId, bob.userId],
+        currentStreak: 5,
+        lastValidatedDate: new Date(yesterday.getTime() - 24 * 60 * 60 * 1000),
+      });
+      await Workout.create({ user: alice.userId, status: 'finished', date: yesterday });
+      await Workout.create({ user: bob.userId,   status: 'finished', date: yesterday });
+
+      const res = await request(app)
+        .get('/api/groups/my-group')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.body.group.currentStreak).toBe(5);
+      expect(res.body.group.shameBreakers).toEqual([]);
+    });
+  });
 });

@@ -22,11 +22,11 @@ export default function BirthdayModal({ visible, pseudo, rewarded, onClose }) {
 
         <View style={styles.card}>
           <View style={styles.iconWrap}>
-            <Text style={styles.iconEmoji}>🎂</Text>
+            <Ionicons name="sparkles" size={34} color={Colors.rankViolet} />
           </View>
 
           <Text style={styles.title}>
-            Joyeux Anniversaire{pseudo ? ` ${pseudo}` : ''} ! 🎉
+            Joyeux Anniversaire{pseudo ? ` ${pseudo}` : ''} !
           </Text>
 
           <Text style={styles.body}>
@@ -90,7 +90,6 @@ const styles = StyleSheet.create({
     alignItems:       'center',
     marginBottom:     18,
   },
-  iconEmoji: { fontSize: 34 },
   title: {
     color:          Colors.textPrimary,
     fontSize:       19,

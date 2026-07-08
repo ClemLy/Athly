@@ -87,3 +87,19 @@ exports.updateFrame = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * ENREGISTRER LE TOKEN PUSH
+ * Permet aux notifications de groupe (Secouer, réactions du flux d'activité…)
+ * d'atteindre réellement l'appareil de l'utilisateur.
+ */
+exports.registerPushToken = async (req, res, next) => {
+  try {
+    const { pushToken } = req.body;
+    await userService.registerPushToken(req.user.id, pushToken);
+
+    res.status(200).json({ success: true, message: "Token push enregistré." });
+  } catch (error) {
+    next(error);
+  }
+};

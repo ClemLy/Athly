@@ -13,3 +13,11 @@ export async function updateShowcase(achievementIds) {
   const res = await API.put('/users/me/showcase', { achievementIds });
   return res.data;
 }
+
+// Enregistre (ou efface, si null) le token Expo Push de l'appareil courant —
+// nécessaire pour recevoir les notifications réellement envoyées par un
+// autre appareil (bouton Secouer, réactions du flux d'activité...).
+export async function registerPushToken(pushToken) {
+  const res = await API.put('/users/me/push-token', { pushToken });
+  return res.data;
+}

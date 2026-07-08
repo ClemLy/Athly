@@ -5,6 +5,7 @@ const { drawChestItem } = require('../services/chest.service');
 const { consumeItemAtomic, addItemAtomic, addUniqueItemOnce, purgeEmptyEntries } = require('../services/inventory.service');
 const { levelFromXP, getRankForLevel } = require('../utils/levelHelpers');
 const { checkAndUnlockAchievements }   = require('./reward.controller');
+const { recordActivityEvent }          = require('../services/activity.service');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -139,6 +140,19 @@ exports.openChest = async (req, res, next) => {
 
     const drawnItem = drawChestItem();
     await addItemAtomic(req.user.id, drawnItem.itemType, drawnItem.rarity);
+
+    // Flux d'activité (Section IV) : un coffre Légendaire mérite d'être
+    // annoncé au groupe — silencieux si l'utilisateur n'a pas de groupe.
+    if (drawnItem.rarity === 'legendary') {
+      const opener = await User.findById(req.user.id).select('pseudo');
+      const pseudo = opener?.pseudo ?? 'Un membre';
+      await recordActivityEvent(
+        req.user.id,
+        'chest_legendary',
+        `${pseudo} a ouvert un coffre Légendaire !`,
+        { itemType: drawnItem.itemType },
+      );
+    }
 
     // Compteur à vie — indépendant de l'inventaire courant (purgé plus bas).
     const afterCount = await User.findOneAndUpdate(

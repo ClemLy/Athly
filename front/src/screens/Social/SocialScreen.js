@@ -18,6 +18,16 @@ import {
 } from '../../services/social.service';
 import { MAJOR_EXERCISES } from '../../data/majorExercises';
 
+// Podium / classements : positions 1-3 affichées en médaille colorée plutôt
+// qu'en emoji 🥇🥈🥉.
+const MEDAL_COLORS = { 1: '#FFD700', 2: '#C0C0C0', 3: '#CD7F32' };
+
+function MedalBadge({ position, size = 16 }) {
+  const color = MEDAL_COLORS[position];
+  if (!color) return null;
+  return <Ionicons name="medal" size={size} color={color} />;
+}
+
 const SEGMENTS = [
   { key: 'friends',     label: 'Amis',       icon: 'people' },
   { key: 'leaderboard', label: 'Classement', icon: 'podium' },
@@ -190,8 +200,8 @@ export default function SocialScreen({ navigation }) {
               results={results}
               searching={searching}
               onQueryChange={onQueryChange}
-              onSend={(id)    => doAction(() => sendFriendRequest(id), 'Invitation envoyée ⚡')}
-              onAccept={(id)  => doAction(() => acceptFriendRequest(id), 'Vous êtes maintenant amis ! 🤝')}
+              onSend={(id)    => doAction(() => sendFriendRequest(id), 'Invitation envoyée')}
+              onAccept={(id)  => doAction(() => acceptFriendRequest(id), 'Vous êtes maintenant amis !')}
               onDecline={(id) => doAction(() => declineFriendRequest(id))}
               onOpenProfile={(friend, friendshipLevel) =>
                 navigation.navigate('FriendProfile', { friendId: friend._id, pseudo: friend.pseudo, friendshipLevel })}
@@ -205,16 +215,16 @@ export default function SocialScreen({ navigation }) {
               group={group}
               invites={groupInvites}
               friends={friends}
-              onInvite={(ids, name) => doAction(() => inviteToGroup(ids, name), 'Demande de Streak de Groupe envoyée 🔥')}
+              onInvite={(ids, name) => doAction(() => inviteToGroup(ids, name), 'Demande de Streak de Groupe envoyée')}
               onRespond={(groupId, accept) =>
-                doAction(() => respondToGroupInvite(groupId, accept), accept ? 'Bienvenue dans le groupe ! 🔥' : null)}
+                doAction(() => respondToGroupInvite(groupId, accept), accept ? 'Bienvenue dans le groupe !' : null)}
               onShake={(groupId, memberId, pseudo) =>
-                doAction(() => shakeMember(groupId, memberId), `${pseudo} a été secoué ! 🚨`)}
+                doAction(() => shakeMember(groupId, memberId), `${pseudo} a été secoué !`)}
               onCheckStreak={async (groupId) => {
                 try {
                   const res = await checkGroupStreak(groupId);
                   if (res.allValidated) {
-                    showToast(`Streak jour ${res.currentStreak} ! +${res.groupBonus?.bonusXp ?? 0} XP (x${res.groupBonus?.multiplier ?? 1}) 🔥`, 'success');
+                    showToast(`Streak jour ${res.currentStreak} ! +${res.groupBonus?.bonusXp ?? 0} XP (x${res.groupBonus?.multiplier ?? 1})`, 'success');
                     // Le bonus XP peut faire franchir un palier de niveau, refetch
                     // le profil global pour que LevelUpCelebration le détecte,
                     // et pousse le même gain dans les logs locaux pour que le
@@ -225,7 +235,7 @@ export default function SocialScreen({ navigation }) {
                     }
                     if (res.bloodSangUnlocked) setBloodSangUnlockedVisible(true);
                   } else if (res.alreadyValidated) {
-                    showToast('Déjà validée aujourd\'hui ✅', 'success');
+                    showToast('Déjà validée aujourd\'hui', 'success');
                   } else {
                     showToast('Tous les membres n\'ont pas encore validé leur séance.', 'error');
                   }
@@ -319,7 +329,12 @@ function FriendsSegment({
                 {r.relationStatus === 'pending_received' && (
                   <SmallBtn label="Accepter" icon="checkmark" color={Colors.valid} onPress={() => onAccept(r.requestId)} />
                 )}
-                {r.relationStatus === 'accepted' && <Text style={styles.friendTag}>Ami 🤝</Text>}
+                {r.relationStatus === 'accepted' && (
+                  <View style={styles.friendTagRow}>
+                    <Ionicons name="people" size={12} color={Colors.textMuted} />
+                    <Text style={styles.friendTag}>Ami</Text>
+                  </View>
+                )}
               </UserRow>
             </AnimatedRow>
           ))}
@@ -345,7 +360,7 @@ function FriendsSegment({
       <Text style={styles.sectionLabel}>MES AMIS ({friends.length})</Text>
       {friends.length === 0 ? (
         <View style={styles.emptyBox}>
-          <Text style={styles.emptyEmoji}>🤝</Text>
+          <Ionicons name="people-outline" size={34} color={Colors.textMuted} style={{ marginBottom: 10 }} />
           <Text style={styles.emptyTxt}>Pas encore d'amis.{'\n'}Cherche un pseudo ci-dessus pour commencer !</Text>
         </View>
       ) : friends.map((f, i) => (
@@ -492,9 +507,11 @@ function RecordsLeaderboard() {
       ) : rows.map((entry, i) => (
         <AnimatedRow key={entry.user._id} index={i}>
           <View style={[styles.boardRow, entry.isMe && styles.boardRowMe]}>
-            <Text style={styles.boardPos}>
-              {entry.position <= 3 ? ['🥇', '🥈', '🥉'][entry.position - 1] : `#${entry.position}`}
-            </Text>
+            <View style={styles.boardPos}>
+              {entry.position <= 3
+                ? <MedalBadge position={entry.position} size={17} />
+                : <Text style={styles.boardPosTxt}>#{entry.position}</Text>}
+            </View>
             <Text style={[styles.boardPseudo, entry.isMe && { color: Colors.primary }]}>
               {entry.user.pseudo}{entry.isMe ? ' (moi)' : ''}
             </Text>
@@ -527,9 +544,9 @@ function PodiumColumn({ entry, height, color, delay }) {
           transform: [{ scaleY: grow }],
         }]}
       >
-        <Text style={styles.podiumMedal}>
-          {entry.position === 1 ? '🥇' : entry.position === 2 ? '🥈' : '🥉'}
-        </Text>
+        <View style={styles.podiumMedal}>
+          <MedalBadge position={entry.position} size={22} />
+        </View>
       </Animated.View>
     </View>
   );
@@ -665,6 +682,19 @@ function GroupCard({ group, onShake, onCheckStreak, onLeaveGroup }) {
         </View>
       </View>
 
+      {/* ── Hall of Shame : reste affiché jusqu'à la prochaine streak validée ── */}
+      {(group.shameBreakers ?? []).length > 0 && (
+        <View style={styles.shameBanner}>
+          <Ionicons name="snow" size={16} color="#38BDF8" />
+          <Text style={styles.shameTxt}>
+            Briseur{group.shameBreakers.length > 1 ? 's' : ''} de Streak actuel : {' '}
+            <Text style={styles.shameNames}>
+              {group.shameBreakers.map((b) => b.pseudo).join(', ')}
+            </Text>
+          </Text>
+        </View>
+      )}
+
       {/* ── Détail du multiplicateur d'XP ── */}
       <View style={styles.multiplierCard}>
         <View style={styles.multiplierHeader}>
@@ -760,15 +790,34 @@ function AnimatedRow({ index, children }) {
   );
 }
 
+// Météo des séances : 4 états stricts remontés par le backend (getMyGroup)
+// dans `member.weatherStatus`. Affiché uniquement quand présent (les listes
+// amis/requêtes n'en portent pas — seuls les membres de groupe en ont un).
+const WEATHER_META = {
+  done:     { icon: 'checkmark-circle', color: '#22C55E', label: 'Séance validée' },
+  active:   { icon: 'flash',            color: '#FBBF24', label: 'Séance active' },
+  ready:    { icon: 'flame',            color: Colors.primary, label: 'Prêt' },
+  sleeping: { icon: 'moon',             color: Colors.textMuted, label: 'En sommeil' },
+};
+
 function UserRow({ user, children }) {
+  const weather = user?.weatherStatus ? WEATHER_META[user.weatherStatus] : null;
   return (
     <View style={styles.userRow}>
       <View style={styles.avatar}>
         <Text style={styles.avatarTxt}>{(user?.pseudo ?? '?').charAt(0).toUpperCase()}</Text>
+        {weather && (
+          <View style={styles.weatherBadge} accessibilityLabel={weather.label}>
+            <Ionicons name={weather.icon} size={11} color={weather.color} />
+          </View>
+        )}
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.userPseudo}>{user?.pseudo ?? '—'}</Text>
-        <Text style={styles.userMeta}>Nv. {user?.level ?? 1} · {user?.rank ?? 'Novice'}</Text>
+        <Text style={styles.userMeta}>
+          Nv. {user?.level ?? 1} · {user?.rank ?? 'Novice'}
+          {weather ? ` · ${weather.label}` : ''}
+        </Text>
       </View>
       <View style={styles.userActions}>{children}</View>
     </View>
@@ -861,11 +910,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', marginRight: 11,
   },
   avatarTxt:  { color: Colors.primary, fontSize: 16, fontWeight: '800' },
+  weatherBadge: {
+    position: 'absolute', bottom: -4, right: -4,
+    width: 18, height: 18, borderRadius: 9,
+    backgroundColor: Colors.cardDeep,
+    borderWidth: 1.5, borderColor: Colors.background,
+    justifyContent: 'center', alignItems: 'center',
+  },
   userPseudo: { color: Colors.textPrimary, fontSize: 14, fontWeight: '700' },
   userMeta:   { color: Colors.textMuted, fontSize: 11.5, marginTop: 1 },
   userActions:{ flexDirection: 'row', alignItems: 'center', gap: 6 },
   pendingTag: { color: Colors.textMuted, fontSize: 12, fontWeight: '600' },
-  friendTag:  { color: Colors.valid, fontSize: 12, fontWeight: '700' },
+  friendTagRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  friendTag:  { color: Colors.textMuted, fontSize: 12, fontWeight: '700' },
   hearts:     { flexDirection: 'row', alignItems: 'center' },
 
   smallBtn: {
@@ -886,7 +943,7 @@ const styles = StyleSheet.create({
     width: '100%', borderRadius: 12, borderWidth: 1,
     justifyContent: 'flex-start', alignItems: 'center', paddingTop: 8,
   },
-  podiumMedal: { fontSize: 22 },
+  podiumMedal: { alignItems: 'center', justifyContent: 'center' },
 
   boardRow: {
     flexDirection: 'row', alignItems: 'center',
@@ -895,7 +952,8 @@ const styles = StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 14, height: 46, marginBottom: 7,
   },
   boardRowMe:  { borderColor: 'rgba(254,116,57,0.45)', backgroundColor: 'rgba(254,116,57,0.06)' },
-  boardPos:    { color: Colors.textMuted, fontSize: 13, fontWeight: '800', width: 36 },
+  boardPos:    { width: 36 },
+  boardPosTxt: { color: Colors.textMuted, fontSize: 13, fontWeight: '800' },
   boardPseudo: { flex: 1, color: Colors.textPrimary, fontSize: 13.5, fontWeight: '600' },
   boardXp:     { color: Colors.textSecondary, fontSize: 12.5, fontWeight: '700' },
   boardKg:     { color: Colors.primary, fontSize: 13.5, fontWeight: '800' },
@@ -948,6 +1006,21 @@ const styles = StyleSheet.create({
   },
   groupName:   { color: Colors.textPrimary, fontSize: 16, fontWeight: '800' },
   groupStreak: { color: Colors.textSecondary, fontSize: 12.5, marginTop: 3 },
+
+  // ── Hall of Shame ──
+  shameBanner: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    backgroundColor: 'rgba(56,189,248,0.10)',
+    borderWidth:     1,
+    borderColor:     'rgba(56,189,248,0.35)',
+    borderRadius:    12,
+    padding:         10,
+    marginTop:       12,
+    gap:             8,
+  },
+  shameTxt:   { color: Colors.textSecondary, fontSize: 12.5, flex: 1, lineHeight: 18 },
+  shameNames: { color: '#38BDF8', fontWeight: '800' },
 
   // ── Détail multiplicateur ──
   multiplierCard: {
@@ -1014,7 +1087,6 @@ const styles = StyleSheet.create({
 
   // ── Vide ──
   emptyBox:   { alignItems: 'center', paddingVertical: 36 },
-  emptyEmoji: { fontSize: 38, marginBottom: 10 },
   emptyTxt:   { color: Colors.textMuted, fontSize: 13, lineHeight: 20, textAlign: 'center' },
   emptySmall: { color: Colors.textMuted, fontSize: 12.5, marginTop: 8, marginLeft: 4 },
 });

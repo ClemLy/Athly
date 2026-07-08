@@ -61,7 +61,7 @@ export default function CustomExercisesScreen({ navigation }) {
         activeOpacity={0.85}
       >
         <View style={styles.iconBox}>
-          <Text style={styles.icon}>{icon}</Text>
+          <Ionicons name={icon} size={22} color={Colors.primary} />
         </View>
         <View style={styles.content}>
           <Text style={styles.name} numberOfLines={1}>{item.name}</Text>

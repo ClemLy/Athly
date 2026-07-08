@@ -46,7 +46,7 @@ function ExerciseRow({ exercise, index, onRemove, onSetsChange, onRepsChange }) 
     <View style={styles.exoCard}>
       <View style={styles.exoHeader}>
         <View style={styles.exoIcon}>
-          <Text style={styles.exoEmoji}>{icon}</Text>
+          <Ionicons name={icon} size={20} color={Colors.primary} />
         </View>
         <View style={styles.exoContent}>
           <Text style={styles.exoName} numberOfLines={1}>{exercise.name}</Text>

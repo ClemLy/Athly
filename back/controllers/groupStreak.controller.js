@@ -8,8 +8,20 @@ const Workout     = require('../models/Workout');
 const { addUniqueItemOnce } = require('../services/inventory.service');
 const { checkAndUnlockAchievements } = require('./reward.controller');
 const { levelFromXP, getRankForLevel } = require('../utils/levelHelpers');
+const { sendPushToUser } = require('../services/push.service');
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
+
+// Bouton "Secouer" (Section IV) : textes troll/passif-agressif façon Duolingo,
+// tirés au sort à chaque secousse pour ne pas être répétitifs.
+const SHAKE_TROLL_MESSAGES = [
+  "Ah donc tu comptes nous abandonner comme ça ? Ok.",
+  "Tu vas briser la streak de l'équipe... tout le monde attend après toi. 👁️",
+  "On sait que tu es en ligne. On voit tout.",
+  "Ta séance ne va pas se faire toute seule, curieusement.",
+  "Le groupe compte sur toi. Ou pas, si tu préfères tout gâcher.",
+  "Petit rappel amical : tu es le maillon faible aujourd'hui.",
+];
 
 const MAX_GROUP_SIZE = 5;
 
@@ -17,8 +29,14 @@ const MAX_GROUP_SIZE = 5;
 // pour débloquer la couleur cosmétique Unique "Rouge Sang Unique".
 const BLOOD_SANG_STREAK_THRESHOLD = 30;
 
-// Champs publics exposés pour un membre de groupe
-const MEMBER_PUBLIC_FIELDS = 'pseudo level rank xp';
+// Champs publics exposés pour un membre de groupe (lastActiveAt alimente la
+// Météo des séances — statut "Prêt")
+const MEMBER_PUBLIC_FIELDS = 'pseudo level rank xp lastActiveAt';
+
+// Météo des séances : une séance "draft"/"in_progress" plus vieille que cette
+// fenêtre est considérée abandonnée plutôt qu'activement chronométrée — évite
+// d'afficher ⚡ indéfiniment pour une séance oubliée en arrière-plan.
+const WEATHER_ACTIVE_WINDOW_MS = 4 * 60 * 60 * 1000; // 4h
 
 // Seuils XP pour les 5 niveaux d'amitié — progression exponentielle (~4 mois)
 const FRIENDSHIP_XP_THRESHOLDS = [0, 100, 300, 700, 1500];
@@ -141,6 +159,135 @@ async function grantGroupXpBonus(memberId, bonusXp) {
       { $set: { level: newLevel, rank: getRankForLevel(newLevel) } },
     );
   }
+}
+
+// ── Météo des séances (Brique IV) ──────────────────────────────────────────
+// 4 états stricts, du plus « chaud » au plus « froid » — le premier qui
+// s'applique gagne :
+//   ✅ done      : séance terminée aujourd'hui (status finished/completed).
+//   ⚡ active    : séance en cours aujourd'hui (status draft/in_progress)
+//                  dont le dernier `updatedAt` date de moins de 4h — au-delà,
+//                  on considère la séance oubliée en arrière-plan plutôt que
+//                  réellement chronométrée en direct.
+//   🔥 ready     : l'utilisateur a ouvert l'app aujourd'hui (lastActiveAt)
+//                  sans avoir encore de séance du jour.
+//   💤 sleeping  : aucun des signaux ci-dessus.
+/**
+ * Enrichit un tableau de membres populés (`MEMBER_PUBLIC_FIELDS`) avec leur
+ * `weatherStatus` du jour. Une seule requête `Workout.find` groupée pour tout
+ * le groupe (pas de N+1) — appelée à chaque `getMyGroup`, donc rafraîchie
+ * "proprement" à chaque focus d'écran côté front, sans avoir besoin d'un
+ * websocket dédié.
+ */
+async function attachWeatherStatuses(members) {
+  const todayStart = startOfToday();
+  const memberIds = members.map((m) => m._id);
+
+  const workouts = await Workout.find({
+    user: { $in: memberIds },
+    date: { $gte: todayStart },
+  }).select('user status updatedAt');
+
+  const workoutsByUser = new Map();
+  for (const w of workouts) {
+    const key = String(w.user);
+    if (!workoutsByUser.has(key)) workoutsByUser.set(key, []);
+    workoutsByUser.get(key).push(w);
+  }
+
+  const now = Date.now();
+
+  return members.map((member) => {
+    const plain = typeof member.toObject === 'function' ? member.toObject() : member;
+    const todaysWorkouts = workoutsByUser.get(String(member._id)) || [];
+
+    let weatherStatus = 'sleeping';
+
+    const hasFinishedToday = todaysWorkouts.some((w) => w.status === 'finished' || w.status === 'completed');
+    const hasActiveNow = todaysWorkouts.some((w) => {
+      if (w.status !== 'draft' && w.status !== 'in_progress') return false;
+      const updatedAt = w.updatedAt ? new Date(w.updatedAt).getTime() : 0;
+      return now - updatedAt <= WEATHER_ACTIVE_WINDOW_MS;
+    });
+    const wasActiveToday = plain.lastActiveAt && new Date(plain.lastActiveAt).getTime() >= todayStart.getTime();
+
+    if (hasFinishedToday) weatherStatus = 'done';
+    else if (hasActiveNow) weatherStatus = 'active';
+    else if (wasActiveToday) weatherStatus = 'ready';
+
+    return { ...plain, weatherStatus };
+  });
+}
+
+// ── Hall of Shame (Brique IV) ──────────────────────────────────────────────
+// Sans cron quotidien (aucun n'existe dans ce backend — voir StreakGroup.js),
+// la rupture de streak est détectée "paresseusement" : au premier getMyGroup
+// appelé après qu'une journée entière se soit écoulée sans validation.
+//
+// Un membre absent la veille est "couvert" (ne casse pas la streak) s'il
+// possède au moins 1 Gel de Streak — celui-ci est alors consommé
+// automatiquement. S'il en reste au moins un membre non couvert, la streak
+// entière retombe à 0 et ce(s) membre(s) deviennent les "briseurs" affichés
+// dans le bandeau Hall of Shame, jusqu'à la prochaine streak validée avec
+// succès (voir checkAndUpdateGroupStreaks, qui vide shameBreakers).
+async function detectAndApplyStreakBreak(group) {
+  if (!group.currentStreak || !group.lastValidatedDate) return group;
+
+  const todayStart = startOfToday();
+  const missedDayStart = new Date(group.lastValidatedDate);
+  missedDayStart.setHours(0, 0, 0, 0);
+  missedDayStart.setDate(missedDayStart.getDate() + 1);
+
+  // La journée suivant la dernière validation n'est même pas encore terminée
+  // (aujourd'hui ou avant) : rien à détecter pour l'instant.
+  if (missedDayStart >= todayStart) return group;
+
+  const missedDayEnd = new Date(missedDayStart);
+  missedDayEnd.setDate(missedDayEnd.getDate() + 1);
+
+  const memberIds = group.members.map(String);
+  const workoutChecks = await Promise.all(
+    memberIds.map((memberId) =>
+      Workout.findOne({
+        user:   memberId,
+        status: { $in: ['finished', 'completed'] },
+        date:   { $gte: missedDayStart, $lt: missedDayEnd },
+      }).select('_id'),
+    ),
+  );
+
+  const absentMemberIds = memberIds.filter((_, i) => !workoutChecks[i]);
+
+  if (absentMemberIds.length === 0) {
+    // Tout le monde avait validé cette journée-là (juste pas cliqué sur
+    // "Valider la streak") : on avance le curseur pour ne pas la re-traiter
+    // indéfiniment, sans casser ni incrémenter la streak.
+    group.lastValidatedDate = missedDayStart;
+    await group.save();
+    return group;
+  }
+
+  const breakers = [];
+  for (const memberId of absentMemberIds) {
+    const covered = await User.findOneAndUpdate(
+      { _id: memberId, streakGels: { $gt: 0 } },
+      { $inc: { streakGels: -1 } },
+    );
+    if (!covered) breakers.push(memberId);
+  }
+
+  if (breakers.length === 0) {
+    // Tous les absents couverts par un Gel de Streak — pareil, on avance le
+    // curseur pour ne pas re-consommer un gel supplémentaire au prochain appel.
+    group.lastValidatedDate = missedDayStart;
+    await group.save();
+    return group;
+  }
+
+  group.currentStreak = 0;
+  group.shameBreakers = breakers;
+  await group.save();
+  return group;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -368,9 +515,14 @@ exports.shakeMember = async (req, res, next) => {
 
     const target       = await User.findById(memberId).select('pseudo');
     const targetPseudo = target?.pseudo ?? memberId;
+    const me           = await User.findById(myId).select('pseudo');
 
-    // Simulation du push — remplacer par un appel réel au service de notifications
-    console.log(`[SHAKE] Push simulé → ${targetPseudo} n'a pas encore fait sa séance du jour.`);
+    const trollMessage = SHAKE_TROLL_MESSAGES[Math.floor(Math.random() * SHAKE_TROLL_MESSAGES.length)];
+    await sendPushToUser(memberId, {
+      title: `${me?.pseudo ?? 'Un ami'} t'a secoué ! 🚨`,
+      body:  trollMessage,
+      data:  { type: 'shake', fromUserId: myId },
+    });
 
     return res.status(200).json({
       success:  true,
@@ -450,6 +602,7 @@ exports.checkAndUpdateGroupStreaks = async (req, res, next) => {
     // ── Tous ont validé ──────────────────────────────────────────────────────
     group.currentStreak    += 1;
     group.lastValidatedDate = new Date();
+    group.shameBreakers     = []; // une nouvelle streak efface le Hall of Shame
     await group.save();
 
     // XP d'amitié par paire (C(n, 2) mises à jour)
@@ -515,9 +668,10 @@ exports.getMyGroup = async (req, res, next) => {
   try {
     const myId = req.user.id;
 
-    const group = await StreakGroup.findOne({ members: myId })
-      .populate('members',       MEMBER_PUBLIC_FIELDS)
-      .populate('pendingInvites', 'pseudo level rank');
+    // Groupe non populé d'abord : la détection de rupture de streak (Hall of
+    // Shame) a besoin des ObjectId bruts des membres, pas de documents User
+    // populés (String(userDoc) ne donne pas son _id).
+    let group = await StreakGroup.findOne({ members: myId });
 
     // Invitations de groupe reçues (groupes où je suis en pendingInvites),
     // pour que l'invité puisse accepter/refuser depuis l'app.
@@ -534,14 +688,22 @@ exports.getMyGroup = async (req, res, next) => {
       });
     }
 
+    group = await detectAndApplyStreakBreak(group);
+    await group.populate([
+      { path: 'members', select: MEMBER_PUBLIC_FIELDS },
+      { path: 'pendingInvites', select: 'pseudo level rank' },
+      { path: 'shameBreakers', select: 'pseudo' },
+    ]);
+
     // Multiplicateur courant (taille + régularité), affichable même sans
     // attendre la prochaine validation — group est un document Mongoose,
     // on construit la réponse à part pour ne pas le muter.
     const xpBonus = computeGroupXpBonus(group.members.length, group.currentStreak);
+    const membersWithWeather = await attachWeatherStatuses(group.members);
 
     return res.status(200).json({
       success: true,
-      group:   { ...group.toObject(), xpBonus },
+      group:   { ...group.toObject(), members: membersWithWeather, xpBonus },
       invites,
     });
   } catch (err) {

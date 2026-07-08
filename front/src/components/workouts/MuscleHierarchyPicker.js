@@ -64,7 +64,7 @@ function GroupRow({ group, expanded, onToggleExpand, mode, selected, onChange, e
         activeOpacity={0.85}
       >
         <View style={[styles.groupIconBox, hasSelection && styles.groupIconBoxActive]}>
-          <Text style={styles.groupIcon}>{icon}</Text>
+          <Ionicons name={icon} size={18} color={hasSelection ? Colors.primary : Colors.textMuted} />
         </View>
         <View style={styles.groupHeaderContent}>
           <Text style={styles.groupTitle}>{group.label}</Text>

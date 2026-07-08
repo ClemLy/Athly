@@ -68,7 +68,7 @@ export default function AddExerciseSheet({ visible, mode = 'add', onClose, onSel
         activeOpacity={0.85}
       >
         <View style={styles.itemIcon}>
-          <Text style={styles.itemEmoji}>{icon}</Text>
+          <Ionicons name={icon} size={19} color={Colors.primary} />
         </View>
         <View style={styles.itemContent}>
           <View style={styles.itemTitleRow}>

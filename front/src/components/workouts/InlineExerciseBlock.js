@@ -90,7 +90,7 @@ function InlineExerciseBlock({ exercise, exerciseIndex, onRemoveExercise, onRepl
         delayLongPress={280}
       >
         <View style={styles.iconBox}>
-          <Text style={styles.icon}>{icon}</Text>
+          <Ionicons name={icon} size={20} color={Colors.primary} />
         </View>
 
         <View style={styles.headerText}>

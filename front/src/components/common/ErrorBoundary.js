@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 
 // ─── ErrorBoundary ────────────────────────────────────────────────────────────
@@ -21,7 +22,7 @@ export default class ErrorBoundary extends React.Component {
   componentDidCatch(error, info) {
     // Log console uniquement — brancher un service de crash-reporting ici
     // (Sentry…) le jour où on en ajoute un.
-    console.error('💥 [ErrorBoundary]', error, info?.componentStack);
+    console.error('[ErrorBoundary]', error, info?.componentStack);
   }
 
   handleRetry = () => {
@@ -39,7 +40,9 @@ export default class ErrorBoundary extends React.Component {
 
     return (
       <View style={styles.root}>
-        <Text style={styles.emoji}>🏋️</Text>
+        <View style={styles.iconWrap}>
+          <Ionicons name="warning-outline" size={40} color={Colors.error} />
+        </View>
         <Text style={styles.title}>Oups, une erreur est survenue</Text>
         <Text style={styles.body}>
           Pas de panique — tes données sont en sécurité.{'\n'}Réessaie, ça devrait repartir.
@@ -60,7 +63,13 @@ const styles = StyleSheet.create({
     alignItems:      'center',
     paddingHorizontal: 32,
   },
-  emoji: { fontSize: 48, marginBottom: 18 },
+  iconWrap: {
+    width: 76, height: 76, borderRadius: 22,
+    backgroundColor: `${Colors.error}18`,
+    borderWidth: 1, borderColor: `${Colors.error}45`,
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: 18,
+  },
   title: {
     color:        Colors.textPrimary,
     fontSize:     19,
