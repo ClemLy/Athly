@@ -1,10 +1,9 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -16,6 +15,7 @@ import {
   pickExerciseIcon,
 } from '../../constants/exerciseFilters';
 import SetTable from './SetTable';
+import ActionSheetModal from '../common/ActionSheetModal';
 
 // Bloc exercice pour la vue "Voir tous les exercices" (all-in-one).
 // Affiche le titre, les muscles, le SetTable compact et le bouton [+ Série].
@@ -62,22 +62,21 @@ function InlineExerciseBlock({ exercise, exerciseIndex, onRemoveExercise, onRepl
     actions.removeSet(exerciseIndex, i);
   }, [actions, exerciseIndex]);
 
+  const [actionSheetVisible, setActionSheetVisible] = useState(false);
+
   const showActions = useCallback(() => {
     try { Haptics.selectionAsync(); } catch (_) {}
-    const opts = [];
-    if (onReplaceExercise) {
-      opts.push({ text: 'Remplacer', onPress: () => onReplaceExercise(exerciseIndex) });
-    }
-    if (onRemoveExercise) {
-      opts.push({
-        text: 'Supprimer',
-        style: 'destructive',
-        onPress: () => onRemoveExercise(exerciseIndex, exercise),
-      });
-    }
-    opts.push({ text: 'Annuler', style: 'cancel' });
-    Alert.alert(title, null, opts);
-  }, [title, onReplaceExercise, onRemoveExercise, exerciseIndex, exercise]);
+    setActionSheetVisible(true);
+  }, []);
+
+  const actionOptions = [
+    ...(onReplaceExercise ? [{ label: 'Remplacer', onPress: () => onReplaceExercise(exerciseIndex) }] : []),
+    ...(onRemoveExercise ? [{
+      label: 'Supprimer',
+      destructive: true,
+      onPress: () => onRemoveExercise(exerciseIndex, exercise),
+    }] : []),
+  ];
 
   return (
     <View style={[styles.block, isDone && styles.blockDone]}>
@@ -134,6 +133,12 @@ function InlineExerciseBlock({ exercise, exerciseIndex, onRemoveExercise, onRepl
         <Text style={styles.addBtnText}>Ajouter une série</Text>
       </TouchableOpacity>
 
+      <ActionSheetModal
+        visible={actionSheetVisible}
+        title={title}
+        options={actionOptions}
+        onClose={() => setActionSheetVisible(false)}
+      />
     </View>
   );
 }

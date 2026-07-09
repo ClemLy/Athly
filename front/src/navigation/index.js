@@ -8,6 +8,7 @@ import { ActivityIndicator, View } from 'react-native';
 
 import AuthStack from './AuthStack';
 import BottomTabs from './BottomTabs';
+import { navigationRef } from './navigationRef';
 
 import { Colors } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
@@ -24,6 +25,7 @@ import BirthdayCelebration from '../components/profile/BirthdayCelebration';
 import LevelUpCelebration from '../components/profile/LevelUpCelebration';
 import ActivityFeedModal from '../components/social/ActivityFeedModal';
 import WeightReminderCheck from '../components/stats/WeightReminderCheck';
+import LobbyInviteCheck from '../components/workouts/LobbyInviteCheck';
 
 const NOTIF_ENABLED_KEY = 'athly:notif:enabled:v1';
 
@@ -68,7 +70,7 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <TutorialProvider>
         <UserProvider>
           <WorkoutLogsProvider>
@@ -81,6 +83,7 @@ export default function AppNavigator() {
                       <LevelUpCelebration />
                       <ActivityFeedModal />
                       <WeightReminderCheck />
+                      <LobbyInviteCheck />
                       <BottomTabs />
                     </>
                   )}

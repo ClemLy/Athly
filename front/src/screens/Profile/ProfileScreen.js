@@ -339,7 +339,7 @@ export default function ProfileScreen({ navigation }) {
           </Section>
 
           {/* ── Activité 12 mois ── */}
-          <Section title="Activité — 12 mois">
+          <Section title="Activité - 12 mois">
             <GlassCard>
               <ActivityHeatmap heatmap={heatmap} />
             </GlassCard>

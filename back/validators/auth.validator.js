@@ -62,6 +62,12 @@ const schemas = {
     code:        codeRule,
     newPassword: registerPwdRule,
   }),
+
+  googleLogin: Joi.object({
+    idToken: Joi.string().required().messages({
+      "any.required": "idToken est obligatoire.",
+    }),
+  }),
 };
 
 module.exports = schemas;

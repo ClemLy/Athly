@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -22,6 +21,7 @@ import {
 } from '../../constants/exerciseFilters';
 import AddExerciseSheet from '../../components/workouts/AddExerciseSheet';
 import { useSavedWorkouts } from '../../context/SavedWorkoutsContext';
+import InfoModal from '../../components/common/InfoModal';
 
 // Construction manuelle d'une séance.
 // L'utilisateur :
@@ -98,7 +98,7 @@ function ExerciseRow({ exercise, index, onRemove, onSetsChange, onRepsChange }) 
               onRepsChange(index, n);
             }}
             keyboardType="numeric"
-            placeholder="—"
+            placeholder="-"
             placeholderTextColor={Colors.textMuted}
             style={styles.repsInput}
             maxLength={2}
@@ -118,6 +118,7 @@ export default function ManualWorkoutCreatorScreen({ navigation }) {
   const [exercises, setExercises] = useState([]);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [infoModal, setInfoModal] = useState(null); // { title, body, onCloseNav? }
 
   const buildSets = (count, reps) => {
     const c = Math.max(1, Math.min(20, count || 4));
@@ -167,11 +168,11 @@ export default function ManualWorkoutCreatorScreen({ navigation }) {
   const handleSave = useCallback(async () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      Alert.alert('Nom requis', 'Donne un nom à ta séance.');
+      setInfoModal({ title: 'Nom requis', body: 'Donne un nom à ta séance.' });
       return;
     }
     if (exercises.length === 0) {
-      Alert.alert('Au moins un exercice', 'Ajoute au moins un exercice avant de sauvegarder.');
+      setInfoModal({ title: 'Au moins un exercice', body: 'Ajoute au moins un exercice avant de sauvegarder.' });
       return;
     }
     setSaving(true);
@@ -182,19 +183,23 @@ export default function ManualWorkoutCreatorScreen({ navigation }) {
         exercises,
         isManual: true,
       });
-      Alert.alert(
-        'Séance créée',
-        `"${trimmed}" est dans tes séances. Tu peux la lancer depuis la page Séances.`,
-        [
-          { text: 'OK', onPress: () => navigation && navigation.goBack() },
-        ],
-      );
+      setInfoModal({
+        title: 'Séance créée',
+        body: `"${trimmed}" est dans tes séances. Tu peux la lancer depuis la page Séances.`,
+        onCloseNav: true,
+      });
     } catch (e) {
-      Alert.alert('Erreur', e && e.message ? e.message : 'Sauvegarde impossible');
+      setInfoModal({ title: 'Erreur', body: e && e.message ? e.message : 'Sauvegarde impossible' });
     } finally {
       setSaving(false);
     }
   }, [name, exercises, createSavedWorkout, navigation]);
+
+  const closeInfoModal = useCallback(() => {
+    const shouldGoBack = infoModal?.onCloseNav;
+    setInfoModal(null);
+    if (shouldGoBack && navigation) navigation.goBack();
+  }, [infoModal, navigation]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -298,6 +303,15 @@ export default function ManualWorkoutCreatorScreen({ navigation }) {
           onSelect={handleAddExercise}
         />
       </KeyboardAvoidingView>
+
+      <InfoModal
+        visible={!!infoModal}
+        icon={infoModal?.title === 'Erreur' ? 'alert-circle-outline' : 'information-circle-outline'}
+        title={infoModal?.title}
+        body={infoModal?.body}
+        destructive={infoModal?.title === 'Erreur'}
+        onClose={closeInfoModal}
+      />
     </SafeAreaView>
   );
 }

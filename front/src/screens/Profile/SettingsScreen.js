@@ -1,11 +1,13 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  StatusBar, Switch, Alert, TextInput, ActivityIndicator, Modal, Share,
+  StatusBar, Switch, TextInput, ActivityIndicator, Modal, Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../../constants/theme';
+import ConfirmModal from '../../components/common/ConfirmModal';
+import InfoModal from '../../components/common/InfoModal';
 import { useAuth } from '../../context/AuthContext';
 import { useUser } from '../../context/UserContext';
 import { useToast } from '../../context/ToastContext';
@@ -41,7 +43,7 @@ import {
   syncBackendLevel, giveChests, generateMockSocial, giveAllItems,
   simulateChestsOpened, simulateReferral, simulateBirthday,
   simulateGroup, simulateActivityEvent, simulateStreakBreak, simulateShakeSelf,
-  simulateSearchableFriend,
+  simulateSearchableFriend, simulateLobbyInvite,
 } from '../../services/debug.service';
 
 const UNIT_WEIGHT_KEY   = 'athly:unit:weight:v1';
@@ -160,6 +162,7 @@ export default function SettingsScreen({ navigation }) {
   const [simFeedback,     setSimFeedback]     = useState('');
   const [trophyExpanded,  setTrophyExpanded]  = useState(false);
   const [testFriendTag,   setTestFriendTag]   = useState(null);
+  const [infoModal, setInfoModal] = useState(null); // { title, body, destructive? }
 
   const [deleteModal1,  setDeleteModal1]  = useState(false);
   const [deleteModal2,  setDeleteModal2]  = useState(false);
@@ -222,13 +225,13 @@ export default function SettingsScreen({ navigation }) {
     if (val) {
       const granted = await requestNotificationPermissions();
       if (!granted) {
-        Alert.alert('Notifications désactivées', 'Activez les notifications Athly dans les réglages de votre appareil.');
+        setInfoModal({ title: 'Notifications désactivées', body: 'Activez les notifications Athly dans les réglages de votre appareil.' });
         return;
       }
       try {
         await scheduleDailyReminder();
       } catch (e) {
-        Alert.alert('Erreur', 'Impossible de planifier la notification.');
+        setInfoModal({ title: 'Erreur', body: 'Impossible de planifier la notification.', destructive: true });
         return;
       }
       setNotifEnabled(true);
@@ -261,15 +264,11 @@ export default function SettingsScreen({ navigation }) {
 
   const handleGodMode = useCallback(async (val) => {
     await setGodMode(val);
-    if (val) Alert.alert('God Mode activé', 'Utilisez la console ci-dessous pour simuler votre progression.');
+    if (val) setInfoModal({ title: 'God Mode activé', body: 'Utilisez la console ci-dessous pour simuler votre progression.' });
   }, [setGodMode]);
 
-  const handleLogout = () => {
-    Alert.alert('Déconnexion', 'Tu vas être déconnecté.', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Déconnexion', style: 'destructive', onPress: signOut },
-    ]);
-  };
+  const [logoutConfirmVisible, setLogoutConfirmVisible] = useState(false);
+  const handleLogout = () => setLogoutConfirmVisible(true);
 
   const runSim = useCallback(async (fn, successMsg) => {
     try {
@@ -309,11 +308,11 @@ export default function SettingsScreen({ navigation }) {
     runSim(() => debugSetStreak(n), `Streak ${n} jours appliqué ✓`);
   };
   const handleResetDailyXP = () => runSim(debugResetDailyXP, 'Quota XP quotidien réinitialisé ✓');
-  const handleClearDebug  = () => {
-    Alert.alert('Effacer les logs DEBUG', 'Les vraies séances restent intactes.', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Effacer', style: 'destructive', onPress: () => runSim(debugClearDebugLogs, 'Logs DEBUG effacés ✓') },
-    ]);
+  const [clearDebugConfirmVisible, setClearDebugConfirmVisible] = useState(false);
+  const handleClearDebug = () => setClearDebugConfirmVisible(true);
+  const confirmClearDebug = () => {
+    setClearDebugConfirmVisible(false);
+    runSim(debugClearDebugLogs, 'Logs DEBUG effacés ✓');
   };
   const handleClearOverrides = () => {
     clearTrophyOverrides();
@@ -386,10 +385,27 @@ export default function SettingsScreen({ navigation }) {
       // de façon persistante, tant que ce compte de test reste valide.
       if (res.tag) {
         setTestFriendTag(res.tag);
-        showFeedback('Compte de test créé — tag affiché ci-dessous ↓');
+        showFeedback('Compte de test créé - tag affiché ci-dessous ↓');
       } else {
         showFeedback(res.message || 'Compte de test créé');
       }
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback]);
+
+  // Crée un lobby Multi avec un coéquipier factice (isTestBot) et envoie une
+  // vraie notification push d'invitation à soi-même — seul moyen de tester en
+  // solo le parcours complet Lobby Multi (invitation, rejoindre, prêt, séance,
+  // bonus de groupe). Bloqué en production (404).
+  const handleSimulateLobbyInvite = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await simulateLobbyInvite();
+      showFeedback(res.message || 'Invitation de test créée');
     } catch (e) {
       const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
       showFeedback('Erreur : ' + msg);
@@ -886,7 +902,7 @@ export default function SettingsScreen({ navigation }) {
                   <Text style={styles.devHint}>
                     Crée un compte "TestAmi" PAS déjà ami avec un # généré aléatoirement.
                     Le tag exact reste affiché juste en dessous (pas le message temporaire,
-                    trop court pour changer d'écran) — saisis-le tel quel dans "Ajouter un
+                    trop court pour changer d'écran) - saisis-le tel quel dans "Ajouter un
                     ami" côté Social. Ne tape jamais "0000", ce n'est qu'un exemple de format.
                   </Text>
                   {testFriendTag && (
@@ -909,14 +925,14 @@ export default function SettingsScreen({ navigation }) {
                   </View>
                   <Text style={styles.devHint}>
                     Crée un groupe avec 3 coéquipiers factices, un par statut de Météo des
-                    séances testable (🔥 Prêt / ⚡ Actif / ✅ Validé — le 4e, 💤 En sommeil,
+                    séances testable (🔥 Prêt / ⚡ Actif / ✅ Validé - le 4e, 💤 En sommeil,
                     s'obtient en ne touchant à aucun des trois). Rejouable sans doublons.
                   </Text>
                   <View style={styles.devBtnRow}>
                     <DevBtn label="Simuler un événement d'activité" onPress={handleSimulateActivityEvent} disabled={simLoading} flex />
                   </View>
                   <Text style={styles.devHint}>
-                    Publie un PR battu ou un coffre Légendaire au nom d'un coéquipier —
+                    Publie un PR battu ou un coffre Légendaire au nom d'un coéquipier -
                     déclenche l'ActivityFeedModal au prochain lancement. Nécessite d'avoir
                     d'abord simulé un groupe.
                   </Text>
@@ -932,7 +948,21 @@ export default function SettingsScreen({ navigation }) {
                   </View>
                   <Text style={styles.devHint}>
                     Envoie une vraie notification push à ton propre appareil, avec le texte
-                    troll du bouton Secouer — vérifie l'infra push de bout en bout.
+                    troll du bouton Secouer - vérifie l'infra push de bout en bout.
+                  </Text>
+                </DevSection>
+
+                {/* ── LOBBY MULTI (V2) ── */}
+                <DevSection title="Lobby Multi" icon="people" badge="V2">
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Simuler une invitation Multi" onPress={handleSimulateLobbyInvite} disabled={simLoading} flex variant="orange" />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Crée un lobby avec un coéquipier factice et t'envoie une vraie
+                    notification push d'invitation - teste tout le parcours en solo :
+                    popup "X t'invite", rejoindre, se déclarer prêt, faire sa séance,
+                    et voir le bonus XP de groupe à la fin (le coéquipier factice suit
+                    automatiquement chacun de tes statuts).
                   </Text>
                 </DevSection>
 
@@ -1242,6 +1272,37 @@ export default function SettingsScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      <InfoModal
+        visible={!!infoModal}
+        icon={infoModal?.destructive ? 'alert-circle-outline' : 'information-circle-outline'}
+        title={infoModal?.title}
+        body={infoModal?.body}
+        destructive={infoModal?.destructive}
+        onClose={() => setInfoModal(null)}
+      />
+
+      <ConfirmModal
+        visible={logoutConfirmVisible}
+        icon="log-out-outline"
+        title="Déconnexion"
+        body="Tu vas être déconnecté."
+        confirmLabel="Déconnexion"
+        destructive
+        onConfirm={() => { setLogoutConfirmVisible(false); signOut(); }}
+        onCancel={() => setLogoutConfirmVisible(false)}
+      />
+
+      <ConfirmModal
+        visible={clearDebugConfirmVisible}
+        icon="trash-outline"
+        title="Effacer les logs DEBUG"
+        body="Les vraies séances restent intactes."
+        confirmLabel="Effacer"
+        destructive
+        onConfirm={confirmClearDebug}
+        onCancel={() => setClearDebugConfirmVisible(false)}
+      />
     </View>
   );
 }

@@ -1,11 +1,10 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   FlatList,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,9 +16,13 @@ import {
   secondaryMusclesLabels,
   primaryEquipmentLabel,
 } from '../../constants/exerciseFilters';
+import ConfirmModal from '../../components/common/ConfirmModal';
+import InfoModal from '../../components/common/InfoModal';
 
 export default function CustomExercisesScreen({ navigation }) {
   const { items, loading, remove } = useCustomExercises();
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [errorInfo, setErrorInfo] = useState(null);
 
   const onAdd = useCallback(() => {
     navigation && navigation.navigate('EditExercise', { mode: 'create' });
@@ -29,24 +32,15 @@ export default function CustomExercisesScreen({ navigation }) {
     navigation && navigation.navigate('EditExercise', { mode: 'edit', exerciseId: item.id });
   }, [navigation]);
 
-  const onDelete = useCallback((item) => {
-    Alert.alert(
-      'Supprimer',
-      `Supprimer "${item.name}" ? Les séances qui l'utilisent ne seront pas affectées.`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: async () => {
-            try { await remove(item.id); } catch (e) {
-              Alert.alert('Erreur', e && e.message ? e.message : 'Suppression impossible');
-            }
-          },
-        },
-      ],
-    );
-  }, [remove]);
+  const onDelete = useCallback((item) => setDeleteTarget(item), []);
+
+  const confirmDelete = useCallback(async () => {
+    const item = deleteTarget;
+    setDeleteTarget(null);
+    try { await remove(item.id); } catch (e) {
+      setErrorInfo(e && e.message ? e.message : 'Suppression impossible');
+    }
+  }, [deleteTarget, remove]);
 
   const renderItem = ({ item }) => {
     const icon = pickExerciseIcon(item);
@@ -122,6 +116,25 @@ export default function CustomExercisesScreen({ navigation }) {
           ItemSeparatorComponent={() => <View style={styles.sep} />}
         />
       )}
+
+      <ConfirmModal
+        visible={!!deleteTarget}
+        icon="trash-outline"
+        title="Supprimer"
+        body={`Supprimer "${deleteTarget?.name}" ? Les séances qui l'utilisent ne seront pas affectées.`}
+        confirmLabel="Supprimer"
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+      <InfoModal
+        visible={!!errorInfo}
+        icon="alert-circle-outline"
+        title="Erreur"
+        body={errorInfo}
+        destructive
+        onClose={() => setErrorInfo(null)}
+      />
     </SafeAreaView>
   );
 }

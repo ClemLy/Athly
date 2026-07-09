@@ -300,7 +300,7 @@ export default function SocialScreen({ navigation }) {
         visible={bloodSangUnlockedVisible}
         icon="color-palette"
         title="Couleur Unique débloquée !"
-        body="Votre groupe a validé 30 jours de streak à 5 membres. La couleur de cadre « Rouge Sang » vous attend dans votre inventaire — direction le Sac pour la réclamer."
+        body="Votre groupe a validé 30 jours de streak à 5 membres. La couleur de cadre « Rouge Sang » vous attend dans votre inventaire - direction le Sac pour la réclamer."
         confirmLabel="Voir mon inventaire"
         cancelLabel="Plus tard"
         onConfirm={() => {
@@ -874,7 +874,7 @@ function UserRow({ user, children }) {
         )}
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.userPseudo}>{user?.pseudo ?? '—'}</Text>
+        <Text style={styles.userPseudo}>{user?.pseudo ?? '-'}</Text>
         <Text style={styles.userMeta}>
           Nv. {user?.level ?? 1} · {user?.rank ?? 'Novice'}
           {weather ? ` · ${weather.label}` : ''}

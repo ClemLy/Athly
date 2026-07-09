@@ -114,6 +114,22 @@ const ACHIEVEMENT_CATALOG = {
     category:    'social',
     hidden:      false,
   },
+
+  // ── Lobby Multi (Section VII) ─────────────────────────────────────────────
+  FIRST_MULTI_SESSION: {
+    id:          'FIRST_MULTI_SESSION',
+    name:        'Duo de Choc',
+    description: "Vous avez terminé votre première séance en Multi.",
+    category:    'social',
+    hidden:      false,
+  },
+  MULTI_SQUAD_FULL: {
+    id:          'MULTI_SQUAD_FULL',
+    name:        'Escouade Complète',
+    description: "Vous avez terminé une séance en Multi à 5 athlètes.",
+    category:    'social',
+    hidden:      false,
+  },
 };
 
 // Nombre total de trophées dans le catalogue (utile pour les stats)
@@ -214,6 +230,30 @@ async function checkAndUnlockAchievements(userId) {
       friendshipLevel: 5,
     });
     if (hasMaxFriend) tryUnlock('FRIENDSHIP_LEVEL_5');
+  }
+
+  // ── Lobby Multi (Section VII) ──────────────────────────────────────────────
+  if (!unlockedIds.has('FIRST_MULTI_SESSION') || !unlockedIds.has('MULTI_SQUAD_FULL')) {
+    // Require tardif : évite le cycle reward.controller ↔ workoutLobby.controller
+    // (celui-ci appelle déjà checkAndUnlockAchievements à la clôture du lobby).
+    const WorkoutLobby = require('../models/WorkoutLobby');
+
+    if (!unlockedIds.has('FIRST_MULTI_SESSION')) {
+      const hasCompletedMulti = await WorkoutLobby.exists({
+        status: 'completed',
+        'members.user': userId,
+      });
+      if (hasCompletedMulti) tryUnlock('FIRST_MULTI_SESSION');
+    }
+
+    if (!unlockedIds.has('MULTI_SQUAD_FULL')) {
+      const hasFullSquad = await WorkoutLobby.exists({
+        status: 'completed',
+        'members.user': userId,
+        memberCount: 5,
+      });
+      if (hasFullSquad) tryUnlock('MULTI_SQUAD_FULL');
+    }
   }
 
   if (newlyUnlocked.length > 0) {

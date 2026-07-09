@@ -6,6 +6,7 @@ const User         = require('../models/User');
 const Friendship   = require('../models/Friendship');
 const StreakGroup  = require('../models/StreakGroup');
 const Workout      = require('../models/Workout');
+const WorkoutLobby = require('../models/WorkoutLobby');
 const { xpForLevel, getRankForLevel } = require('../utils/levelHelpers');
 const { addItemAtomic, addUniqueItemOnce } = require('../services/inventory.service');
 const { checkAndUnlockAchievements } = require('./reward.controller');
@@ -592,7 +593,7 @@ exports.simulateActivityEvent = async (req, res, next) => {
 
     const group = await StreakGroup.findOne({ members: myId });
     if (!group) {
-      return next(createError('Aucun groupe — utilise "Simuler un groupe" avant de tester le flux d\'activité.', 400));
+      return next(createError('Aucun groupe - utilise "Simuler un groupe" avant de tester le flux d\'activité.', 400));
     }
 
     const otherMemberId = group.members.find((m) => m.toString() !== myId);
@@ -642,7 +643,7 @@ exports.simulateStreakBreak = async (req, res, next) => {
     const myId = req.user.id;
     const group = await StreakGroup.findOne({ members: myId });
     if (!group) {
-      return next(createError('Aucun groupe — utilise "Simuler un groupe" avant de tester le Hall of Shame.', 400));
+      return next(createError('Aucun groupe - utilise "Simuler un groupe" avant de tester le Hall of Shame.', 400));
     }
 
     const twoDaysAgo = new Date();
@@ -655,7 +656,7 @@ exports.simulateStreakBreak = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Rupture de streak simulée — recharge l\'onglet Groupe pour voir le Hall of Shame.',
+      message: 'Rupture de streak simulée - recharge l\'onglet Groupe pour voir le Hall of Shame.',
     });
   } catch (err) {
     next(err);
@@ -677,7 +678,7 @@ exports.simulateShakeSelf = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id).select('pushToken');
     if (!user?.pushToken) {
-      return next(createError("Aucun token push enregistré sur ce compte — ouvre l'app avec les notifications autorisées d'abord.", 400));
+      return next(createError("Aucun token push enregistré sur ce compte - ouvre l'app avec les notifications autorisées d'abord.", 400));
     }
 
     const trollMessage = SHAKE_TROLL_MESSAGES[Math.floor(Math.random() * SHAKE_TROLL_MESSAGES.length)];
@@ -690,7 +691,7 @@ exports.simulateShakeSelf = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       pushed,
-      message: pushed ? 'Notification envoyée à ton appareil.' : "Échec d'envoi — le token est peut-être périmé.",
+      message: pushed ? 'Notification envoyée à ton appareil.' : "Échec d'envoi - le token est peut-être périmé.",
     });
   } catch (err) {
     next(err);
@@ -759,6 +760,73 @@ exports.simulateSearchableFriend = async (req, res, next) => {
       pseudo: created.pseudo,
       discriminator: created.discriminator,
       tag: `${created.pseudo}#${created.discriminator}`,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// simulateLobbyInvite  POST /api/debug/godmode/simulate-lobby-invite
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Outil de test : crée un coéquipier factice `isTestBot: true` et un lobby
+ * Multi dont il est le créateur, puis envoie une VRAIE notification push à
+ * l'appelant (data: { type: 'lobby_invite', lobbyId, fromPseudo }) — permet de
+ * tester en solo le parcours complet de la Lobby Multi (réception d'une
+ * invitation → popup → rejoindre → prêt → séance → fin), le bot étant
+ * automatiquement auto-progressé en miroir du statut de l'appelant (voir
+ * autoProgressBots dans workoutLobby.controller.js), sans second appareil.
+ *
+ * Idempotent : le bot et le lobby précédemment créés par cet outil pour CET
+ * utilisateur (namespacés par son ObjectId) sont supprimés avant recréation,
+ * pour ne jamais empiler des invitations fantômes.
+ */
+exports.simulateLobbyInvite = async (req, res, next) => {
+  try {
+    const myId = req.user.id;
+    const emailPrefix = `mock-lobbybot-${myId}-`;
+
+    const previousBots = await User.find({ email: { $regex: `^${emailPrefix}` } }).select('_id');
+    const previousIds = previousBots.map((u) => u._id);
+    if (previousIds.length > 0) {
+      await WorkoutLobby.deleteMany({ 'members.user': { $in: previousIds } });
+      await User.deleteMany({ _id: { $in: previousIds } });
+    }
+
+    const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), MOCK_PASSWORD_ROUNDS);
+    const bot = await User.create({
+      pseudo:     'CoequipierBot',
+      email:      `${emailPrefix}${Date.now()}@athly.dev`,
+      password:   passwordHash,
+      isVerified: true,
+      isTestBot:  true,
+      level:      20,
+      xp:         xpForLevel(20),
+      rank:       getRankForLevel(20),
+    });
+
+    const lobby = await WorkoutLobby.create({
+      creatorId:   bot._id,
+      members:     [{ user: bot._id, status: 'waiting' }],
+      memberCount: 1,
+    });
+
+    const pushed = await sendPushToUser(myId, {
+      title: 'Invitation Multi',
+      body:  `${bot.pseudo} t'invite à réaliser une séance ensemble !`,
+      data:  { type: 'lobby_invite', lobbyId: lobby._id.toString(), fromPseudo: bot.pseudo },
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: pushed
+        ? 'Invitation simulée envoyée à ton appareil.'
+        : "Lobby créé, mais l'envoi push a échoué (token manquant ou périmé) - utilise directement lobbyId.",
+      lobbyId: lobby._id,
+      fromPseudo: bot.pseudo,
+      pushed,
     });
   } catch (err) {
     next(err);

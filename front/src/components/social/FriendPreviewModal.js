@@ -75,7 +75,7 @@ export default function FriendPreviewModal({ visible, result, onSend, onClose })
           {relationStatus === 'pending_received' && (
             <View style={styles.statusChip}>
               <Ionicons name="mail-unread-outline" size={14} color={Colors.gold} />
-              <Text style={styles.statusChipTxt}>Vous a envoyé une invitation — vois l'onglet Demandes</Text>
+              <Text style={styles.statusChipTxt}>Vous a envoyé une invitation - vois l'onglet Demandes</Text>
             </View>
           )}
           {relationStatus === 'accepted' && (

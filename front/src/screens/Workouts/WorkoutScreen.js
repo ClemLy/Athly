@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   FlatList,
   Platform,
 } from 'react-native';
@@ -30,6 +29,10 @@ import WorkoutRecapModal from '../../components/workouts/WorkoutRecapModal';
 import ShortSessionWarningModal from '../../components/workouts/ShortSessionWarningModal';
 import QuestToast from '../../components/common/QuestToast';
 import ConfirmModal from '../../components/common/ConfirmModal';
+import LobbyMembersBar from '../../components/workouts/LobbyMembersBar';
+import LobbyWaitingOverlay from '../../components/workouts/LobbyWaitingOverlay';
+import MultiLootModal from '../../components/workouts/MultiLootModal';
+import { getLobby, finishLobby } from '../../services/lobby.service';
 
 const DEFAULT_FILTERS = { muscles: [], levels: [], equipment: [] };
 
@@ -50,9 +53,35 @@ function estimateMinutes(count) {
 
 export default function WorkoutScreen({ route, navigation }) {
   const { state, actions, loadWorkout } = useWorkoutInProgress();
-  const { totalXP } = useWorkoutLogs();
+  const { totalXP, addBonusXp } = useWorkoutLogs();
   const { bypassAnticheat } = useDevSettings();
   const [allInOne, setAllInOne] = useState(false);
+
+  // ─── Séance en Multi (Section VII) ───────────────────────────────────────
+  // Chacun gère ses propres séries/poids côté client (résilience réseau) —
+  // le lobby ne sert qu'à afficher les bulles de présence et à synchroniser
+  // la clôture (voir handleTerminate / executeFinalize plus bas).
+  const lobbyId = route?.params?.lobbyId ?? null;
+  const [lobby, setLobby] = useState(null);
+  const [multiWaiting, setMultiWaiting] = useState(false);
+  const [multiLoot, setMultiLoot] = useState(null); // { memberCount, bonusPercent, bonusXp }
+  const multiBonusPendingRef = useRef(null); // { bonusPercent, memberCount } — consommé par executeFinalize
+  const lobbyPollRef = useRef(null);
+
+  // Bulles de présence : poll léger tant que la séance n'est pas terminée.
+  useEffect(() => {
+    if (!lobbyId) return undefined;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await getLobby(lobbyId);
+        if (!cancelled) setLobby(res.lobby);
+      } catch (_) {}
+    };
+    poll();
+    const interval = setInterval(poll, 4000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [lobbyId]);
 
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -76,6 +105,9 @@ export default function WorkoutScreen({ route, navigation }) {
   const [abandonModalVisible, setAbandonModalVisible] = useState(false);
   const allowExitRef = useRef(false);
   const pendingNavActionRef = useRef(null);
+
+  // Confirmation de suppression d'un exercice (modale custom, pas d'Alert natif)
+  const [removeConfirm, setRemoveConfirm] = useState(null); // { sourceIndex, name }
 
   // Quest toast queue
   const [currentToast, setCurrentToast] = useState(null);
@@ -211,15 +243,13 @@ export default function WorkoutScreen({ route, navigation }) {
   }, [actions, sheetMode]);
 
   const onRemove = useCallback((sourceIndex, exercise) => {
-    Alert.alert(
-      'Supprimer',
-      `Retirer "${exercise && exercise.name ? exercise.name : 'cet exercice'}" de la séance ?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Supprimer', style: 'destructive', onPress: () => actions.removeExercise(sourceIndex) },
-      ],
-    );
-  }, [actions]);
+    setRemoveConfirm({ sourceIndex, name: exercise?.name || 'cet exercice' });
+  }, []);
+
+  const confirmRemove = useCallback(() => {
+    if (removeConfirm) actions.removeExercise(removeConfirm.sourceIndex);
+    setRemoveConfirm(null);
+  }, [removeConfirm, actions]);
 
   const onToggleSuperset = useCallback((sourceIndex) => {
     actions.toggleSupersetWithNext(sourceIndex);
@@ -261,6 +291,18 @@ export default function WorkoutScreen({ route, navigation }) {
         prevTotalXP,
       };
 
+      // ── Bonus XP Multi (Section VII) ── consommé une seule fois : posé par
+      // handleTerminate dès que le lobby passe 'completed' (voir plus bas).
+      const pendingBonus = multiBonusPendingRef.current;
+      multiBonusPendingRef.current = null;
+      if (pendingBonus && pendingBonus.bonusPercent > 0) {
+        const bonusXp = Math.round(builtRecapData.stats.xpEarned * pendingBonus.bonusPercent);
+        if (bonusXp > 0) {
+          addBonusXp('Bonus Multi', bonusXp).catch(() => {});
+        }
+        setMultiLoot({ memberCount: pendingBonus.memberCount, bonusPercent: pendingBonus.bonusPercent, bonusXp });
+      }
+
       const toastItems = [
         ...(result.completedQuests || []).map((q) => ({ label: q.label, isBonus: false })),
         ...(result.bonusUnlocked ? [{ label: null, isBonus: true }] : []),
@@ -286,7 +328,7 @@ export default function WorkoutScreen({ route, navigation }) {
     } finally {
       setIsFinalizing(false);
     }
-  }, [actions, state.notes, state.id, totalXP, elapsed]);
+  }, [actions, state.notes, state.id, totalXP, elapsed, addBonusXp]);
 
   // ─── TERMINER LA SÉANCE ───────────────────────────────────────────────────
   const handleTerminate = useCallback(async () => {
@@ -294,7 +336,7 @@ export default function WorkoutScreen({ route, navigation }) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {}
 
-    if (isFinalizing || recapVisible) return;
+    if (isFinalizing || recapVisible || multiWaiting) return;
 
     // Anti-cheat 5 min : bloque si < 300s et bypass désactivé
     if (elapsed < 300 && !bypassAnticheat) {
@@ -302,8 +344,52 @@ export default function WorkoutScreen({ route, navigation }) {
       return;
     }
 
+    // ── Clôture synchrone Multi (Section VII) ── mon statut passe 'finished'.
+    // Si je suis le dernier, le lobby passe 'completed' immédiatement (pas
+    // d'attente). Sinon, écran d'attente bloquant jusqu'à ce que tout le
+    // monde ait fini (polling — pas de websocket dans ce projet).
+    if (lobbyId) {
+      setMultiWaiting(true);
+      try {
+        const res = await finishLobby(lobbyId);
+        setLobby(res.lobby);
+        if (res.completed) {
+          multiBonusPendingRef.current = {
+            bonusPercent: res.lobby.xpBonusPercent,
+            memberCount: res.lobby.memberCount,
+          };
+          setMultiWaiting(false);
+          executeFinalize();
+        } else {
+          lobbyPollRef.current = setInterval(async () => {
+            try {
+              const poll = await getLobby(lobbyId);
+              setLobby(poll.lobby);
+              if (poll.lobby.status === 'completed') {
+                clearInterval(lobbyPollRef.current);
+                multiBonusPendingRef.current = {
+                  bonusPercent: poll.lobby.xpBonusPercent,
+                  memberCount: poll.lobby.memberCount,
+                };
+                setMultiWaiting(false);
+                executeFinalize();
+              }
+            } catch (_) {}
+          }, 3000);
+        }
+      } catch (_) {
+        // Best-effort : un souci réseau sur le lobby ne doit jamais bloquer
+        // la validation de la propre séance de l'utilisateur.
+        setMultiWaiting(false);
+        executeFinalize();
+      }
+      return;
+    }
+
     executeFinalize();
-  }, [isFinalizing, recapVisible, elapsed, bypassAnticheat, executeFinalize]);
+  }, [isFinalizing, recapVisible, multiWaiting, elapsed, bypassAnticheat, executeFinalize, lobbyId]);
+
+  useEffect(() => () => { if (lobbyPollRef.current) clearInterval(lobbyPollRef.current); }, []);
 
   // Valider quand même (0 XP, shortSession)
   const handleForceFinish = useCallback(() => {
@@ -326,9 +412,7 @@ export default function WorkoutScreen({ route, navigation }) {
     }
   }, []);
 
-  const closeRecap = useCallback(() => {
-    setRecapVisible(false);
-    setRecapData(null);
+  const leaveWorkoutScreen = useCallback(() => {
     // Reset the workout context so the next session starts clean
     actions.reset();
     if (navigation) {
@@ -342,6 +426,20 @@ export default function WorkoutScreen({ route, navigation }) {
       navigation.navigate('Stats');
     }
   }, [navigation, actions]);
+
+  const closeRecap = useCallback(() => {
+    setRecapVisible(false);
+    setRecapData(null);
+    // Séance en Multi avec butin en attente : le popup d'équipe (MultiLootModal)
+    // prend le relai plutôt que de naviguer immédiatement — voir closeMultiLoot.
+    if (multiLoot) return;
+    leaveWorkoutScreen();
+  }, [multiLoot, leaveWorkoutScreen]);
+
+  const closeMultiLoot = useCallback(() => {
+    setMultiLoot(null);
+    leaveWorkoutScreen();
+  }, [leaveWorkoutScreen]);
 
   // ── Vue globale : un bloc inline par exercice, pas de navigation ──────────
   const renderItemAllInOne = ({ item }) => {
@@ -441,6 +539,9 @@ export default function WorkoutScreen({ route, navigation }) {
             : 'Ajoute tes exercices'}
         </Text>
       </View>
+
+      {/* ── Bulles de présence Multi (Section VII) ── */}
+      <LobbyMembersBar members={lobby?.members ?? []} />
 
       {/* ── Filtres ── */}
       <SortBar filters={filters} onChange={setFilters} />
@@ -553,6 +654,27 @@ export default function WorkoutScreen({ route, navigation }) {
         destructive
         onConfirm={confirmAbandon}
         onCancel={cancelAbandon}
+      />
+
+      <ConfirmModal
+        visible={!!removeConfirm}
+        icon="trash-outline"
+        title="Supprimer"
+        body={`Retirer "${removeConfirm?.name ?? 'cet exercice'}" de la séance ?`}
+        confirmLabel="Supprimer"
+        destructive
+        onConfirm={confirmRemove}
+        onCancel={() => setRemoveConfirm(null)}
+      />
+
+      <LobbyWaitingOverlay visible={multiWaiting} members={lobby?.members ?? []} />
+
+      <MultiLootModal
+        visible={!!multiLoot}
+        memberCount={multiLoot?.memberCount}
+        bonusPercent={multiLoot?.bonusPercent ?? 0}
+        bonusXp={multiLoot?.bonusXp}
+        onClose={closeMultiLoot}
       />
 
     </SafeAreaView>

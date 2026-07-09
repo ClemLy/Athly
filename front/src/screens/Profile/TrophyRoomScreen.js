@@ -146,7 +146,7 @@ function UltimateTile({ unlocked, unlockedCount, totalCount, onPress }) {
               {ULTIMATE_TROPHY.label}
             </Text>
             <Text style={[styles.ultimateCond, { color: unlocked ? 'rgba(255,215,0,0.7)' : 'rgba(255,255,255,0.15)' }]}>
-              {unlocked ? 'Collection complète — Vous régnez.' : ULTIMATE_TROPHY.condition}
+              {unlocked ? 'Collection complète - Vous régnez.' : ULTIMATE_TROPHY.condition}
             </Text>
             {unlocked && (
               <View style={styles.ultimateBadge}>
@@ -464,12 +464,12 @@ function TrophyDetailModal({ trophy, onClose, isFeatured = false, onToggleFeatur
               <Ionicons name={unlocked ? 'checkmark-circle' : 'lock-closed'} size={13}
                 color={unlocked ? color : Colors.textMuted} />
               <Text style={[styles.badgeText, { color: unlocked ? color : Colors.textMuted }]}>
-                {unlocked ? `${tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : ''} — Débloqué` : 'Verrouillé'}
+                {unlocked ? `${tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : ''} - Débloqué` : 'Verrouillé'}
               </Text>
             </View>
             <View style={[styles.divider, { backgroundColor: color + '30' }]} />
             <Text style={[styles.epicDesc, !unlocked && { color: Colors.textMuted, fontStyle: 'italic' }]}>
-              {unlocked ? epicDesc : "Accomplissez encore — ce trophée attend le guerrier que vous deviendrez."}
+              {unlocked ? epicDesc : "Accomplissez encore - ce trophée attend le guerrier que vous deviendrez."}
             </Text>
             {unlocked && !isBackend && (
               <TouchableOpacity

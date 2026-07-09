@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +19,8 @@ import XPProgressBar from '../../components/stats/XPProgressBar';
 import WorkoutHistoryList from '../../components/stats/WorkoutHistoryList';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import WeightEntryModal from '../../components/common/WeightEntryModal';
+import ConfirmModal from '../../components/common/ConfirmModal';
+import InfoModal from '../../components/common/InfoModal';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 import { MOCK_TUTORIAL_LOGS } from '../../data/mockTutorialStats';
 
@@ -31,9 +33,13 @@ export default function StatsScreen({ navigation }) {
   const { sessionLogs: realLogs, totalXP, remove } = useWorkoutLogs();
   const { user } = useUser();
 
+  const [errorInfo, setErrorInfo] = useState(null);
+  const [dayDetail, setDayDetail] = useState(null); // { log, body, deletable }
+  const [noSessionInfo, setNoSessionInfo] = useState(null); // dateKey
+
   const handleDelete = useCallback(async (id) => {
     try { await remove(id); } catch (e) {
-      Alert.alert('Erreur', e?.message || 'Suppression impossible');
+      setErrorInfo(e?.message || 'Suppression impossible');
     }
   }, [remove]);
 
@@ -118,26 +124,25 @@ export default function StatsScreen({ navigation }) {
   const onSelectDate = useCallback((dateKey) => {
     const matching = activeLogs.filter((l) => l.date && l.date.slice(0, 10) === dateKey);
     if (matching.length === 0) {
-      Alert.alert('Aucune séance', `Pas de séance le ${dateKey}.`);
+      setNoSessionInfo(dateKey);
       return;
     }
     const log = matching[0];
-    Alert.alert(
-      log.name,
-      [`Volume: ${Math.round(log.totalVolume)} kg`, `Sets: ${log.setsCompleted}`, `XP: ${log.xpEarned}`].join('\n'),
-      [
-        { text: 'Fermer', style: 'cancel' },
-        ...(activeChapterId !== 'stats' ? [{
-          text: 'Supprimer', style: 'destructive',
-          onPress: async () => {
-            try { await remove(log.id); } catch (e) {
-              Alert.alert('Erreur', e?.message || 'Suppression impossible');
-            }
-          },
-        }] : []),
-      ],
-    );
-  }, [activeLogs, remove, activeChapterId]);
+    setDayDetail({
+      log,
+      body: [`Volume: ${Math.round(log.totalVolume)} kg`, `Sets: ${log.setsCompleted}`, `XP: ${log.xpEarned}`].join('\n'),
+      deletable: activeChapterId !== 'stats',
+    });
+  }, [activeLogs, activeChapterId]);
+
+  const confirmDeleteDayDetail = useCallback(async () => {
+    const log = dayDetail?.log;
+    setDayDetail(null);
+    if (!log) return;
+    try { await remove(log.id); } catch (e) {
+      setErrorInfo(e?.message || 'Suppression impossible');
+    }
+  }, [dayDetail, remove]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -145,7 +150,7 @@ export default function StatsScreen({ navigation }) {
       {activeChapterId === 'stats' && (
         <View style={styles.mockBanner}>
           <Ionicons name="flask-outline" size={12} color="#FFD700" />
-          <Text style={styles.mockBannerText}>Données de démonstration — disparaîtront à la fin du chapitre</Text>
+          <Text style={styles.mockBannerText}>Données de démonstration - disparaîtront à la fin du chapitre</Text>
         </View>
       )}
 
@@ -244,6 +249,46 @@ export default function StatsScreen({ navigation }) {
         visible={weightEntryVisible}
         onClose={() => setWeightEntryVisible(false)}
         onSaved={loadWeightHistory}
+      />
+
+      {dayDetail?.deletable ? (
+        <ConfirmModal
+          visible={!!dayDetail}
+          icon="calendar-outline"
+          title={dayDetail?.log?.name}
+          body={dayDetail?.body}
+          confirmLabel="Supprimer"
+          cancelLabel="Fermer"
+          destructive
+          onConfirm={confirmDeleteDayDetail}
+          onCancel={() => setDayDetail(null)}
+        />
+      ) : (
+        <InfoModal
+          visible={!!dayDetail}
+          icon="calendar-outline"
+          title={dayDetail?.log?.name}
+          body={dayDetail?.body}
+          closeLabel="Fermer"
+          onClose={() => setDayDetail(null)}
+        />
+      )}
+
+      <InfoModal
+        visible={!!noSessionInfo}
+        icon="calendar-outline"
+        title="Aucune séance"
+        body={noSessionInfo ? `Pas de séance le ${noSessionInfo}.` : ''}
+        onClose={() => setNoSessionInfo(null)}
+      />
+
+      <InfoModal
+        visible={!!errorInfo}
+        icon="alert-circle-outline"
+        title="Erreur"
+        body={errorInfo}
+        destructive
+        onClose={() => setErrorInfo(null)}
       />
     </SafeAreaView>
   );

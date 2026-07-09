@@ -6,6 +6,7 @@ const jwt         = require("jsonwebtoken");
 const config      = require("../config/env");
 const emailService = require("./email.service");
 const { addItemAtomic } = require("./inventory.service");
+const { containsProfanity } = require("../utils/profanityFilter");
 
 const MAX_OTP_ATTEMPTS  = 5;
 const CODE_TTL_VERIFY   = 10 * 60 * 1000; // 10 min
@@ -84,6 +85,10 @@ class AuthService {
    *    FIRST_REFERRAL, et les deux sont liés en amis "accepted" d'office.
    */
   async register(pseudo, email, password, referralCode = null) {
+    if (containsProfanity(pseudo)) {
+      throw httpError("Ce pseudo n'est pas autorisé. Choisis-en un autre.", 422, "PSEUDO_NOT_ALLOWED");
+    }
+
     const existing = await User.findOne({ email });
     if (existing) throw httpError("Un utilisateur avec cet email existe déjà.", 409, "EMAIL_TAKEN");
 
@@ -187,6 +192,82 @@ class AuthService {
       token,
       user: {
         id:    user._id,
+        pseudo: user.pseudo || user.name,
+        discriminator: user.discriminator,
+        email: user.email,
+        level: user.level,
+      },
+    };
+  }
+
+  // ── Connexion Google OAuth (Section VIII) ─────────────────────────────────
+  /**
+   * Connexion en un clic via Google : le client (app mobile) obtient un
+   * `idToken` via expo-auth-session / Google Sign-In, l'envoie ici pour
+   * vérification côté serveur (jamais confiance en un payload décodé côté
+   * client, qui pourrait être falsifié).
+   *
+   * Compte trouvé par `googleId` → connexion directe.
+   * Sinon par `email` (compte déjà créé au mot de passe) → on lie googleId à
+   * ce compte existant plutôt que d'en créer un doublon.
+   * Sinon → création d'un nouveau compte (email déjà vérifié par Google,
+   * mot de passe aléatoire jamais utilisable pour se connecter autrement).
+   */
+  async googleLogin(idToken) {
+    if (!config.googleClientId) {
+      throw httpError("Connexion Google non configurée sur ce serveur.", 501, "GOOGLE_OAUTH_NOT_CONFIGURED");
+    }
+    if (!idToken) {
+      throw httpError("idToken manquant.", 400, "GOOGLE_TOKEN_MISSING");
+    }
+
+    const { OAuth2Client } = require("google-auth-library");
+    const client = new OAuth2Client(config.googleClientId);
+
+    let payload;
+    try {
+      const ticket = await client.verifyIdToken({ idToken, audience: config.googleClientId });
+      payload = ticket.getPayload();
+    } catch (_err) {
+      throw httpError("Token Google invalide.", 401, "GOOGLE_TOKEN_INVALID");
+    }
+
+    if (!payload?.sub || !payload?.email) {
+      throw httpError("Token Google invalide.", 401, "GOOGLE_TOKEN_INVALID");
+    }
+
+    let user = await User.findOne({ googleId: payload.sub });
+
+    if (!user) {
+      user = await User.findOne({ email: payload.email.toLowerCase() });
+      if (user) {
+        user.googleId = payload.sub;
+        if (!user.isVerified) user.isVerified = true; // Google a déjà vérifié cet email
+        await user.save();
+      }
+    }
+
+    if (!user) {
+      const pseudo = (payload.name || payload.email.split("@")[0]).slice(0, 50);
+      const randomPassword = await bcrypt.hash(crypto.randomBytes(24).toString("hex"), BCRYPT_ROUNDS);
+
+      user = await User.create({
+        pseudo,
+        name: pseudo,
+        email: payload.email.toLowerCase(),
+        password: randomPassword,
+        isVerified: true,
+        googleId: payload.sub,
+        referralCode: await uniqueReferralCode(),
+        discriminator: await uniqueDiscriminator(pseudo),
+      });
+    }
+
+    const token = makeToken(user._id);
+    return {
+      token,
+      user: {
+        id: user._id,
         pseudo: user.pseudo || user.name,
         discriminator: user.discriminator,
         email: user.email,

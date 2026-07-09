@@ -33,6 +33,8 @@ const ICON_BY_ID = {
   CHEST_50:             'gift',
   CHEST_100:            'trophy',
   CHEST_200:            'diamond',
+  FIRST_MULTI_SESSION:  'people',
+  MULTI_SQUAD_FULL:     'people-circle',
 };
 
 const RARITY_BY_ID = {
@@ -61,6 +63,8 @@ const TIER_BY_ID = {
   CHEST_50:             'gold',
   CHEST_100:            'platinum',
   CHEST_200:            'diamond',
+  FIRST_MULTI_SESSION:  'silver',
+  MULTI_SQUAD_FULL:     'platinum',
 };
 
 // FRIENDSHIP_LEVEL_5 ("Lien de Sang") est la même récompense Rareté Unique

@@ -89,3 +89,14 @@ export async function simulateSearchableFriend() {
   const res = await API.post('/debug/godmode/simulate-searchable-friend');
   return res.data;
 }
+
+// ─── Vague 3 : Lobby Multi ─────────────────────────────────────────────────────
+
+// Crée un lobby Multi avec un coéquipier factice (isTestBot) et envoie une
+// vraie notification push d'invitation à l'utilisateur connecté — teste le
+// parcours complet (popup d'invitation, rejoindre, prêt, séance, bonus de
+// groupe) sans second appareil, le bot suivant automatiquement tes statuts.
+export async function simulateLobbyInvite() {
+  const res = await API.post('/debug/godmode/simulate-lobby-invite');
+  return res.data;
+}

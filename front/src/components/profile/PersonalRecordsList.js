@@ -83,7 +83,7 @@ function RecordRow({ record, isLast, onPress }) {
             {record.prEstimate1RM != null && <Text style={styles.valueSub}>1RM ~{record.prEstimate1RM}</Text>}
           </>
         ) : (
-          <Text style={styles.valueEmpty}>—</Text>
+          <Text style={styles.valueEmpty}>-</Text>
         )}
       </View>
       <Ionicons

@@ -61,8 +61,8 @@ export default function ExerciseStatsScreen({ route, navigation }) {
       >
         <View style={styles.kpisRow}>
           <Kpi label="Sessions" value={stats.totalSessions} icon="calendar-outline" />
-          <Kpi label="Poids max" value={stats.prWeight ? `${stats.prWeight} kg` : '—'} icon="trophy-outline" />
-          <Kpi label="1RM est." value={stats.prEstimate1RM ? `${stats.prEstimate1RM} kg` : '—'} icon="rocket-outline" />
+          <Kpi label="Poids max" value={stats.prWeight ? `${stats.prWeight} kg` : '-'} icon="trophy-outline" />
+          <Kpi label="1RM est." value={stats.prEstimate1RM ? `${stats.prEstimate1RM} kg` : '-'} icon="rocket-outline" />
         </View>
 
         <View style={styles.card}>
@@ -138,7 +138,7 @@ function LastSessionCard({ session }) {
                 {w > 0 ? `${w} kg` : 'PC'}
               </Text>
               <Text style={[styles.lastSetVal, { flex: 2, textAlign: 'center' }]}>
-                {r > 0 ? r : '—'}
+                {r > 0 ? r : '-'}
               </Text>
               <View style={{ width: 28, alignItems: 'center' }}>
                 <Ionicons

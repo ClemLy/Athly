@@ -482,4 +482,51 @@ describe('God Mode — outils de test Vague 1', () => {
       expect(res.statusCode).toBe(401);
     });
   });
+
+  describe('POST /api/debug/godmode/simulate-lobby-invite', () => {
+    it('✅ Crée un lobby avec un coéquipier isTestBot et renvoie lobbyId', async () => {
+      const res = await request(app)
+        .post('/api/debug/godmode/simulate-lobby-invite')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(201);
+      expect(res.body.lobbyId).toBeTruthy();
+      expect(res.body.fromPseudo).toBe('CoequipierBot');
+
+      const bot = await User.findOne({ pseudo: 'CoequipierBot' });
+      expect(bot.isTestBot).toBe(true);
+    });
+
+    it('✅ pushed: false si aucun token push enregistré (jamais d\'erreur)', async () => {
+      const res = await request(app)
+        .post('/api/debug/godmode/simulate-lobby-invite')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(201);
+      expect(res.body.pushed).toBe(false);
+    });
+
+    it('🔁 Idempotent : rejouer supprime le bot/lobby précédents avant recréation', async () => {
+      const first = await request(app)
+        .post('/api/debug/godmode/simulate-lobby-invite')
+        .set('Authorization', `Bearer ${alice.token}`);
+      const second = await request(app)
+        .post('/api/debug/godmode/simulate-lobby-invite')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(second.body.lobbyId).not.toBe(first.body.lobbyId);
+
+      const botCount = await User.countDocuments({ pseudo: 'CoequipierBot' });
+      expect(botCount).toBe(1);
+
+      const WorkoutLobby = require('../models/WorkoutLobby');
+      const oldLobby = await WorkoutLobby.findById(first.body.lobbyId);
+      expect(oldLobby).toBeNull();
+    });
+
+    it('❌ 401 sans token', async () => {
+      const res = await request(app).post('/api/debug/godmode/simulate-lobby-invite');
+      expect(res.statusCode).toBe(401);
+    });
+  });
 });

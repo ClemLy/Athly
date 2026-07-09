@@ -500,7 +500,7 @@ exports.shakeMember = async (req, res, next) => {
     });
 
     if (workoutDone) {
-      return next(createError("Ce membre a déjà validé sa séance aujourd'hui — inutile de le secouer !", 422));
+      return next(createError("Ce membre a déjà validé sa séance aujourd'hui - inutile de le secouer !", 422));
     }
 
     // Limite 1 secousse par jour civil et par cible — évite le harcèlement
@@ -509,7 +509,7 @@ exports.shakeMember = async (req, res, next) => {
       s.from.toString() === myId && s.to.toString() === memberId && s.date >= todayStart && s.date < tomorrow,
     );
     if (alreadyShakenToday) {
-      return next(createError("Tu as déjà secoué cette personne aujourd'hui — reviens demain !", 422));
+      return next(createError("Tu as déjà secoué cette personne aujourd'hui - reviens demain !", 422));
     }
 
     const target       = await User.findById(memberId).select('pseudo');
