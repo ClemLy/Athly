@@ -130,6 +130,20 @@ const ACHIEVEMENT_CATALOG = {
     category:    'social',
     hidden:      false,
   },
+  MULTI_SESSIONS_5: {
+    id:          'MULTI_SESSIONS_5',
+    name:        'Entraînement en Duo',
+    description: "Vous avez terminé 5 séances en mode Multi.",
+    category:    'social',
+    hidden:      false,
+  },
+  MULTI_SESSIONS_30: {
+    id:          'MULTI_SESSIONS_30',
+    name:        "Frères d'Armes",
+    description: "Vous avez terminé 30 séances en mode Multi.",
+    category:    'social',
+    hidden:      false,
+  },
 };
 
 // Nombre total de trophées dans le catalogue (utile pour les stats)
@@ -253,6 +267,18 @@ async function checkAndUnlockAchievements(userId) {
         memberCount: 5,
       });
       if (hasFullSquad) tryUnlock('MULTI_SQUAD_FULL');
+    }
+  }
+
+  // Trophées gradués sur le cumul de séances Multi terminées
+  // (totalMultiSessions, incrémenté dans workoutLobby.controller.js → finishLobby).
+  const MULTI_SESSION_ACHIEVEMENTS = [
+    [5,  'MULTI_SESSIONS_5'],
+    [30, 'MULTI_SESSIONS_30'],
+  ];
+  for (const [threshold, achievementId] of MULTI_SESSION_ACHIEVEMENTS) {
+    if (!unlockedIds.has(achievementId) && user.totalMultiSessions >= threshold) {
+      tryUnlock(achievementId);
     }
   }
 

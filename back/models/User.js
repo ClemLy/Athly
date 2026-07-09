@@ -149,6 +149,11 @@ const UserSchema = new mongoose.Schema(
     // cosmétique Rouge Sang Unique à 100 coffres).
     totalChestsOpened: { type: Number, default: 0, min: 0 },
 
+    // Cumul du nombre de séances Multi terminées (lobby passé 'completed',
+    // voir workoutLobby.controller.js → finishLobby) — condition des trophées
+    // gradués MULTI_SESSIONS_5 / MULTI_SESSIONS_30 (reward.controller.js).
+    totalMultiSessions: { type: Number, default: 0, min: 0 },
+
     // Cosmétiques Uniques définitivement débloqués (réclamés depuis
     // l'inventaire — voir inventory.controller.js → claimUniqueItem).
     // Clés libres du catalogue front (BorderPicker.js / profileThemes.js) :

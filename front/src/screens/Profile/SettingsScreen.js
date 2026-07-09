@@ -925,7 +925,7 @@ export default function SettingsScreen({ navigation }) {
                   </View>
                   <Text style={styles.devHint}>
                     Crée un groupe avec 3 coéquipiers factices, un par statut de Météo des
-                    séances testable (🔥 Prêt / ⚡ Actif / ✅ Validé - le 4e, 💤 En sommeil,
+                    séances testable (Prêt / Actif / Validé - le 4e, En sommeil,
                     s'obtient en ne touchant à aucun des trois). Rejouable sans doublons.
                   </Text>
                   <View style={styles.devBtnRow}>

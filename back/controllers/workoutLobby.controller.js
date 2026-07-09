@@ -317,8 +317,9 @@ exports.unreadyLobby = async (req, res, next) => {
 /**
  * Passe le statut du membre appelant à 'finished'. Dès que TOUS les membres
  * ont fini, le lobby passe 'completed', le bonus XP Multi est figé
- * (`xpBonusPercent`), et les trophées sociaux Multi sont vérifiés pour
- * chaque membre (FIRST_MULTI_SESSION, MULTI_SQUAD_FULL à 5 joueurs).
+ * (`xpBonusPercent`), le compteur totalMultiSessions de chaque membre est
+ * incrémenté, et les trophées sociaux Multi sont vérifiés (FIRST_MULTI_SESSION,
+ * MULTI_SQUAD_FULL à 5 joueurs, MULTI_SESSIONS_5, MULTI_SESSIONS_30).
  */
 exports.finishLobby = async (req, res, next) => {
   try {
@@ -359,6 +360,14 @@ exports.finishLobby = async (req, res, next) => {
     if (allFinished) {
       // Best-effort : les trophées ne doivent jamais faire échouer la clôture.
       try {
+        // Incrémente le compteur AVANT de vérifier les trophées gradués
+        // (MULTI_SESSIONS_5 / MULTI_SESSIONS_30), sinon le seuil serait
+        // évalué sur l'ancienne valeur.
+        await User.updateMany(
+          { _id: { $in: lobby.members.map((m) => m.user) } },
+          { $inc: { totalMultiSessions: 1 } },
+        );
+
         const results = await Promise.all(
           lobby.members.map((m) => checkAndUnlockAchievements(m.user.toString())),
         );

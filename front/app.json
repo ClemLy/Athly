@@ -3,6 +3,7 @@
     "name": "Athly",
     "slug": "athly-app",
     "version": "1.0.0",
+    "scheme": "athly",
     "orientation": "portrait",
     "icon": "./assets/favicon.png",
     "userInterfaceStyle": "light",
