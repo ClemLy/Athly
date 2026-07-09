@@ -45,7 +45,7 @@ export default class ErrorBoundary extends React.Component {
         </View>
         <Text style={styles.title}>Oups, une erreur est survenue</Text>
         <Text style={styles.body}>
-          Pas de panique — tes données sont en sécurité.{'\n'}Réessaie, ça devrait repartir.
+          Pas de panique - tes données sont en sécurité.{'\n'}Réessaie, ça devrait repartir.
         </Text>
         <TouchableOpacity style={styles.btn} onPress={this.handleRetry} activeOpacity={0.85}>
           <Text style={styles.btnTxt}>Recharger l'application</Text>

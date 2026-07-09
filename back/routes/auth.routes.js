@@ -18,6 +18,12 @@ router.post("/login",
   ctrl.loginUser
 );
 
+// POST /api/auth/google — connexion en un clic (idToken vérifié côté serveur)
+router.post("/google",
+  validate(schemas.googleLogin),
+  ctrl.googleLogin
+);
+
 // POST /api/auth/verify-email
 router.post("/verify-email",
   validate(schemas.verifyEmail),

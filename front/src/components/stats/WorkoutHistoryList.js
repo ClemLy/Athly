@@ -1,10 +1,11 @@
 import React, { useState, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Animated, Alert, Platform, UIManager,
+  Animated, Platform, UIManager,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
+import ConfirmModal from '../common/ConfirmModal';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -27,7 +28,7 @@ function SetRow({ set, index }) {
       <Text style={styles.setUnit}> reps</Text>
       <Text style={styles.setX}> × </Text>
       <Text style={styles.setWeight}>
-        {set.weight > 0 ? `${set.weight} kg` : '—'}
+        {set.weight > 0 ? `${set.weight} kg` : '-'}
       </Text>
     </View>
   );
@@ -65,6 +66,7 @@ function ExerciseBlock({ exercise, isLast }) {
 function SessionCard({ log, onDelete }) {
   const [expanded,      setExpanded]      = useState(false);
   const [contentVisible, setContentVisible] = useState(false);
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
   const anim = useRef(new Animated.Value(0)).current;
 
   const toggle = useCallback(() => {
@@ -80,15 +82,10 @@ function SessionCard({ log, onDelete }) {
     });
   }, [expanded, anim]);
 
-  const handleDelete = useCallback(() => {
-    Alert.alert(
-      'Supprimer la séance',
-      `Supprimer "${log.name}" de l'historique ? Cette action est irréversible.`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Supprimer', style: 'destructive', onPress: () => onDelete(log.id) },
-      ],
-    );
+  const handleDelete = useCallback(() => setDeleteConfirmVisible(true), []);
+  const confirmDelete = useCallback(() => {
+    setDeleteConfirmVisible(false);
+    onDelete(log.id);
   }, [log, onDelete]);
 
   const exercises = useMemo(
@@ -104,7 +101,7 @@ function SessionCard({ log, onDelete }) {
         weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
       });
     } catch {
-      return log.date?.slice(0, 10) ?? '—';
+      return log.date?.slice(0, 10) ?? '-';
     }
   }, [log.date]);
 
@@ -177,6 +174,17 @@ function SessionCard({ log, onDelete }) {
           </View>
         )}
       </Animated.View>
+
+      <ConfirmModal
+        visible={deleteConfirmVisible}
+        icon="trash-outline"
+        title="Supprimer la séance"
+        body={`Supprimer "${log.name}" de l'historique ? Cette action est irréversible.`}
+        confirmLabel="Supprimer"
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirmVisible(false)}
+      />
     </View>
   );
 }

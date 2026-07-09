@@ -179,7 +179,7 @@ export default function HomeScreen({ navigation }) {
       {isTutorialDashboard && (
         <View style={styles.mockBanner}>
           <Ionicons name="flask-outline" size={12} color="#FFD700" />
-          <Text style={styles.mockBannerText}>Données de démonstration — disparaîtront à la fin du chapitre</Text>
+          <Text style={styles.mockBannerText}>Données de démonstration - disparaîtront à la fin du chapitre</Text>
         </View>
       )}
       <ScrollView

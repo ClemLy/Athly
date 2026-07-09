@@ -441,7 +441,7 @@ export default function WorkoutRecapModal({
                 </Text>
                 <View style={styles.capBadge}>
                   <Ionicons name="time-outline" size={13} color={Colors.textMuted} style={{ marginRight: 5 }} />
-                  <Text style={styles.capText}>Limite quotidienne atteinte — reviens demain !</Text>
+                  <Text style={styles.capText}>Limite quotidienne atteinte - reviens demain !</Text>
                 </View>
               </>
             ) : (
@@ -530,7 +530,7 @@ export default function WorkoutRecapModal({
                 <View key={`pr-${i}`} style={styles.prRow}>
                   <Text style={styles.prName} numberOfLines={1}>{pr.name}</Text>
                   <Text style={styles.prValues}>
-                    <Text style={styles.prOld}>{pr.oldPR || '—'} kg</Text>
+                    <Text style={styles.prOld}>{pr.oldPR || '-'} kg</Text>
                     <Text style={styles.prArrow}>  →  </Text>
                     <Text style={styles.prNew}>{pr.newPR} kg</Text>
                   </Text>

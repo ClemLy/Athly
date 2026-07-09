@@ -29,4 +29,7 @@ router.post('/godmode/simulate-shake-self',     debug.simulateShakeSelf);
 // ── God Mode : Vague 2 (tag Discord, ajout d'ami) ────────────────────────────
 router.post('/godmode/simulate-searchable-friend', debug.simulateSearchableFriend);
 
+// ── God Mode : Vague 3 (Lobby Multi) ─────────────────────────────────────────
+router.post('/godmode/simulate-lobby-invite',   debug.simulateLobbyInvite);
+
 module.exports = router;

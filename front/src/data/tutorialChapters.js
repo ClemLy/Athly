@@ -94,7 +94,7 @@ export const TUTORIAL_CHAPTERS = [
       {
         key: 'workout_anticheat',
         title: 'Séances Sérieuses Uniquement',
-        body: "Athly récompense l'effort réel : une séance de moins de 5 minutes ne rapporte aucun XP. Tu peux quand même l'enregistrer — mais seules les séances complètes comptent pour ta streak.",
+        body: "Athly récompense l'effort réel : une séance de moins de 5 minutes ne rapporte aucun XP. Tu peux quand même l'enregistrer - mais seules les séances complètes comptent pour ta streak.",
         targetKey: null, position: 'center', scrollY: null,
       },
       {
@@ -252,7 +252,7 @@ export const TUTORIAL_CHAPTERS = [
       {
         key: 'settings_done',
         title: 'Tu es prêt, Athlète !',
-        body: "Tu maîtrises désormais Athly. Lance-toi — chaque set te rapproche du sommet. Bonne chance !",
+        body: "Tu maîtrises désormais Athly. Lance-toi - chaque set te rapproche du sommet. Bonne chance !",
         targetKey: null, position: 'center', scrollY: null,
         isLast: true,
       },

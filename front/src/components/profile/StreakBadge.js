@@ -64,7 +64,7 @@ function StreakBonusModal({ visible, streak, onClose }) {
                 </View>
                 <Text style={ms.progressHint}>
                   <Text style={{ color: nextMilestone.color || Colors.primary, fontWeight: '700' }}>{daysToNext} jour{daysToNext > 1 ? 's' : ''}</Text>
-                  {' '}avant ×{nextMilestone.multiplier} — {nextMilestone.label}
+                  {' '}avant ×{nextMilestone.multiplier} - {nextMilestone.label}
                 </Text>
               </>
             )}

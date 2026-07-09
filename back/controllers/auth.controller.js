@@ -30,6 +30,17 @@ exports.loginUser = async (req, res, next) => {
   }
 };
 
+// ── Connexion Google OAuth (Section VIII) ─────────────────────────────────────
+exports.googleLogin = async (req, res, next) => {
+  try {
+    const { idToken } = req.body;
+    const data = await authService.googleLogin(idToken);
+    res.status(200).json({ success: true, message: "Connexion Google réussie.", ...data });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ── Vérification email ────────────────────────────────────────────────────────
 exports.verifyEmailUser = async (req, res, next) => {
   try {

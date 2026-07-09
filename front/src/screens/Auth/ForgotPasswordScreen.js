@@ -388,7 +388,7 @@ export default function ForgotPasswordScreen({ navigation }) {
           </TouchableOpacity>
 
           {/* ══════════════════════════════════════════════════
-              ÉTAPE 1 — Saisie de l'email
+              ÉTAPE 1 - Saisie de l'email
           ══════════════════════════════════════════════════ */}
           {step === 1 && (
             <>
@@ -438,7 +438,7 @@ export default function ForgotPasswordScreen({ navigation }) {
           )}
 
           {/* ══════════════════════════════════════════════════
-              ÉTAPE 2 — Code + Nouveau mot de passe
+              ÉTAPE 2 - Code + Nouveau mot de passe
           ══════════════════════════════════════════════════ */}
           {step === 2 && (
             <>

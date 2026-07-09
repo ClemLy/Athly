@@ -56,6 +56,20 @@ const UserSchema = new mongoose.Schema(
     // backfillés lazily — voir user.service.js → getUserProfile) : l'index
     // unique ci-dessous n'agit que sur les documents qui en ont déjà un.
     discriminator: { type: String, match: /^\d{4}$/ },
+
+    // ── Google OAuth (Section VIII) ───────────────────────────────────────────
+    // `sub` (identifiant unique Google) du compte lié, si connecté via
+    // "Se connecter avec Google" — voir auth.service.js → googleLogin.
+    // null pour tous les comptes email/mot de passe classiques.
+    googleId: { type: String, unique: true, sparse: true },
+
+    // ── Compte de test God Mode (Section VII) ─────────────────────────────────
+    // true uniquement pour les coéquipiers factices créés par
+    // simulateLobbyInvite (debug.controller.js) — leur statut de Lobby Multi
+    // est auto-progressé en miroir du vôtre (voir workoutLobby.controller.js),
+    // pour tester le flux complet en solo sans second appareil.
+    isTestBot: { type: Boolean, default: false },
+
     email: {
       type:      String,
       required:  [true, "L'e-mail est obligatoire"],

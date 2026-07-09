@@ -228,7 +228,7 @@ export default function EditProfileScreen({ navigation }) {
               style={styles.inlineInput}
               value={formData.poids}
               onChangeText={(v) => set('poids', v)}
-              placeholder="—"
+              placeholder="-"
               placeholderTextColor={Colors.textMuted}
               selectionColor={Colors.primary}
               keyboardType="decimal-pad"
@@ -239,7 +239,7 @@ export default function EditProfileScreen({ navigation }) {
               style={styles.inlineInput}
               value={formData.poidsCible}
               onChangeText={(v) => set('poidsCible', v)}
-              placeholder="—"
+              placeholder="-"
               placeholderTextColor={Colors.textMuted}
               selectionColor={Colors.primary}
               keyboardType="decimal-pad"
@@ -250,7 +250,7 @@ export default function EditProfileScreen({ navigation }) {
               style={styles.inlineInput}
               value={formData.taille}
               onChangeText={(v) => set('taille', v)}
-              placeholder="—"
+              placeholder="-"
               placeholderTextColor={Colors.textMuted}
               selectionColor={Colors.primary}
               keyboardType="number-pad"

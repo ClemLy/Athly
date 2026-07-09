@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +20,7 @@ import { useCustomExercises } from '../../context/CustomExercisesContext';
 import { useWorkoutInProgress } from '../../context/WorkoutInProgressContext';
 import { useSavedWorkouts } from '../../context/SavedWorkoutsContext';
 import { generateWorkout } from '../../data/exerciseCatalog';
+import InfoModal from '../../components/common/InfoModal';
 
 const DURATIONS = [
   { id: 30, label: '30 min' },
@@ -41,6 +41,7 @@ export default function WorkoutBuilderScreen({ navigation }) {
   const [duration, setDuration] = useState(60);
   const [regenKey, setRegenKey] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [infoModal, setInfoModal] = useState(null); // { title, body }
 
   const toggleArr = useCallback((arr, value) => (
     arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value]
@@ -78,13 +79,12 @@ export default function WorkoutBuilderScreen({ navigation }) {
         description: preview.description,
         exercises: preview.exercises,
       });
-      Alert.alert(
-        'Sauvegardé',
-        `"${preview.name}" est dans tes séances. Retrouve-la dans la page Séances.`,
-        [{ text: 'OK' }],
-      );
+      setInfoModal({
+        title: 'Sauvegardé',
+        body: `"${preview.name}" est dans tes séances. Retrouve-la dans la page Séances.`,
+      });
     } catch (e) {
-      Alert.alert('Erreur', e && e.message ? e.message : 'Sauvegarde impossible');
+      setInfoModal({ title: 'Erreur', body: e && e.message ? e.message : 'Sauvegarde impossible' });
     } finally {
       setSaving(false);
     }
@@ -246,6 +246,15 @@ export default function WorkoutBuilderScreen({ navigation }) {
           <Text style={styles.launchBtnText}>Lancer la séance</Text>
         </TouchableOpacity>
       </View>
+
+      <InfoModal
+        visible={!!infoModal}
+        icon={infoModal?.title === 'Erreur' ? 'alert-circle-outline' : 'checkmark-circle-outline'}
+        title={infoModal?.title}
+        body={infoModal?.body}
+        destructive={infoModal?.title === 'Erreur'}
+        onClose={() => setInfoModal(null)}
+      />
     </SafeAreaView>
   );
 }

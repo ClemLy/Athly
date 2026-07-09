@@ -18,16 +18,16 @@ const T = (id, category, icon, label, condition, epicDesc, color, gradientColors
 const LOCAL_TROPHY_LIST = [
   // ── HÉRITAGE (6) ──
   T('ignition', 'heritage', 'flame', 'Ignition', '1ère séance',
-    "La flamme s'allume. Votre premier pas dans l'arène — et rien ne sera jamais plus pareil.",
+    "La flamme s'allume. Votre premier pas dans l'arène - et rien ne sera jamais plus pareil.",
     '#FE7439', ['#FF9A5C', '#FE7439', '#C44A10'], 'bronze'),
   T('promise', 'heritage', 'medal', 'Promesse', 'Niveau 10',
-    "Le novice est mort. Vous avez prouvé que vous êtes là pour durer — la promesse est tenue.",
+    "Le novice est mort. Vous avez prouvé que vous êtes là pour durer - la promesse est tenue.",
     '#FFD700', ['#FFE566', '#FFD700', '#B8860B'], 'gold'),
   T('apprenti', 'heritage', 'school', 'Apprenti', 'Niveau 25',
-    "Les bases sont posées. Chaque set vous a sculpté — vous n'êtes plus un débutant, vous êtes un apprenti.",
+    "Les bases sont posées. Chaque set vous a sculpté - vous n'êtes plus un débutant, vous êtes un apprenti.",
     '#34D399', ['#6EE7B7', '#34D399', '#059669'], 'silver'),
   T('centurion', 'heritage', 'trophy', 'Centurion', '50 séances',
-    "Votre volonté est d'acier. 50 combats menés avec honneur — les légions vous saluent.",
+    "Votre volonté est d'acier. 50 combats menés avec honneur - les légions vous saluent.",
     '#6E6AF0', ['#9B97FF', '#6E6AF0', '#3D3A9E'], 'platinum'),
   T('veteran', 'heritage', 'shield-checkmark', 'Vétéran', 'Niveau 75',
     "Trois quarts du chemin vers le sommet. Vous portez les cicatrices de centaines de batailles.",
@@ -61,13 +61,13 @@ const LOCAL_TROPHY_LIST = [
 
   // ── EXPLORATION (6) ──
   T('polyvalent', 'exploration', 'grid', 'Polyvalent', '5 groupes musculaires',
-    "Pecs, dos, jambes, épaules, bras — vous ne laissez aucun muscle au repos.",
+    "Pecs, dos, jambes, épaules, bras - vous ne laissez aucun muscle au repos.",
     '#22C55E', ['#4ADE80', '#22C55E', '#15803D'], 'silver'),
   T('marathonien', 'exploration', 'time', 'Marathonien', 'Séance ≥ 60 min',
     "Une heure dans l'arène. Quand les autres partaient après 30 minutes, vous étiez encore là.",
     '#0EA5E9', ['#38BDF8', '#0EA5E9', '#0369A1'], 'bronze'),
   T('demi_legende', 'exploration', 'rocket', 'Demi-Légende', 'Niveau 50',
-    "La moitié du chemin vers le sommet. Peu y arrivent — vous y êtes.",
+    "La moitié du chemin vers le sommet. Peu y arrivent - vous y êtes.",
     '#3B82F6', ['#60A5FA', '#3B82F6', '#1D4ED8'], 'gold'),
   T('xp_millionaire', 'exploration', 'infinite', 'XP Millionnaire', '1 000 000 XP cumulés',
     "Un million de points d'expérience. Une vie entière de sueur, de fer et de détermination.",
@@ -102,12 +102,12 @@ const LOCAL_TROPHY_LIST = [
     "Minuit passé. Les loups chassent quand le troupeau dort.",
     '#4338CA', ['#6366F1', '#4338CA', '#1E1B4B'], 'silver', true),
   T('athly_god', 'secret', 'planet', 'ATHLY GOD', 'Niveau 200',
-    "Le sommet absolu. Vous n'êtes plus un athlète — vous êtes une légende vivante. Le trône vous appartient.",
+    "Le sommet absolu. Vous n'êtes plus un athlète - vous êtes une légende vivante. Le trône vous appartient.",
     '#FFD700', ['#FDE68A', '#FFD700', '#92400E'], 'diamond', true),
 
   // ── CORPS (5) ──
   T('corps_bronze', 'corps', 'fitness', 'Initié Poids Corps', '50 sets complétés',
-    "Cinquante séries avec votre propre corps. Pas de barres, pas de charges — juste vous contre la gravité.",
+    "Cinquante séries avec votre propre corps. Pas de barres, pas de charges - juste vous contre la gravité.",
     '#CD7F32', ['#E8A060', '#CD7F32', '#6B3A1A'], 'bronze'),
   T('corps_silver', 'corps', 'walk', 'Guerrier Poids Corps', '150 sets complétés',
     "Cent cinquante séries. Votre poids corporel est devenu votre outil de sculpture le plus précis.",
@@ -124,7 +124,7 @@ const LOCAL_TROPHY_LIST = [
 
   // ── RÉGULARITÉ (5) ──
   T('reg_3m', 'regularite', 'calendar-outline', 'Constance 3 Mois', 'Séances sur 3 mois',
-    "Trois mois d'entraînement. Pas une mode — une véritable habitude.",
+    "Trois mois d'entraînement. Pas une mode - une véritable habitude.",
     '#10B981', ['#34D399', '#10B981', '#065F46'], 'bronze'),
   T('reg_6m', 'regularite', 'time-outline', 'Constance 6 Mois', 'Séances sur 6 mois',
     "Six mois. La moitié d'une année dédiée au progrès.",
@@ -144,17 +144,17 @@ const LOCAL_TROPHY_LIST = [
     "Les grandes épopées ne se vivent pas seules. Votre premier compagnon d'armes vous attend.",
     '#EC4899', ['#F472B6', '#EC4899', '#9D174D'], 'bronze'),
   T('mentor', 'social', 'people-circle', 'Mentor', 'Inspirer 5 amis',
-    "Vous avez allumé la flamme chez cinq autres — vous êtes plus qu'un athlète, vous êtes un mentor.",
+    "Vous avez allumé la flamme chez cinq autres - vous êtes plus qu'un athlète, vous êtes un mentor.",
     '#8B5CF6', ['#A78BFA', '#8B5CF6', '#4C1D95'], 'gold'),
 
   // ── SPÉCIAL (1) ──
   T('athly_birthday', 'special', 'gift', 'Anniversaire Athly', 'Séance le 13 mai',
-    "Le jour où Athly est né, vous étiez là — à suer, à pousser, à vous dépasser.",
+    "Le jour où Athly est né, vous étiez là - à suer, à pousser, à vous dépasser.",
     '#FE7439', ['#FF9A5C', '#FE7439', '#C44A10'], 'gold'),
 
   // ── ULTIME (1) ──
   T('souverain_absolu', 'ultime', 'infinite', 'Souverain Absolu', 'Tous les trophées débloqués',
-    "Il n'existe pas de plus grand accomplissement. Vous avez tout conquis, tout maîtrisé, tout surpassé. L'empire d'Athly vous appartient — et l'univers entier s'incline devant vous.",
+    "Il n'existe pas de plus grand accomplissement. Vous avez tout conquis, tout maîtrisé, tout surpassé. L'empire d'Athly vous appartient - et l'univers entier s'incline devant vous.",
     '#FFD700', ['#FFFACD', '#FFD700', '#FF8C00', '#C44A10'], 'diamond'),
 ];
 

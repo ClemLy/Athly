@@ -13,9 +13,9 @@ export default function PRCard({ prWeight = 0, prVolume = 0, prEstimate1RM = 0, 
     <View style={styles.card}>
       <Text style={styles.title}>Records personnels</Text>
       <View style={styles.statsGrid}>
-        <Stat icon="trophy" label="Poids max" value={hasData ? `${prWeight} kg` : '—'} />
-        <Stat icon="barbell" label="Volume max" value={hasData ? `${Math.round(prVolume)} kg` : '—'} />
-        <Stat icon="rocket" label="1RM estimé" value={hasData ? `${prEstimate1RM} kg` : '—'} />
+        <Stat icon="trophy" label="Poids max" value={hasData ? `${prWeight} kg` : '-'} />
+        <Stat icon="barbell" label="Volume max" value={hasData ? `${Math.round(prVolume)} kg` : '-'} />
+        <Stat icon="rocket" label="1RM estimé" value={hasData ? `${prEstimate1RM} kg` : '-'} />
       </View>
 
       <View style={styles.divider} />

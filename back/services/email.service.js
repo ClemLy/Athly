@@ -75,7 +75,7 @@ function baseTemplate(title, bodyHtml) {
             <td align="center" style="padding-top:28px;">
               <p style="margin:0;font-size:12px;color:#4A4F5C;line-height:1.6;">
                 Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.<br/>
-                © 2026 Athly — Tous droits réservés.
+                © 2026 Athly - Tous droits réservés.
               </p>
             </td>
           </tr>

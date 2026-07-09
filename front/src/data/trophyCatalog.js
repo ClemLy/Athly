@@ -54,19 +54,19 @@ export function weeklyConsecutive(logs, weeks) {
 export const TROPHY_CATALOG = [
   // ─── HÉRITAGE (6) ──────────────────────────────────────────────────────────
   { id: 'ignition',   category: 'heritage', icon: 'flame',            label: 'Ignition',          condition: '1ère séance',
-    epicDesc: "La flamme s'allume. Votre premier pas dans l'arène — et rien ne sera jamais plus pareil.",
+    epicDesc: "La flamme s'allume. Votre premier pas dans l'arène - et rien ne sera jamais plus pareil.",
     color: '#FE7439', gradientColors: ['#FF9A5C','#FE7439','#C44A10'], tier: 'bronze',
     check: (l, s) => s >= 1 },
   { id: 'promise',    category: 'heritage', icon: 'medal',            label: 'Promesse',           condition: 'Niveau 10',
-    epicDesc: "Le novice est mort. Vous avez prouvé que vous êtes là pour durer — la promesse est tenue.",
+    epicDesc: "Le novice est mort. Vous avez prouvé que vous êtes là pour durer - la promesse est tenue.",
     color: '#FFD700', gradientColors: ['#FFE566','#FFD700','#B8860B'], tier: 'gold',
     check: (l) => l >= 10 },
   { id: 'apprenti',   category: 'heritage', icon: 'school',           label: 'Apprenti',           condition: 'Niveau 25',
-    epicDesc: "Les bases sont posées. Chaque set vous a sculpté — vous n'êtes plus un débutant, vous êtes un apprenti.",
+    epicDesc: "Les bases sont posées. Chaque set vous a sculpté - vous n'êtes plus un débutant, vous êtes un apprenti.",
     color: '#34D399', gradientColors: ['#6EE7B7','#34D399','#059669'], tier: 'silver',
     check: (l) => l >= 25 },
   { id: 'centurion',  category: 'heritage', icon: 'trophy',           label: 'Centurion',          condition: '50 séances',
-    epicDesc: "Votre volonté est d'acier. 50 combats menés avec honneur — les légions vous saluent.",
+    epicDesc: "Votre volonté est d'acier. 50 combats menés avec honneur - les légions vous saluent.",
     color: '#6E6AF0', gradientColors: ['#9B97FF','#6E6AF0','#3D3A9E'], tier: 'platinum',
     check: (l, s) => s >= 50 },
   { id: 'veteran',    category: 'heritage', icon: 'shield-checkmark', label: 'Vétéran',            condition: 'Niveau 75',
@@ -110,7 +110,7 @@ export const TROPHY_CATALOG = [
 
   // ─── EXPLORATION (6) ───────────────────────────────────────────────────────
   { id: 'polyvalent',    category: 'exploration', icon: 'grid',         label: 'Polyvalent',      condition: '5 groupes musculaires',
-    epicDesc: "Pecs, dos, jambes, épaules, bras — vous ne laissez aucun muscle au repos.",
+    epicDesc: "Pecs, dos, jambes, épaules, bras - vous ne laissez aucun muscle au repos.",
     color: '#22C55E', gradientColors: ['#4ADE80','#22C55E','#15803D'], tier: 'silver',
     check: (l, s, logs) => new Set(logs.flatMap(log => Object.keys(log.muscleDistribution || {}))).size >= 5 },
   { id: 'marathonien',   category: 'exploration', icon: 'time',         label: 'Marathonien',     condition: 'Séance ≥ 60 min',
@@ -118,7 +118,7 @@ export const TROPHY_CATALOG = [
     color: '#0EA5E9', gradientColors: ['#38BDF8','#0EA5E9','#0369A1'], tier: 'bronze',
     check: (l, s, logs) => logs.some(log => (Number(log.durationSeconds) || 0) >= 3600) },
   { id: 'demi_legende',  category: 'exploration', icon: 'rocket',       label: 'Demi-Légende',    condition: 'Niveau 50',
-    epicDesc: "La moitié du chemin vers le sommet. Peu y arrivent — vous y êtes.",
+    epicDesc: "La moitié du chemin vers le sommet. Peu y arrivent - vous y êtes.",
     color: '#3B82F6', gradientColors: ['#60A5FA','#3B82F6','#1D4ED8'], tier: 'gold',
     check: (l) => l >= 50 },
   { id: 'xp_millionaire', category: 'exploration', icon: 'infinite',    label: 'XP Millionnaire', condition: '1 000 000 XP cumulés',
@@ -168,13 +168,13 @@ export const TROPHY_CATALOG = [
     color: '#4338CA', gradientColors: ['#6366F1','#4338CA','#1E1B4B'], tier: 'silver',
     check: (l, s, logs) => logs.some(log => { if (!log.date) return false; return new Date(log.date).getHours() === 0; }) },
   { id: 'athly_god',   category: 'secret', icon: 'planet',         label: 'ATHLY GOD',          condition: 'Niveau 200',
-    epicDesc: "Le sommet absolu. Vous n'êtes plus un athlète — vous êtes une légende vivante. Le trône vous appartient.",
+    epicDesc: "Le sommet absolu. Vous n'êtes plus un athlète - vous êtes une légende vivante. Le trône vous appartient.",
     color: '#FFD700', gradientColors: ['#FDE68A','#FFD700','#92400E'], tier: 'diamond',
     check: (l) => l >= 200 },
 
   // ─── CORPS (5) ─────────────────────────────────────────────────────────────
   { id: 'corps_bronze',   category: 'corps', icon: 'fitness',      label: 'Initié Poids Corps',  condition: '50 sets complétés',
-    epicDesc: "Cinquante séries avec votre propre corps. Pas de barres, pas de charges — juste vous contre la gravité.",
+    epicDesc: "Cinquante séries avec votre propre corps. Pas de barres, pas de charges - juste vous contre la gravité.",
     color: '#CD7F32', gradientColors: ['#E8A060','#CD7F32','#6B3A1A'], tier: 'bronze',
     check: (l, s, logs) => logs.reduce((sum, log) => sum + (Number(log.setsCompleted) || 0), 0) >= 50 },
   { id: 'corps_silver',   category: 'corps', icon: 'walk',         label: 'Guerrier Poids Corps', condition: '150 sets complétés',
@@ -196,7 +196,7 @@ export const TROPHY_CATALOG = [
 
   // ─── RÉGULARITÉ (5) ────────────────────────────────────────────────────────
   { id: 'reg_3m',         category: 'regularite', icon: 'calendar-outline', label: 'Constance 3 Mois',   condition: 'Séances sur 3 mois',
-    epicDesc: "Trois mois d'entraînement. Pas une mode — une véritable habitude.",
+    epicDesc: "Trois mois d'entraînement. Pas une mode - une véritable habitude.",
     color: '#10B981', gradientColors: ['#34D399','#10B981','#065F46'], tier: 'bronze',
     check: (l, s, logs) => daysSpanned(logs) >= 90 },
   { id: 'reg_6m',         category: 'regularite', icon: 'time-outline',     label: 'Constance 6 Mois',   condition: 'Séances sur 6 mois',
@@ -222,13 +222,13 @@ export const TROPHY_CATALOG = [
     color: '#EC4899', gradientColors: ['#F472B6','#EC4899','#9D174D'], tier: 'bronze',
     check: () => false },
   { id: 'mentor',        category: 'social', icon: 'people-circle', label: 'Mentor',              condition: 'Inspirer 5 amis',
-    epicDesc: "Vous avez allumé la flamme chez cinq autres — vous êtes plus qu'un athlète, vous êtes un mentor.",
+    epicDesc: "Vous avez allumé la flamme chez cinq autres - vous êtes plus qu'un athlète, vous êtes un mentor.",
     color: '#8B5CF6', gradientColors: ['#A78BFA','#8B5CF6','#4C1D95'], tier: 'gold',
     check: () => false },
 
   // ─── SPÉCIAL (1) ───────────────────────────────────────────────────────────
   { id: 'athly_birthday', category: 'special', icon: 'gift',        label: 'Anniversaire Athly',  condition: 'Séance le 13 mai',
-    epicDesc: "Le jour où Athly est né, vous étiez là — à suer, à pousser, à vous dépasser.",
+    epicDesc: "Le jour où Athly est né, vous étiez là - à suer, à pousser, à vous dépasser.",
     color: '#FE7439', gradientColors: ['#FF9A5C','#FE7439','#C44A10'], tier: 'gold',
     check: (l, s, logs) => logs.some(log => {
       if (!log.date) return false;
@@ -245,7 +245,7 @@ export const ULTIMATE_TROPHY = {
   icon: 'infinite',
   label: 'Souverain Absolu',
   condition: 'Tous les trophées débloqués',
-  epicDesc: "Il n'existe pas de plus grand accomplissement. Vous avez tout conquis, tout maîtrisé, tout surpassé. L'empire d'Athly vous appartient — et l'univers entier s'incline devant vous.",
+  epicDesc: "Il n'existe pas de plus grand accomplissement. Vous avez tout conquis, tout maîtrisé, tout surpassé. L'empire d'Athly vous appartient - et l'univers entier s'incline devant vous.",
   color: '#FFD700',
   gradientColors: ['#FFFACD', '#FFD700', '#FF8C00', '#C44A10'],
   tier: 'diamond',

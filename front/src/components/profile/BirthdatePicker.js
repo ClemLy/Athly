@@ -78,7 +78,7 @@ export default function BirthdatePicker({ value, onConfirm }) {
   const formattedValue = value
     ? `${pad2(value.getUTCDate())}/${pad2(value.getUTCMonth() + 1)}/${value.getUTCFullYear()}`
     : null;
-  const formattedPending = canContinue ? `${pad2(day)}/${pad2(month + 1)}/${year}` : '—';
+  const formattedPending = canContinue ? `${pad2(day)}/${pad2(month + 1)}/${year}` : '-';
 
   return (
     <>

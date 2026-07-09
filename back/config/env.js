@@ -15,6 +15,12 @@ const config = {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
+
+  // ── Google OAuth (Section VIII) ─────────────────────────────────────────────
+  // Non requis pour démarrer le serveur (contrairement à mongoUri/jwtSecret) :
+  // tant que la variable n'est pas définie, /api/auth/google répond 501
+  // "non configuré" au lieu de planter tout le serveur au démarrage.
+  googleClientId: process.env.GOOGLE_CLIENT_ID || null,
 };
 
 if (!config.mongoUri) {

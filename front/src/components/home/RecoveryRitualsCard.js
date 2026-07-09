@@ -48,7 +48,7 @@ Les 5 points clés d'un bon squat :
 
 2. Descends jusqu'aux cuisses parallèles au sol minimum. Plus profond = plus de fessiers, moins de contrainte sur les genoux.
 
-3. Garde le dos neutre — ni trop arqué, ni trop rond. Imagine une barre de fer sur ta colonne.
+3. Garde le dos neutre - ni trop arqué, ni trop rond. Imagine une barre de fer sur ta colonne.
 
 4. Pousse le sol vers le bas au retour, comme si tu voulais écarter le plancher avec tes pieds. Ça active les fessiers et stabilise les genoux.
 
@@ -58,11 +58,11 @@ Erreur la plus commune : les genoux qui rentrent vers l'intérieur. Si c'est ton
   },
   {
     title: 'Manger après l\'effort : ce qui compte vraiment',
-    content: `La "fenêtre anabolique" — cette idée qu'il faut absolument manger dans les 30 minutes après l'effort — est largement exagérée. Si tu as bien mangé 2-3h avant ta séance, cette fenêtre s'étend à 4-6h après l'entraînement.
+    content: `La "fenêtre anabolique" - cette idée qu'il faut absolument manger dans les 30 minutes après l'effort - est largement exagérée. Si tu as bien mangé 2-3h avant ta séance, cette fenêtre s'étend à 4-6h après l'entraînement.
 
 Ce qui compte vraiment après l'effort :
 
-Protéines : 20 à 40g pour relancer la synthèse protéique. Ton corps n'utilise pas plus de 40g à la fois — inutile d'en avaler 80g.
+Protéines : 20 à 40g pour relancer la synthèse protéique. Ton corps n'utilise pas plus de 40g à la fois - inutile d'en avaler 80g.
 
 Glucides : après un effort intense, ton stock de glycogène est épuisé. 1 à 1.5g par kg de poids corporel aide à le reconstituer rapidement (riz, patate douce, fruits).
 
