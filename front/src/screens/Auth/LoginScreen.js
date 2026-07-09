@@ -31,7 +31,7 @@ function FadeLoader() {
 
 export default function LoginScreen({ navigation }) {
   const { signIn } = useAuth();
-  const { isConfigured: googleConfigured, idToken, promptAsync } = useGoogleAuth();
+  const { isConfigured: googleConfigured, request: googleRequest, idToken, promptAsync } = useGoogleAuth();
 
   const [email, setEmail]               = useState('');
   const [password, setPassword]         = useState('');
@@ -205,7 +205,7 @@ export default function LoginScreen({ navigation }) {
             <TouchableOpacity
               style={s.googleBtn}
               onPress={handleGoogleLogin}
-              disabled={googleLoading}
+              disabled={googleLoading || !googleRequest}
               activeOpacity={0.82}
             >
               {googleLoading

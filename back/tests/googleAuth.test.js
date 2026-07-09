@@ -24,12 +24,12 @@ describe('POST /api/auth/google — connexion Google OAuth (Section VIII)', () =
     if (mongoose.connection.readyState === 0) {
       await mongoose.connect(process.env.MONGO_URI);
     }
-    originalClientId = config.googleClientId;
-    config.googleClientId = 'test-client-id.apps.googleusercontent.com';
+    originalClientId = config.googleClientIds;
+    config.googleClientIds = ['test-client-id.apps.googleusercontent.com'];
   });
 
   afterAll(async () => {
-    config.googleClientId = originalClientId;
+    config.googleClientIds = originalClientId;
     await User.deleteMany({});
     await mongoose.connection.close();
   });
@@ -101,10 +101,10 @@ describe('POST /api/auth/google — connexion Google OAuth (Section VIII)', () =
     expect(res.statusCode).toBe(400);
   });
 
-  it("❌ 501 si Google OAuth n'est pas configuré (pas de GOOGLE_CLIENT_ID)", async () => {
-    config.googleClientId = null;
+  it("❌ 501 si Google OAuth n'est pas configuré (pas de GOOGLE_CLIENT_IDS)", async () => {
+    config.googleClientIds = [];
     const res = await request(app).post('/api/auth/google').send({ idToken: 'whatever' });
     expect(res.statusCode).toBe(501);
-    config.googleClientId = 'test-client-id.apps.googleusercontent.com';
+    config.googleClientIds = ['test-client-id.apps.googleusercontent.com'];
   });
 });

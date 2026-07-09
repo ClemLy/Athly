@@ -214,7 +214,7 @@ class AuthService {
    * mot de passe aléatoire jamais utilisable pour se connecter autrement).
    */
   async googleLogin(idToken) {
-    if (!config.googleClientId) {
+    if (!config.googleClientIds.length) {
       throw httpError("Connexion Google non configurée sur ce serveur.", 501, "GOOGLE_OAUTH_NOT_CONFIGURED");
     }
     if (!idToken) {
@@ -222,11 +222,13 @@ class AuthService {
     }
 
     const { OAuth2Client } = require("google-auth-library");
-    const client = new OAuth2Client(config.googleClientId);
+    const client = new OAuth2Client();
 
     let payload;
     try {
-      const ticket = await client.verifyIdToken({ idToken, audience: config.googleClientId });
+      // audience accepte un tableau : le token peut avoir été émis pour
+      // n'importe lequel des Client IDs configurés (iOS/Android/Web/Expo).
+      const ticket = await client.verifyIdToken({ idToken, audience: config.googleClientIds });
       payload = ticket.getPayload();
     } catch (_err) {
       throw httpError("Token Google invalide.", 401, "GOOGLE_TOKEN_INVALID");
