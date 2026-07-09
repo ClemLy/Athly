@@ -374,6 +374,46 @@ describe('Lobby Multi — Section VII', () => {
       expect(res.body.newlyUnlocked).not.toContain('MULTI_SQUAD_FULL');
     });
 
+    it('✅ Incrémente totalMultiSessions pour chaque membre à la clôture', async () => {
+      const lobbyId = await createActiveLobby([alice, bob]);
+      await request(app).post(`/api/lobby/${lobbyId}/finish`).set('Authorization', `Bearer ${alice.token}`);
+      await request(app).post(`/api/lobby/${lobbyId}/finish`).set('Authorization', `Bearer ${bob.token}`);
+
+      const aliceUser = await User.findById(alice.userId);
+      const bobUser   = await User.findById(bob.userId);
+      expect(aliceUser.totalMultiSessions).toBe(1);
+      expect(bobUser.totalMultiSessions).toBe(1);
+    });
+
+    it('✅ Débloque MULTI_SESSIONS_5 à la 5e séance Multi terminée', async () => {
+      await User.updateOne({ _id: alice.userId }, { $set: { totalMultiSessions: 4 } });
+
+      const lobbyId = await createActiveLobby([alice, bob]);
+      await request(app).post(`/api/lobby/${lobbyId}/finish`).set('Authorization', `Bearer ${alice.token}`);
+      const res = await request(app).post(`/api/lobby/${lobbyId}/finish`).set('Authorization', `Bearer ${bob.token}`);
+
+      const aliceUser = await User.findById(alice.userId);
+      const bobUser   = await User.findById(bob.userId);
+      expect(aliceUser.totalMultiSessions).toBe(5);
+      expect(aliceUser.achievements.some((a) => a.achievementId === 'MULTI_SESSIONS_5')).toBe(true);
+      // Bob n'a fait qu'1 séance Multi : pas encore débloqué pour lui
+      expect(bobUser.totalMultiSessions).toBe(1);
+      expect(bobUser.achievements.some((a) => a.achievementId === 'MULTI_SESSIONS_5')).toBe(false);
+      expect(res.body.newlyUnlocked).not.toContain('MULTI_SESSIONS_5');
+    });
+
+    it('✅ Débloque MULTI_SESSIONS_30 à la 30e séance Multi terminée', async () => {
+      await User.updateOne({ _id: alice.userId }, { $set: { totalMultiSessions: 29 } });
+
+      const lobbyId = await createActiveLobby([alice, bob]);
+      await request(app).post(`/api/lobby/${lobbyId}/finish`).set('Authorization', `Bearer ${alice.token}`);
+      await request(app).post(`/api/lobby/${lobbyId}/finish`).set('Authorization', `Bearer ${bob.token}`);
+
+      const aliceUser = await User.findById(alice.userId);
+      expect(aliceUser.totalMultiSessions).toBe(30);
+      expect(aliceUser.achievements.some((a) => a.achievementId === 'MULTI_SESSIONS_30')).toBe(true);
+    });
+
     it("❌ 422 si le lobby n'est pas encore actif (waiting)", async () => {
       const res = await request(app).post('/api/lobby/create').set('Authorization', `Bearer ${alice.token}`);
       const lobbyId = res.body.lobby._id;

@@ -2,6 +2,8 @@
 // Each theme overrides accentColor, glow, shimmer and background variant.
 // unlockLevel: minimum level required to pick this theme (God Mode bypasses).
 
+import { Colors } from '../constants/theme';
+
 export const PROFILE_THEMES = [
   {
     id: 'auto',
@@ -135,8 +137,8 @@ export const PROFILE_THEMES = [
     unlockLevel: 0,
     requiresCosmetic: 'THEME_BLOODSANG',
     requiresChests: 100, // pour le texte de progression avant réclamation
-    accentColor: '#FF2E4D',
-    glowColor: 'rgba(163,0,0,0.75)',
+    accentColor: Colors.uniqueBloodBright,
+    glowColor: Colors.uniqueBloodGlow,
     shimmer: true,
     hasGlow: true,
     bgVariant: 'blood',

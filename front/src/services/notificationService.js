@@ -3,7 +3,12 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const DAILY_NOTIF_IDS_KEY = 'athly:notif:daily_ids:v2';
+const DAILY_NOTIF_IDS_KEY  = 'athly:notif:daily_ids:v2';
+// Titre du DERNIER rappel quotidien généré (persisté en cache local) — permet
+// à pickDailyOccurrence d'éviter une répétition même quand la planification
+// est régénérée (ensureDailyRemindersScheduled), sans quoi le jour 1 d'un
+// nouveau lot pourrait reproduire le titre du dernier jour du lot précédent.
+const LAST_NOTIF_TITLE_KEY = 'athly:notif:last_title:v1';
 const CHANNEL_ORANGE_ID   = 'streak-orange';
 const CHANNEL_VIOLET_ID   = 'streak-purple';
 const CHANNEL_BIRTHDAY_ID = 'athly-birthday';
@@ -161,9 +166,14 @@ export async function scheduleDailyReminder(hour = 18, minute = 0, count = DAILY
   // une nouvelle, pour éviter l'accumulation de rappels dupliqués en arrière-plan.
   await cancelDailyReminder();
 
+  // Anti-répétition inter-lots : reprend le dernier titre généré (même après
+  // régénération du stock) pour ne jamais enchaîner deux jours identiques.
+  let lastTitle = null;
+  try { lastTitle = await AsyncStorage.getItem(LAST_NOTIF_TITLE_KEY); } catch (_) {}
+
   const now = new Date();
   const ids = [];
-  let previous = null;
+  let previous = lastTitle ? { msg: { title: lastTitle } } : null;
 
   for (let dayOffset = 0; dayOffset < count; dayOffset++) {
     const date = new Date(now);
@@ -195,6 +205,9 @@ export async function scheduleDailyReminder(hour = 18, minute = 0, count = DAILY
 
   try {
     await AsyncStorage.setItem(DAILY_NOTIF_IDS_KEY, JSON.stringify({ hour, minute, ids }));
+    if (previous?.msg?.title) {
+      await AsyncStorage.setItem(LAST_NOTIF_TITLE_KEY, previous.msg.title);
+    }
   } catch (_) {}
 
   return ids;
