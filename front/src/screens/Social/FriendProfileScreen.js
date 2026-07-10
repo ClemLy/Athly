@@ -10,6 +10,7 @@ import { Colors } from '../../constants/theme';
 import { useToast } from '../../context/ToastContext';
 import { getRank, xpToLevel } from '../../services/stats.service';
 import { getFriendProfile, getMyGroup, shakeMember } from '../../services/social.service';
+import { RARITY_META } from '../../services/inventory.service';
 
 import HeroLevelCard        from '../../components/profile/HeroLevelCard';
 import StreakBadge          from '../../components/profile/StreakBadge';
@@ -168,6 +169,8 @@ export default function FriendProfileScreen({ route, navigation }) {
               totalActiveDays={profile.stats.totalActiveDays}
               shapeId={equippedFrame.shapeId}
               colorId={equippedFrame.colorId}
+              titleLabel={profile.equippedTitleInfo?.label}
+              titleColor={profile.equippedTitleInfo ? RARITY_META[profile.equippedTitleInfo.rarity]?.color : undefined}
             />
             <EmberParticles
               visible={isLegend}

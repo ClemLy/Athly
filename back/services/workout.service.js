@@ -2,6 +2,7 @@ const Workout = require("../models/Workout");
 const User = require("../models/User");
 const { levelFromXP } = require("../utils/levelHelpers");
 const { addItemAtomic } = require("./inventory.service");
+const { checkAndUnlockTitles } = require("../controllers/title.controller");
 
 // ── Coffres à l'effort (Brique II) ───────────────────────────────────────────
 // 1 coffre (CHEST_KEY) tous les CHEST_MINUTES_THRESHOLD minutes de séance
@@ -145,6 +146,19 @@ class WorkoutService {
       await user.save();
     }
 
+    // Titres (Section X) : cumul de séries + conditions événementielles
+    // (night owl, loup solitaire...). Best-effort, ne bloque jamais la
+    // clôture déjà actée ci-dessus.
+    let newlyUnlockedTitles = [];
+    if (user && workout.setsCompleted > 0) {
+      try {
+        await User.updateOne({ _id: userId }, { $inc: { totalSetsCompleted: workout.setsCompleted } });
+        newlyUnlockedTitles = await checkAndUnlockTitles(userId, { finishedWorkout: workout });
+      } catch (_) {
+        // ignore
+      }
+    }
+
     return {
       workout,
       stats: {
@@ -155,6 +169,7 @@ class WorkoutService {
         durationSeconds: workout.durationSeconds,
         userXP: user ? user.xp : null,
         userLevel: user ? user.level : null,
+        newlyUnlockedTitles,
       },
     };
   }
@@ -203,6 +218,17 @@ class WorkoutService {
       chestInfo = await accrueMinutesAndAwardChests(userId, Math.floor(duration / 60));
     }
 
+    // Titres (Section X) — mêmes conditions que completeWorkout ci-dessus.
+    let newlyUnlockedTitles = [];
+    if (user && workout.setsCompleted > 0) {
+      try {
+        await User.updateOne({ _id: userId }, { $inc: { totalSetsCompleted: workout.setsCompleted } });
+        newlyUnlockedTitles = await checkAndUnlockTitles(userId, { finishedWorkout: workout });
+      } catch (_) {
+        // ignore
+      }
+    }
+
     return {
       workout,
       stats: {
@@ -212,6 +238,7 @@ class WorkoutService {
         userLevel: user ? user.level : null,
         chestsAwarded:       chestInfo.chestsAwarded,
         totalWorkoutMinutes: chestInfo.totalWorkoutMinutes,
+        newlyUnlockedTitles,
       },
     };
   }

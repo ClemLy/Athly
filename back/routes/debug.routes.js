@@ -32,4 +32,7 @@ router.post('/godmode/simulate-searchable-friend', debug.simulateSearchableFrien
 // ── God Mode : Vague 3 (Lobby Multi) ─────────────────────────────────────────
 router.post('/godmode/simulate-lobby-invite',   debug.simulateLobbyInvite);
 
+// ── God Mode : Titres (Section X) ────────────────────────────────────────────
+router.post('/godmode/give-all-titles',         debug.giveAllTitles);
+
 module.exports = router;

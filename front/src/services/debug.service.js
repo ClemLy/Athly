@@ -100,3 +100,12 @@ export async function simulateLobbyInvite() {
   const res = await API.post('/debug/godmode/simulate-lobby-invite');
   return res.data;
 }
+
+// ─── Titres (Section X) ─────────────────────────────────────────────────────
+
+// Débloque directement tous les titres du catalogue (sans passer par leurs
+// conditions réelles) — teste le sélecteur de titres en un clic.
+export async function giveAllTitles() {
+  const res = await API.post('/debug/godmode/give-all-titles');
+  return res.data;
+}

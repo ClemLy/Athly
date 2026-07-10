@@ -14,6 +14,7 @@ import { xpForLevel, xpToLevel } from '../../services/stats.service';
 import { useAvatarFrame } from '../../hooks/useAvatarFrame';
 import { useDevSettings } from '../../hooks/useDevSettings';
 import ChestOpeningModal from '../../components/inventory/ChestOpeningModal';
+import { haptics } from '../../services/haptics.service';
 
 const MIN_LEVEL_FOR_CHEST = 11;
 const RARITY_ORDER = ['unique', 'legendary', 'epic', 'rare', 'common'];
@@ -60,6 +61,8 @@ export default function InventoryScreen({ navigation }) {
     try {
       const res = await openChest();
       if (res.success) {
+        // Ouverture de coffre : moment marquant → vibration lourde.
+        haptics.heavy();
         // La modale joue l'animation (shake → burst → reveal)
         setChestModal({ visible: true, drawnItem: res.drawnItem });
       }

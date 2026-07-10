@@ -25,6 +25,8 @@ export default function HeroLevelCard({
   shapeId = 'circle',
   colorId = 'none',
   profileTheme = null,  // PROFILE_THEMES entry — overrides visual rank when set
+  titleLabel = null,    // Titre équipé (Section X) — libellé résolu côté appelant
+  titleColor = Colors.textMuted, // Couleur de rareté du titre équipé
 }) {
   const { level, currentInLevel, neededForNext, progress } = useMemo(
     () => xpToLevel(totalXP),
@@ -133,6 +135,17 @@ export default function HeroLevelCard({
           </Animated.Text>
         )}
       </View>
+
+      {/* ── Titre équipé (Section X) ── */}
+      {titleLabel && (
+        <View style={[
+          styles.titleBadge,
+          { backgroundColor: `${titleColor}1F`, borderColor: `${titleColor}70`, shadowColor: titleColor },
+        ]}>
+          <Ionicons name="sparkles" size={10} color={titleColor} style={{ marginRight: 4 }} />
+          <Text style={[styles.titleBadgeText, { color: titleColor }]} numberOfLines={1}>{titleLabel}</Text>
+        </View>
+      )}
 
       {/* ── Rang ── */}
       <Text style={[styles.rankName, { color: rank.color }]}>{rank.name}</Text>
@@ -270,6 +283,26 @@ const styles = StyleSheet.create({
   shimmerBadge: {
     fontSize: 20,
     fontWeight: '900',
+  },
+  titleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    marginTop: 5,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    maxWidth: '90%',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  titleBadgeText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
 
   // ── Rang ──────────────────────────────────────────────────────────────────────

@@ -498,8 +498,16 @@ exports.getFriendProfile = async (req, res, next) => {
     }
 
     const friend = await User.findById(friendId)
-      .select('pseudo level rank xp achievements showcasedAchievements showcasedRecords streakGels totalWorkoutMinutes equippedFrame createdAt');
+      .select('pseudo level rank xp achievements showcasedAchievements showcasedRecords streakGels totalWorkoutMinutes equippedFrame equippedTitle createdAt');
     if (!friend) return next(createError('Utilisateur introuvable.', 404));
+
+    // Résolu côté serveur (label + rareté) pour que le front n'ait pas besoin
+    // de dupliquer le catalogue des titres juste pour afficher un badge —
+    // voir data/titleCatalog.js.
+    const { TITLE_CATALOG } = require('../data/titleCatalog');
+    const equippedTitleInfo = friend.equippedTitle && TITLE_CATALOG[friend.equippedTitle]
+      ? { id: friend.equippedTitle, label: TITLE_CATALOG[friend.equippedTitle].label, rarity: TITLE_CATALOG[friend.equippedTitle].rarity }
+      : null;
 
     const friendObjectId = new mongoose.Types.ObjectId(friendId);
 
@@ -543,6 +551,7 @@ exports.getFriendProfile = async (req, res, next) => {
       success: true,
       profile: {
         user:            friend,
+        equippedTitleInfo,
         friendshipLevel: friendship.friendshipLevel,
         friendshipXp:    friendship.friendshipXp,
         stats: {

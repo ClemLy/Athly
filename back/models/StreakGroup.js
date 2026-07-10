@@ -44,6 +44,13 @@ const StreakGroupSchema = new mongoose.Schema(
     // validée avec succès — reste affiché jusque-là.
     shameBreakers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
 
+    // Horodatage du dernier envoi au Hall of Shame — condition du titre
+    // SHAME_REPENTANCE ("sortir du Hall of Shame en validant sa séance moins
+    // de 2h après y avoir été affiché", voir title.controller.js). Un seul
+    // timestamp pour tout le batch de breakers : ils sont détectés au même
+    // instant par detectAndApplyStreakBreak.
+    shameBreakersShamedAt: { type: Date, default: null },
+
     // Historique des secousses (bouton "Secouer") — limite chaque paire
     // (from, to) à 1 secousse par jour civil, et permet au front de griser
     // le bouton pour les membres déjà secoués aujourd'hui (voir shakeMember

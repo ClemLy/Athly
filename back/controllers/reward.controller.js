@@ -144,6 +144,22 @@ const ACHIEVEMENT_CATALOG = {
     category:    'social',
     hidden:      false,
   },
+
+  // ── Titres (Section X) ──────────────────────────────────────────────────────
+  TITLE_FIRST: {
+    id:          'TITLE_FIRST',
+    name:        'Nouvelle Identité',
+    description: "Vous avez débloqué votre premier titre.",
+    category:    'social',
+    hidden:      false,
+  },
+  TITLE_COLLECTOR_5: {
+    id:          'TITLE_COLLECTOR_5',
+    name:        'Homme aux Mille Visages',
+    description: "Vous avez débloqué 5 titres différents.",
+    category:    'social',
+    hidden:      false,
+  },
 };
 
 // Nombre total de trophées dans le catalogue (utile pour les stats)
@@ -278,6 +294,18 @@ async function checkAndUnlockAchievements(userId) {
   ];
   for (const [threshold, achievementId] of MULTI_SESSION_ACHIEVEMENTS) {
     if (!unlockedIds.has(achievementId) && user.totalMultiSessions >= threshold) {
+      tryUnlock(achievementId);
+    }
+  }
+
+  // Trophées gradués sur le nombre de titres débloqués (Section X).
+  const TITLE_COUNT_ACHIEVEMENTS = [
+    [1, 'TITLE_FIRST'],
+    [5, 'TITLE_COLLECTOR_5'],
+  ];
+  const unlockedTitleCount = (user.unlockedTitles || []).length;
+  for (const [threshold, achievementId] of TITLE_COUNT_ACHIEVEMENTS) {
+    if (!unlockedIds.has(achievementId) && unlockedTitleCount >= threshold) {
       tryUnlock(achievementId);
     }
   }

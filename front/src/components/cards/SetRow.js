@@ -7,8 +7,8 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { Colors } from '../../constants/theme';
+import { haptics } from '../../services/haptics.service';
 
 // Ligne de série : [-] SET | POIDS (KG) | REPS | VALIDER
 //
@@ -35,12 +35,13 @@ function SetRow({ index, setData = {}, onChange, onToggle, onRemove }) {
   const reps   = setData.reps   ? String(setData.reps)   : '';
 
   const handleToggle = useCallback(() => {
-    try { Haptics.selectionAsync(); } catch (e) {}
+    // Validation d'une série : vibration légère et rapide.
+    if (!completed) haptics.success(); else haptics.selection();
     if (onToggle) onToggle();
-  }, [onToggle]);
+  }, [onToggle, completed]);
 
   const handleRemove = useCallback(() => {
-    try { Haptics.selectionAsync(); } catch (e) {}
+    haptics.selection();
     if (onRemove) onRemove();
   }, [onRemove]);
 

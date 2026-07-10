@@ -6,6 +6,7 @@ const User          = require('../models/User');
 const Friendship    = require('../models/Friendship');
 const { sendPushToUser } = require('../services/push.service');
 const { checkAndUnlockAchievements } = require('./reward.controller');
+const { checkAndUnlockTitles } = require('./title.controller');
 
 const { MAX_MEMBERS } = WorkoutLobby;
 const MEMBER_PUBLIC_FIELDS = 'pseudo level rank equippedFrame';
@@ -357,8 +358,9 @@ exports.finishLobby = async (req, res, next) => {
     await lobby.save();
 
     let newlyUnlockedByUser = {};
+    let newlyUnlockedTitlesByUser = {};
     if (allFinished) {
-      // Best-effort : les trophées ne doivent jamais faire échouer la clôture.
+      // Best-effort : les trophées/titres ne doivent jamais faire échouer la clôture.
       try {
         // Incrémente le compteur AVANT de vérifier les trophées gradués
         // (MULTI_SESSIONS_5 / MULTI_SESSIONS_30), sinon le seuil serait
@@ -372,8 +374,13 @@ exports.finishLobby = async (req, res, next) => {
           lobby.members.map((m) => checkAndUnlockAchievements(m.user.toString())),
         );
         lobby.members.forEach((m, i) => { newlyUnlockedByUser[m.user.toString()] = results[i]; });
+
+        const titleResults = await Promise.all(
+          lobby.members.map((m) => checkAndUnlockTitles(m.user.toString())),
+        );
+        lobby.members.forEach((m, i) => { newlyUnlockedTitlesByUser[m.user.toString()] = titleResults[i]; });
       } catch (_) {
-        // ignore — la clôture du lobby ne doit pas dépendre des trophées.
+        // ignore — la clôture du lobby ne doit pas dépendre des trophées/titres.
       }
     }
 
@@ -384,6 +391,7 @@ exports.finishLobby = async (req, res, next) => {
       lobby: serializeLobby(lobby),
       completed: allFinished,
       newlyUnlocked: allFinished ? (newlyUnlockedByUser[myId] ?? []) : [],
+      newlyUnlockedTitles: allFinished ? (newlyUnlockedTitlesByUser[myId] ?? []) : [],
     });
   } catch (err) {
     next(err);

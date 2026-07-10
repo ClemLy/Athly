@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import { haptics } from '../../services/haptics.service';
 
 import { Colors } from '../../constants/theme';
 import useExerciseSorting, { isFiltering } from '../../hooks/useExerciseSorting';
@@ -162,6 +162,7 @@ export default function WorkoutScreen({ route, navigation }) {
   }, [navigation, actions]);
 
   const cancelAbandon = useCallback(() => {
+    haptics.error();
     setAbandonModalVisible(false);
     pendingNavActionRef.current = null;
   }, []);
@@ -332,9 +333,8 @@ export default function WorkoutScreen({ route, navigation }) {
 
   // ─── TERMINER LA SÉANCE ───────────────────────────────────────────────────
   const handleTerminate = useCallback(async () => {
-    try {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (e) {}
+    // Clôture de séance : moment marquant → vibration lourde.
+    haptics.heavy();
 
     if (isFinalizing || recapVisible || multiWaiting) return;
 
