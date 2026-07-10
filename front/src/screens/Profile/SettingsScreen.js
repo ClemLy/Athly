@@ -1173,7 +1173,7 @@ export default function SettingsScreen({ navigation }) {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.tutReplayTitle}>Rejouer l'intégralité du tutoriel</Text>
-            <Text style={styles.tutReplaySub}>5 chapitres · du Dashboard aux Réglages</Text>
+            <Text style={styles.tutReplaySub}>8 chapitres · du Dashboard aux Réglages</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={Colors.chevron} />
         </TouchableOpacity>
@@ -1192,7 +1192,7 @@ export default function SettingsScreen({ navigation }) {
                 </View>
                 <View style={styles.rowLabelWrap}>
                   <Text style={styles.rowLabel}>{chapter.title}</Text>
-                  <Text style={styles.rowSub}>{chapter.subtitle} · {chapter.steps.length} étapes</Text>
+                  <Text style={styles.rowSub}>Chapitre {idx + 1} · {chapter.steps.length} étapes</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={14} color={Colors.chevron} />
               </View>

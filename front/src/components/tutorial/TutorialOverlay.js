@@ -1,25 +1,29 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity,
   Animated, useWindowDimensions, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTutorial } from '../../context/TutorialContext';
+import { CHAPTER_IDS } from '../../data/tutorialChapters';
+import { haptics } from '../../services/haptics.service';
 import { Colors } from '../../constants/theme';
 
 // Padding visuel autour du spotlight (léger, ne perturbe pas les coordonnées)
 const SPOTLIGHT_PADDING  = 8;
 // Marge gauche/droite du tooltip
 const TOOLTIP_MARGIN     = 16;
-// Hauteur max estimée du tooltip — sert uniquement au calcul de placement
+// Hauteur estimée du tooltip AVANT sa première mesure (remplacée par la vraie
+// hauteur via onLayout dès le premier rendu)
 const TOOLTIP_HEIGHT_EST = 220;
-// Seuil vertical (px) : si pageY de l'élément < THRESHOLD → tooltip en-dessous
-// sinon → tooltip au-dessus (algorithme strict demandé, indépendant de `position`)
-const ELEMENT_Y_THRESHOLD = 250;
 // Écart gap entre le bord du spotlight et le tooltip
 const TOOLTIP_GAP        = 15;
 // Marge de sécurité minimale par rapport aux bords de l'écran
 const SCREEN_SAFE        = 12;
+// Insets approximés : barre de statut/encoche en haut, indicateur/onglets en bas.
+// Gardent le tooltip lisible et cliquable hors des zones système.
+const SAFE_INSET_TOP     = 44;
+const SAFE_INSET_BOTTOM  = 28;
 const GLOW_COLOR         = 'rgba(254,116,57,0.55)';
 
 // ─── ProgressDots ─────────────────────────────────────────────────────────────
@@ -51,11 +55,13 @@ const dots = StyleSheet.create({
 
 // ─── ChapterBadge ─────────────────────────────────────────────────────────────
 
-function ChapterBadge({ chapter }) {
+function ChapterBadge({ chapter, index, total }) {
   return (
     <View style={[badge.wrap, { borderColor: Colors.primary + '50' }]}>
       <Ionicons name={chapter.icon} size={10} color={Colors.primary} />
-      <Text style={badge.text}>{chapter.subtitle} · {chapter.title}</Text>
+      <Text style={badge.counter}>Chapitre {index}/{total}</Text>
+      <View style={badge.sep} />
+      <Text style={badge.text} numberOfLines={1}>{chapter.title}</Text>
     </View>
   );
 }
@@ -63,12 +69,14 @@ function ChapterBadge({ chapter }) {
 const badge = StyleSheet.create({
   wrap: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    alignSelf: 'flex-start',
+    alignSelf: 'flex-start', maxWidth: '100%',
     backgroundColor: 'rgba(254,116,57,0.12)',
     borderWidth: 1, borderRadius: 8,
     paddingHorizontal: 8, paddingVertical: 4, marginBottom: 10,
   },
-  text: { color: Colors.primary, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  counter: { color: Colors.primary, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  sep:     { width: 3, height: 3, borderRadius: 2, backgroundColor: Colors.primary, opacity: 0.6 },
+  text:    { color: Colors.primary, fontSize: 10, fontWeight: '700', letterSpacing: 0.3, flexShrink: 1 },
 });
 
 // ─── TutorialOverlay ──────────────────────────────────────────────────────────
@@ -87,6 +95,10 @@ export default function TutorialOverlay({ navigation }) {
 
   const slideY  = useRef(new Animated.Value(24)).current;
   const opacity = useRef(new Animated.Value(0)).current;
+  // Hauteur réelle du tooltip, mesurée au rendu (onLayout). Sert au calcul de
+  // placement : avec une estimation fixe, un texte long débordait sous l'écran
+  // et le bouton "Suivant" devenait inatteignable.
+  const [tooltipH, setTooltipH] = useState(TOOLTIP_HEIGHT_EST);
 
   const animateIn = useCallback(() => {
     slideY.setValue(24);
@@ -114,36 +126,49 @@ export default function TutorialOverlay({ navigation }) {
     h: targetRect.height + SPOTLIGHT_PADDING * 2,
   } : null;
 
-  // ─── Positionnement du tooltip (algorithme strict basé sur pageY) ─────────
+  // ─── Positionnement du tooltip (espace réel + intention du design) ────────
   //
-  // Règle absolue :
-  //   • Pas de cible OU position === 'center'  → centré verticalement
-  //   • pageY de l'élément < ELEMENT_Y_THRESHOLD (250 px)
-  //       → tooltip EN-DESSOUS  : top = pageY + height + GAP
-  //   • pageY ≥ ELEMENT_Y_THRESHOLD
-  //       → tooltip AU-DESSUS   : top = pageY - TOOLTIP_HEIGHT_EST - GAP
+  // Règles :
+  //   • Pas de cible OU position === 'center' → centré verticalement.
+  //   • Sinon on respecte le côté voulu par le design (position 'top' → tooltip
+  //     AU-DESSUS de la cible, 'bottom' → EN-DESSOUS), MAIS on bascule sur
+  //     l'autre côté s'il n'y a pas la place (cible trop haute/basse ou trop
+  //     grande). On mesure la hauteur RÉELLE du tooltip (tooltipH) pour ne
+  //     jamais le laisser déborder hors de l'écran : sans ça, un texte long
+  //     poussait le bouton "Suivant" sous le bord bas, illisible et incliquable.
   //
-  // Les coordonnées utilisées sont celles de l'élément brut (targetRect),
-  // pas les valeurs paddées du spotlight, pour un placement pixel-perfect.
+  // Les bornes verticales tiennent compte des marges hautes/basses de sécurité
+  // (SCREEN_SAFE + insets approximés) pour rester sous la barre d'onglets.
   const tooltipStyle = (() => {
     const base = { position: 'absolute', left: TOOLTIP_MARGIN, right: TOOLTIP_MARGIN };
 
+    const safeTop    = SCREEN_SAFE + SAFE_INSET_TOP;
+    const safeBottom = H - SCREEN_SAFE - SAFE_INSET_BOTTOM;
+    const maxTop     = Math.max(safeTop, safeBottom - tooltipH);
+
     if (!hasSpot || activeStep.position === 'center') {
-      return { ...base, top: Math.max(SCREEN_SAFE, H / 2 - TOOLTIP_HEIGHT_EST / 2) };
+      const centered = (safeTop + safeBottom) / 2 - tooltipH / 2;
+      return { ...base, top: Math.min(Math.max(safeTop, centered), maxTop) };
     }
 
-    const elemY = targetRect.y;      // pageY réel de l'élément (coordonnée native)
-    const elemH = targetRect.height; // hauteur réelle de l'élément
+    const spotTop    = targetRect.y - SPOTLIGHT_PADDING;
+    const spotBottom = targetRect.y + targetRect.height + SPOTLIGHT_PADDING;
+    const need       = tooltipH + TOOLTIP_GAP;
+    const roomAbove  = spotTop - safeTop;
+    const roomBelow  = safeBottom - spotBottom;
 
-    if (elemY < ELEMENT_Y_THRESHOLD) {
-      // Élément dans la partie HAUTE de l'écran → tooltip en-dessous
-      const topBelow = elemY + elemH + TOOLTIP_GAP;
-      return { ...base, top: Math.min(topBelow, H - TOOLTIP_HEIGHT_EST - SCREEN_SAFE) };
-    } else {
-      // Élément dans la partie BASSE/MILIEU → tooltip au-dessus
-      const topAbove = elemY - TOOLTIP_HEIGHT_EST - TOOLTIP_GAP;
-      return { ...base, top: Math.max(SCREEN_SAFE, topAbove) };
-    }
+    // Côté souhaité par le design, conservé tant qu'il y a la place ; à défaut
+    // on prend le côté le plus spacieux (jamais par-dessus la cible).
+    const prefersAbove = activeStep.position === 'top';
+    const placeAbove   = prefersAbove
+      ? (roomAbove >= need || roomAbove >= roomBelow)
+      : (roomBelow >= need ? false : roomAbove > roomBelow);
+
+    const rawTop = placeAbove
+      ? spotTop - TOOLTIP_GAP - tooltipH
+      : spotBottom + TOOLTIP_GAP;
+
+    return { ...base, top: Math.min(Math.max(safeTop, rawTop), maxTop) };
   })();
 
   const chapterColor = Colors.primary;
@@ -151,7 +176,23 @@ export default function TutorialOverlay({ navigation }) {
   const isEndCard    = !!activeStep.isLast;
   const isAction     = !!activeStep.actionRequired;
 
-  const handleNext = () => nextStep(navigation);
+  // Position globale du chapitre courant (pour l'indicateur "Chapitre X/N").
+  const chapterIndex = CHAPTER_IDS.indexOf(activeChapter.id) + 1;
+  const totalChapters = CHAPTER_IDS.length;
+
+  const handleNext = () => {
+    // Retour haptique : lourd et marquant à la toute fin du tutoriel,
+    // léger sur une simple avance (étape ou chapitre suivant).
+    if (isEndCard) haptics.heavy();
+    else haptics.selection();
+    nextStep(navigation);
+  };
+
+  const handleSkip = () => {
+    // "Passer" ferme le tutoriel : léger retour haptique de confirmation.
+    haptics.selection();
+    dismiss();
+  };
 
   const nextLabel = isEndCard  ? 'Terminer le tutoriel ✓'
     : isLastStep ? 'Chapitre suivant'
@@ -190,8 +231,14 @@ export default function TutorialOverlay({ navigation }) {
       <Animated.View
         style={[styles.tooltip, tooltipStyle, { opacity, transform: [{ translateY: slideY }] }]}
         pointerEvents="box-none"
+        onLayout={(e) => {
+          const h = e.nativeEvent.layout.height;
+          // Ne met à jour que sur variation nette (>1px) pour éviter les
+          // boucles de re-rendu dues aux arrondis sub-pixel.
+          if (h > 0 && Math.abs(h - tooltipH) > 1) setTooltipH(h);
+        }}
       >
-        <ChapterBadge chapter={activeChapter} />
+        <ChapterBadge chapter={activeChapter} index={chapterIndex} total={totalChapters} />
         <Text style={styles.stepTitle}>{activeStep.title}</Text>
         <Text style={styles.stepBody}>{activeStep.body}</Text>
 
@@ -206,7 +253,7 @@ export default function TutorialOverlay({ navigation }) {
             </View>
           ) : (
             <View style={styles.btnRow}>
-              <TouchableOpacity style={styles.skipBtn} onPress={dismiss} activeOpacity={0.75}>
+              <TouchableOpacity style={styles.skipBtn} onPress={handleSkip} activeOpacity={0.75}>
                 <Text style={styles.skipTxt}>Passer</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -225,7 +272,7 @@ export default function TutorialOverlay({ navigation }) {
 
         {/* Bouton Passer toujours accessible même en actionRequired */}
         {isAction && (
-          <TouchableOpacity style={styles.skipBtnBottom} onPress={dismiss} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.skipBtnBottom} onPress={handleSkip} activeOpacity={0.7}>
             <Text style={styles.skipTxt}>Passer le tutoriel</Text>
           </TouchableOpacity>
         )}

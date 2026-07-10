@@ -154,6 +154,24 @@ class UserService {
     return updatedUser;
   }
 
+  /**
+   * Marque le tutoriel/onboarding comme terminé pour cet utilisateur.
+   * Idempotent : rejouer ne change rien une fois le flag à true. Le client
+   * appelle ceci en best-effort à la fin (ou au skip) du tutoriel — la vérité
+   * immédiate reste AsyncStorage, ce flag backend sert la cohérence
+   * inter-appareils (voir TutorialContext.js).
+   * @param {string} userId
+   */
+  async completeOnboarding(userId) {
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: { hasCompletedOnboarding: true } },
+      { new: true },
+    ).select('hasCompletedOnboarding');
+    if (!updatedUser) throw new Error('Utilisateur non trouvé.');
+    return updatedUser;
+  }
+
   async addExperience(userId, xpAmount) {
     const user = await User.findById(userId);
     user.xp += xpAmount;

@@ -28,6 +28,9 @@ router.put("/me/records-showcase", auth, validate(updateRecordsShowcase), userCo
 // Enregistrer (ou effacer) le token Expo Push de l'appareil courant
 router.put("/me/push-token", auth, validate(registerPushToken), userController.registerPushToken);
 
+// Marquer le tutoriel/onboarding comme terminé — pas de body (idempotent)
+router.post("/me/complete-onboarding", auth, userController.completeOnboarding);
+
 // Suppression définitive du compte (RGPD)
 router.delete("/delete-account", auth, userController.deleteAccount);
 

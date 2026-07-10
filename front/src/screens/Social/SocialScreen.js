@@ -21,6 +21,8 @@ import {
 } from '../../services/social.service';
 import { MAJOR_EXERCISES } from '../../data/majorExercises';
 import ExercisePickerModal from '../../components/social/ExercisePickerModal';
+import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
+import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 
 // Podium / classements : positions 1-3 affichées en médaille colorée plutôt
 // qu'en emoji 🥇🥈🥉.
@@ -47,6 +49,10 @@ export default function SocialScreen({ navigation }) {
   const { user, refetch: refetchUser } = useUser();
   const { addBonusXp } = useWorkoutLogs();
   const [segment, setSegment] = useState('friends');
+
+  // ─── Tutorial (chapitre Social) ──────────────────────────────────────────────
+  const { pendingChapterId, activeChapterId, startChapter } = useTutorial();
+  const { ref: segmentsRef, onLayout: onSegmentsLayout } = useTutorialTarget('social_segments');
 
   // ── Données ──
   const [friends,     setFriends]     = useState([]);
@@ -130,6 +136,15 @@ export default function SocialScreen({ navigation }) {
 
   useFocusEffect(useCallback(() => { loadAll(); }, [loadAll]));
 
+  useFocusEffect(
+    useCallback(() => {
+      if (pendingChapterId === 'social') {
+        const t = setTimeout(() => startChapter('social'), 400);
+        return () => clearTimeout(t);
+      }
+    }, [pendingChapterId, startChapter]),
+  );
+
   const onRefresh = () => { setRefreshing(true); loadAll(); };
 
   // Recherche déclenchée depuis AddFriendModal, avec le tag déjà construit à
@@ -173,7 +188,12 @@ export default function SocialScreen({ navigation }) {
       <Text style={styles.title}>Social</Text>
 
       {/* ── Segments ── */}
-      <View style={styles.segmentRow}>
+      <View
+        ref={segmentsRef}
+        onLayout={onSegmentsLayout}
+        collapsable={false}
+        style={styles.segmentRow}
+      >
         {SEGMENTS.map((s) => {
           const active = segment === s.key;
           const badge = s.key === 'friends' && pending.length > 0 ? pending.length
@@ -335,6 +355,10 @@ export default function SocialScreen({ navigation }) {
         }}
         onClose={() => setPreviewResult(null)}
       />
+
+      {activeChapterId === 'social' && (
+        <TutorialOverlay navigation={navigation} />
+      )}
     </View>
   );
 }

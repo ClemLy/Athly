@@ -4,14 +4,19 @@ const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const config = require('../config/env');
 
 // Les tests Jest enchaînent des centaines de requêtes : on désactive le
-// rate-limiting en environnement de test uniquement.
-const isTest = config.nodeEnv === 'test';
+// rate-limiting en environnement de test uniquement. Détection via
+// JEST_WORKER_ID (défini par Jest dans chaque worker) plutôt que NODE_ENV :
+// certains tests basculent temporairement config.nodeEnv vers 'production'
+// (pour vérifier les routes devOnly), ce qui réactivait par erreur le limiter
+// au milieu de la suite et provoquait des 429 non-déterministes. Évalué à
+// chaque requête (pas figé au chargement du module).
+const isTestEnv = () => process.env.JEST_WORKER_ID !== undefined || config.nodeEnv === 'test';
 
 const standardOptions = {
   windowMs: 15 * 60 * 1000,
   standardHeaders: true, // RateLimit-* headers pour les clients
   legacyHeaders: false,
-  skip: () => isTest,
+  skip: () => isTestEnv(),
   message: {
     success: false,
     status: 429,
