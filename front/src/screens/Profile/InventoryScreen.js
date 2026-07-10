@@ -15,6 +15,8 @@ import { useAvatarFrame } from '../../hooks/useAvatarFrame';
 import { useDevSettings } from '../../hooks/useDevSettings';
 import ChestOpeningModal from '../../components/inventory/ChestOpeningModal';
 import { haptics } from '../../services/haptics.service';
+import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
+import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 
 const MIN_LEVEL_FOR_CHEST = 11;
 const RARITY_ORDER = ['unique', 'legendary', 'epic', 'rare', 'common'];
@@ -42,7 +44,20 @@ export default function InventoryScreen({ navigation }) {
   const [busy, setBusy]         = useState(false);
   const [chestModal, setChestModal] = useState({ visible: false, drawnItem: null });
 
+  // ─── Tutorial (chapitre Inventaire) ──────────────────────────────────────────
+  const { pendingChapterId, activeChapterId, startChapter } = useTutorial();
+  const { ref: chestRef, onLayout: onChestLayout } = useTutorialTarget('inventory_chest');
+
   useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
+
+  useFocusEffect(
+    useCallback(() => {
+      if (pendingChapterId === 'inventory') {
+        const t = setTimeout(() => startChapter('inventory'), 400);
+        return () => clearTimeout(t);
+      }
+    }, [pendingChapterId, startChapter]),
+  );
 
   const inventory = user?.inventory ?? [];
   const chestEntry = inventory.find((i) => i.itemType === 'CHEST_KEY');
@@ -150,12 +165,16 @@ export default function InventoryScreen({ navigation }) {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
         {/* ── Coffres ── */}
-        <ChestCard
-          count={chestCount}
-          locked={chestLocked}
-          busy={busy}
-          onOpen={handleOpenChest}
-        />
+        {/* marginTop porté par le wrapper (et non la carte) pour que le
+            spotlight du tutoriel épouse pile la carte, sans décalage vertical. */}
+        <View ref={chestRef} onLayout={onChestLayout} collapsable={false} style={styles.chestSpot}>
+          <ChestCard
+            count={chestCount}
+            locked={chestLocked}
+            busy={busy}
+            onOpen={handleOpenChest}
+          />
+        </View>
 
         {/* ── Objets ── */}
         <Text style={styles.sectionLabel}>MES OBJETS</Text>
@@ -187,6 +206,10 @@ export default function InventoryScreen({ navigation }) {
         drawnItem={chestModal.drawnItem}
         onClose={closeChestModal}
       />
+
+      {activeChapterId === 'inventory' && (
+        <TutorialOverlay navigation={navigation} />
+      )}
     </View>
   );
 }
@@ -338,6 +361,7 @@ const styles = StyleSheet.create({
   },
 
   // ── Coffre ──
+  chestSpot: { marginTop: 8 },
   chestCard: {
     flexDirection:   'row',
     alignItems:      'center',
@@ -346,7 +370,6 @@ const styles = StyleSheet.create({
     borderColor:     'rgba(254,116,57,0.30)',
     borderRadius:    18,
     padding:         18,
-    marginTop:       8,
   },
   chestCardLocked: {
     backgroundColor: 'rgba(255,255,255,0.04)',

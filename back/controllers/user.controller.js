@@ -126,6 +126,25 @@ exports.registerPushToken = async (req, res, next) => {
 };
 
 /**
+ * MARQUER LE TUTORIEL COMME TERMINÉ
+ * Appelé par le front à la fin (ou au skip) du tutoriel interactif.
+ * Idempotent — voir user.service.js → completeOnboarding.
+ */
+exports.completeOnboarding = async (req, res, next) => {
+  try {
+    const user = await userService.completeOnboarding(req.user.id);
+
+    res.status(200).json({
+      success: true,
+      message: "Onboarding terminé.",
+      hasCompletedOnboarding: user.hasCompletedOnboarding,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * SYNCHRONISER L'XP LOCALE
  * Pousse l'XP totale accumulée localement (front, AsyncStorage-first) vers
  * user.xp/level backend — Source de Vérité pour tout ce qui est gated côté

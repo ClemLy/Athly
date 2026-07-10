@@ -67,7 +67,12 @@ export default function StatsScreen({ navigation }) {
   } = useTutorial();
 
   const scrollRef = useRef(null);
+  // Offset de scroll courant, suivi en direct pour un défilement piloté par la
+  // position RÉELLE des cibles (robuste aux changements de mise en page comme
+  // l'ajout du graphique de poids, qui décalait les anciens scrollY fixes).
+  const scrollOffsetRef = useRef(0);
   const { ref: kpisRef,       onLayout: onKpisLayout,       remeasure: rKpis   } = useTutorialTarget('stats_kpis');
+  const { ref: weightRef,     onLayout: onWeightLayout,     remeasure: rWeight } = useTutorialTarget('stats_weight_chart');
   const { ref: volumeRef,     onLayout: onVolumeLayout,     remeasure: rVolume } = useTutorialTarget('stats_volume_chart');
   const { ref: muscleRef,     onLayout: onMuscleLayout,     remeasure: rMuscle } = useTutorialTarget('stats_muscle_chart');
   const { ref: tabHistoryRef, onLayout: onTabHistoryLayout }                     = useTutorialTarget('stats_tab_history');
@@ -76,9 +81,24 @@ export default function StatsScreen({ navigation }) {
   useEffect(() => {
     registerScrollRef('stats', scrollRef);
     registerRemeasure('stats', () => {
-      setTimeout(() => { rKpis(); rVolume(); rMuscle(); }, 50);
+      setTimeout(() => { rKpis(); rWeight(); rVolume(); rMuscle(); }, 50);
     });
-  }, [registerScrollRef, registerRemeasure, rKpis, rVolume, rMuscle]);
+  }, [registerScrollRef, registerRemeasure, rKpis, rWeight, rVolume, rMuscle]);
+
+  // Fait défiler pour amener une cible mesurée à une position confortable :
+  // haut de cible vers ~160 px (tooltip en-dessous) ou ~300 px (tooltip
+  // au-dessus). On mesure en absolu (pageY) et on combine avec l'offset courant,
+  // donc aucun nombre magique ne dépend de la hauteur des sections au-dessus.
+  const scrollTargetIntoView = useCallback((targetRef, prefersAbove, remeasureAll) => {
+    if (!targetRef?.current || !scrollRef.current) return;
+    const desiredTop = prefersAbove ? 300 : 160;
+    targetRef.current.measure((_x, _y, _w, _h, _pageX, pageY) => {
+      if (pageY == null) return;
+      const newY = Math.max(0, scrollOffsetRef.current + (pageY - desiredTop));
+      scrollRef.current.scrollTo({ y: newY, animated: true });
+      if (remeasureAll) setTimeout(remeasureAll, 350);
+    });
+  }, []);
 
   // Démarrage du chapitre quand l'écran gagne le focus.
   // On force d'abord l'onglet Performance pour éviter que l'utilisateur,
@@ -93,13 +113,33 @@ export default function StatsScreen({ navigation }) {
     }, [pendingChapterId, startChapter]),
   );
 
-  // Auto-scroll + autoActions quand l'étape change
+  // Auto-scroll + autoActions quand l'étape change.
+  // Défilement piloté par la cible (robuste) pour les sections défilables ;
+  // pour la cible d'onglet Historique (barre de nav haute) on remonte en tête.
   useEffect(() => {
     if (activeChapterId !== 'stats' || !activeStep) return;
-    const y = activeStep.scrollY;
-    if (y != null && scrollRef.current) {
-      scrollRef.current.scrollTo({ y, animated: true });
-      setTimeout(() => { rKpis(); rVolume(); rMuscle(); }, 350);
+
+    const remeasureAll = () => { rKpis(); rWeight(); rVolume(); rMuscle(); };
+    const REF_BY_KEY = {
+      stats_kpis:          kpisRef,
+      stats_weight_chart:  weightRef,
+      stats_volume_chart:  volumeRef,
+      stats_muscle_chart:  muscleRef,
+    };
+    const targetRef = activeStep.targetKey ? REF_BY_KEY[activeStep.targetKey] : null;
+
+    if (targetRef) {
+      // Laisse le rendu se stabiliser puis amène la cible à bonne hauteur.
+      const t = setTimeout(
+        () => scrollTargetIntoView(targetRef, activeStep.position === 'top', remeasureAll),
+        80,
+      );
+      return () => clearTimeout(t);
+    }
+    // Cibles hors flux défilable (onglet) ou cartes centrées : scroll fixe.
+    if (activeStep.scrollY != null && scrollRef.current) {
+      scrollRef.current.scrollTo({ y: activeStep.scrollY, animated: true });
+      setTimeout(remeasureAll, 350);
     }
     if (activeStep.autoAction === 'switchToHistory') {
       const t = setTimeout(() => setTab('history'), 300);
@@ -159,6 +199,8 @@ export default function StatsScreen({ navigation }) {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
       >
         <View style={styles.header}>
           <Text style={styles.title}>Statistiques</Text>
@@ -194,17 +236,19 @@ export default function StatsScreen({ navigation }) {
               <Kpi label="Volume"  value={`${Math.round(stats.totalVolume).toLocaleString('fr-FR')} kg`} icon="barbell" wide />
             </View>
 
-            <Card title="Suivi de poids">
-              <WeightProgressChart history={weightHistory} goal={user?.poidsCible} />
-              <TouchableOpacity
-                style={styles.addWeightBtn}
-                onPress={() => setWeightEntryVisible(true)}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="add-circle-outline" size={16} color={Colors.primary} style={{ marginRight: 6 }} />
-                <Text style={styles.addWeightBtnTxt}>Ajouter une pesée</Text>
-              </TouchableOpacity>
-            </Card>
+            <View ref={weightRef} onLayout={onWeightLayout} collapsable={false}>
+              <Card title="Suivi de poids">
+                <WeightProgressChart history={weightHistory} goal={user?.poidsCible} />
+                <TouchableOpacity
+                  style={styles.addWeightBtn}
+                  onPress={() => setWeightEntryVisible(true)}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="add-circle-outline" size={16} color={Colors.primary} style={{ marginRight: 6 }} />
+                  <Text style={styles.addWeightBtnTxt}>Ajouter une pesée</Text>
+                </TouchableOpacity>
+              </Card>
+            </View>
 
             <View ref={volumeRef} onLayout={onVolumeLayout} collapsable={false}>
               <Card title="Volume par période">

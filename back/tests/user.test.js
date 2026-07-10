@@ -76,6 +76,60 @@ describe('User API (Routes Protégées)', () => {
     });
   });
 
+  describe('POST /api/users/me/complete-onboarding — completeOnboarding (Tutoriel)', () => {
+    beforeEach(async () => {
+      await User.updateOne({ email: 'user@test.fr' }, { $set: { hasCompletedOnboarding: false } });
+    });
+
+    it('✅ hasCompletedOnboarding est false par défaut', async () => {
+      const res = await request(app)
+        .get('/api/users/me')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.body.user.hasCompletedOnboarding).toBe(false);
+    });
+
+    it('✅ Passe le flag à true et le persiste en base', async () => {
+      const res = await request(app)
+        .post('/api/users/me/complete-onboarding')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.hasCompletedOnboarding).toBe(true);
+
+      const user = await User.findOne({ email: 'user@test.fr' });
+      expect(user.hasCompletedOnboarding).toBe(true);
+    });
+
+    it('✅ Idempotent : rejouer laisse le flag à true', async () => {
+      await request(app)
+        .post('/api/users/me/complete-onboarding')
+        .set('Authorization', `Bearer ${token}`);
+      const second = await request(app)
+        .post('/api/users/me/complete-onboarding')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(second.statusCode).toBe(200);
+      expect(second.body.hasCompletedOnboarding).toBe(true);
+    });
+
+    it('✅ getMe reflète le flag une fois terminé', async () => {
+      await request(app)
+        .post('/api/users/me/complete-onboarding')
+        .set('Authorization', `Bearer ${token}`);
+
+      const me = await request(app)
+        .get('/api/users/me')
+        .set('Authorization', `Bearer ${token}`);
+      expect(me.body.user.hasCompletedOnboarding).toBe(true);
+    });
+
+    it('❌ 401 sans token', async () => {
+      const res = await request(app).post('/api/users/me/complete-onboarding');
+      expect(res.statusCode).toBe(401);
+    });
+  });
+
   describe('POST /api/users/me/sync-xp — syncXp (Section X)', () => {
     const { xpForLevel } = require('../utils/levelHelpers');
 

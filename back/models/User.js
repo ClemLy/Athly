@@ -181,6 +181,14 @@ const UserSchema = new mongoose.Schema(
     // ex. "FRAME_SHAPE_DRAGONFANG", "FRAME_COLOR_BLOODSANG", "THEME_BLOODSANG".
     unlockedCosmetics: { type: [String], default: [] },
 
+    // ── Onboarding / Tutoriel interactif ──────────────────────────────────────
+    // Passe à true quand l'utilisateur termine (ou passe) le tutoriel interactif.
+    // Doublé côté client dans AsyncStorage (source immédiate du déclenchement),
+    // ce flag backend est la vérité inter-appareils : une réinstallation ou une
+    // connexion sur un nouvel appareil ne re-déclenche pas le tutoriel
+    // (voir TutorialContext.js → reconcileWithServer).
+    hasCompletedOnboarding: { type: Boolean, default: false },
+
     // ── Présence & notifications push ─────────────────────────────────────────
     // Token Expo Push (ExponentPushToken[...]) enregistré par le front après
     // acceptation des permissions — voir push.service.js. null = aucun appareil
