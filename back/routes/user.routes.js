@@ -3,7 +3,7 @@ const router = express.Router();
 const userController = require("../controllers/user.controller");
 const auth = require("../middleware/auth.middleware");
 const validate = require("../middleware/validate.middleware");
-const { updateProfile, updateFrame, updateShowcase, updateRecordsShowcase, registerPushToken } = require("../validators/user.validator");
+const { updateProfile, updateFrame, updateShowcase, updateRecordsShowcase, registerPushToken, syncXp } = require("../validators/user.validator");
 
 /**
  * ROUTES UTILISATEURS PROTEGEES
@@ -27,6 +27,10 @@ router.put("/me/records-showcase", auth, validate(updateRecordsShowcase), userCo
 
 // Enregistrer (ou effacer) le token Expo Push de l'appareil courant
 router.put("/me/push-token", auth, validate(registerPushToken), userController.registerPushToken);
+
+// Synchronise l'XP totale locale (front) vers le backend — Source de Vérité
+// pour le gating serveur (coffres niveau 11+, conditions de titres).
+router.post("/me/sync-xp", auth, validate(syncXp), userController.syncXp);
 
 // Suppression définitive du compte (RGPD)
 router.delete("/delete-account", auth, userController.deleteAccount);

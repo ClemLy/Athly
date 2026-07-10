@@ -124,3 +124,21 @@ exports.registerPushToken = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * SYNCHRONISER L'XP LOCALE
+ * Pousse l'XP totale accumulée localement (front, AsyncStorage-first) vers
+ * user.xp/level backend — Source de Vérité pour tout ce qui est gated côté
+ * serveur (coffres niveau 11+, conditions de titres). Voir user.service.js
+ * → syncXp pour le détail du ratchet anti-régression et du recalcul de niveau.
+ */
+exports.syncXp = async (req, res, next) => {
+  try {
+    const { xp } = req.body;
+    const result = await userService.syncXp(req.user.id, xp);
+
+    res.status(200).json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+};
