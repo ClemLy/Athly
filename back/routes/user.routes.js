@@ -31,6 +31,10 @@ router.put("/me/push-token", auth, validate(registerPushToken), userController.r
 // Marquer le tutoriel/onboarding comme terminé — pas de body (idempotent)
 router.post("/me/complete-onboarding", auth, userController.completeOnboarding);
 
+// Synchronise l'XP totale locale (front) vers le backend — Source de Vérité
+// pour le gating serveur (coffres niveau 11+, conditions de titres).
+router.post("/me/sync-xp", auth, validate(syncXp), userController.syncXp);
+
 // Suppression définitive du compte (RGPD)
 router.delete("/delete-account", auth, userController.deleteAccount);
 

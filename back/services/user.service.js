@@ -172,6 +172,60 @@ class UserService {
     return updatedUser;
   }
 
+  /**
+   * Synchronise l'XP totale calculée localement (front, AsyncStorage-first)
+   * vers user.xp/level backend — Source de Vérité pour tout ce qui est gated
+   * côté serveur (coffres niveau 11+, conditions de titres comme PERFORM_LEVEL_50).
+   *
+   * Sans ce point de synchro explicite, le niveau backend dérive silencieusement
+   * de celui vécu par le joueur : `finalizeWorkout` calcule sa PROPRE xp
+   * (anti-cheat serveur, à partir des exercices soumis) plutôt que d'adopter
+   * l'xp locale — les deux ledgers divergent avec le temps.
+   *
+   * Sécurité : XP en lecture seule ratchet (ne redescend jamais) — un sync
+   * redondant ou tardif ne peut jamais effacer une progression déjà actée.
+   * Bornée à xpForLevel(MAX_LEVEL) pour rejeter tout payload absurde (la
+   * validation Joi en amont ne fait qu'un garde-fou grossier).
+   *
+   * @param {string} userId
+   * @param {number} submittedXp — XP cumulée locale (jamais un delta)
+   * @returns {{ level, xp, rank, newlyUnlockedTitles }}
+   */
+  async syncXp(userId, submittedXp) {
+    const { levelFromXP, getRankForLevel, xpForLevel, MAX_LEVEL } = require('../utils/levelHelpers');
+
+    const user = await User.findById(userId).select('xp level rank');
+    if (!user) throw new Error('Utilisateur non trouvé.');
+
+    const clampedXp = Math.max(0, Math.min(submittedXp, xpForLevel(MAX_LEVEL)));
+    const nextXp = Math.max(user.xp || 0, clampedXp);
+
+    let newlyUnlockedTitles = [];
+
+    if (nextXp !== user.xp) {
+      user.xp    = nextXp;
+      user.level = levelFromXP(nextXp);
+      user.rank  = getRankForLevel(user.level);
+      await user.save();
+
+      // Require tardif : évite le cycle user.service ↔ title.controller au
+      // chargement des modules (voir même idiome dans reward.controller.js).
+      try {
+        const { checkAndUnlockTitles } = require('../controllers/title.controller');
+        newlyUnlockedTitles = await checkAndUnlockTitles(userId);
+      } catch (_) {
+        // best-effort — la synchro XP elle-même ne doit jamais échouer pour ça.
+      }
+    }
+
+    return {
+      level: user.level,
+      xp:    user.xp,
+      rank:  user.rank,
+      newlyUnlockedTitles,
+    };
+  }
+
   async addExperience(userId, xpAmount) {
     const user = await User.findById(userId);
     user.xp += xpAmount;
