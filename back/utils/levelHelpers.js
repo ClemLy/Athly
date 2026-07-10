@@ -51,4 +51,4 @@ function getRankForLevel(level) {
   return match ? match.rank : 'Novice';
 }
 
-module.exports = { xpForLevel, levelFromXP, getRankForLevel };
+module.exports = { xpForLevel, levelFromXP, getRankForLevel, MAX_LEVEL };

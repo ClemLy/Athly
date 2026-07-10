@@ -3,7 +3,7 @@ const router = express.Router();
 const userController = require("../controllers/user.controller");
 const auth = require("../middleware/auth.middleware");
 const validate = require("../middleware/validate.middleware");
-const { updateProfile, updateFrame, updateShowcase, updateRecordsShowcase, registerPushToken } = require("../validators/user.validator");
+const { updateProfile, updateFrame, updateShowcase, updateRecordsShowcase, registerPushToken, syncXp } = require("../validators/user.validator");
 
 /**
  * ROUTES UTILISATEURS PROTEGEES

@@ -35,6 +35,13 @@ const userSchemas = {
     // null explicite = désenregistrement (permissions révoquées côté client)
     pushToken: Joi.string().max(200).allow(null).required(),
   }),
+
+  // Synchronisation XP local → backend (voir user.service.js → syncXp).
+  // Borne haute large mais finie : le clamp fin (xpForLevel(200)) est fait
+  // côté service, cette borne Joi n'est qu'un garde-fou anti-payload absurde.
+  syncXp: Joi.object({
+    xp: Joi.number().integer().min(0).max(100000000).required(),
+  }),
 };
 
 module.exports = userSchemas;
