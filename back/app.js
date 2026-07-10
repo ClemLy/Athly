@@ -18,6 +18,7 @@ const debugRoutes         = require("./routes/debug.routes");
 const activityRoutes      = require("./routes/activity.routes");
 const weightRoutes        = require("./routes/weight.routes");
 const workoutLobbyRoutes  = require("./routes/workoutLobby.routes");
+const profileRoutes       = require("./routes/profile.routes");
 
 // --- Importation des middlewares ---
 const errorMiddleware = require("./middleware/error.middleware");
@@ -100,6 +101,7 @@ app.use("/api/debug",      debugRoutes);
 app.use("/api/activity",   activityRoutes);
 app.use("/api/weight",     weightRoutes);
 app.use("/api/lobby",      workoutLobbyRoutes);
+app.use("/api/profile",    profileRoutes);
 
 // --- Gestion des erreurs ---
 // Route 404

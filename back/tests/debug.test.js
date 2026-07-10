@@ -529,4 +529,43 @@ describe('God Mode — outils de test Vague 1', () => {
       expect(res.statusCode).toBe(401);
     });
   });
+
+  describe('POST /api/debug/godmode/give-all-titles', () => {
+    it('✅ Débloque tous les titres du catalogue', async () => {
+      const { TITLE_CATALOG } = require('../data/titleCatalog');
+      const res = await request(app)
+        .post('/api/debug/godmode/give-all-titles')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.unlockedTitles.length).toBe(Object.keys(TITLE_CATALOG).length);
+
+      const user = await User.findById(alice.userId);
+      expect(user.unlockedTitles.length).toBe(Object.keys(TITLE_CATALOG).length);
+    });
+
+    it('✅ Débloque au passage les trophées TITLE_FIRST et TITLE_COLLECTOR_5', async () => {
+      const res = await request(app)
+        .post('/api/debug/godmode/give-all-titles')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      expect(res.body.newlyUnlocked).toContain('TITLE_FIRST');
+      expect(res.body.newlyUnlocked).toContain('TITLE_COLLECTOR_5');
+    });
+
+    it('🔁 Idempotent : rejouer ne duplique pas les titres', async () => {
+      await request(app).post('/api/debug/godmode/give-all-titles').set('Authorization', `Bearer ${alice.token}`);
+      const second = await request(app)
+        .post('/api/debug/godmode/give-all-titles')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      const { TITLE_CATALOG } = require('../data/titleCatalog');
+      expect(second.body.unlockedTitles.length).toBe(Object.keys(TITLE_CATALOG).length);
+    });
+
+    it('❌ 401 sans token', async () => {
+      const res = await request(app).post('/api/debug/godmode/give-all-titles');
+      expect(res.statusCode).toBe(401);
+    });
+  });
 });

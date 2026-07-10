@@ -43,7 +43,7 @@ import {
   syncBackendLevel, giveChests, generateMockSocial, giveAllItems,
   simulateChestsOpened, simulateReferral, simulateBirthday,
   simulateGroup, simulateActivityEvent, simulateStreakBreak, simulateShakeSelf,
-  simulateSearchableFriend, simulateLobbyInvite,
+  simulateSearchableFriend, simulateLobbyInvite, giveAllTitles,
 } from '../../services/debug.service';
 
 const UNIT_WEIGHT_KEY   = 'athly:unit:weight:v1';
@@ -283,10 +283,24 @@ export default function SettingsScreen({ navigation }) {
     }
   }, [refresh, showFeedback]);
 
+  // debugSetLevel (AsyncStorage local) + syncBackendLevel (user.level backend)
+  // dans la foulée : sans ça, le niveau simulé par God Mode divergeait
+  // silencieusement du niveau réellement stocké côté serveur — visible par
+  // exemple dans le sélecteur de titres, qui vérifie le niveau backend (comme
+  // le gating des coffres). syncBackendLevel échoue silencieusement en
+  // production (404, endpoint dev-only) : ne bloque jamais la simulation locale.
+  const setLevelEverywhere = async (n) => {
+    await debugSetLevel(n);
+    try {
+      await syncBackendLevel(n);
+      await refetchUser();
+    } catch (_) { /* prod : endpoint indisponible, ignoré */ }
+  };
+
   const handleSetLevel    = () => {
     const n = parseInt(targetLevel, 10);
     if (!targetLevel || isNaN(n) || n < 0 || n > 200) { showFeedback('Niveau invalide (0–200)'); return; }
-    runSim(() => debugSetLevel(n), `Niveau ${n} appliqué ✓`);
+    runSim(() => setLevelEverywhere(n), `Niveau ${n} appliqué ✓`);
   };
   const handleAddXP       = () => runSim(() => debugAddXP(1000), '+1000 XP injectés ✓');
   const handleAddCustomXP = () => {
@@ -295,10 +309,10 @@ export default function SettingsScreen({ navigation }) {
     runSim(() => debugAddXP(n), `+${n.toLocaleString('fr-FR')} XP injectés ✓`);
     setTargetXP('');
   };
-  const handlePlusLevel   = () => runSim(() => debugSetLevel(level + 1), `Passage au niveau ${level + 1} ✓`);
+  const handlePlusLevel   = () => runSim(() => setLevelEverywhere(level + 1), `Passage au niveau ${level + 1} ✓`);
   const handleMinusLevel  = () => {
     if (level <= 0) { showFeedback('Déjà au niveau 0'); return; }
-    runSim(() => debugSetLevel(level - 1), `Retour au niveau ${level - 1} ✓`);
+    runSim(() => setLevelEverywhere(level - 1), `Retour au niveau ${level - 1} ✓`);
   };
   const handleGenSessions = () => runSim(() => debugAddSessions(50), '50 séances injectées ✓');
   const handleSimReps     = () => runSim(() => debugSimulateReps(3000), '~3000 répétitions simulées ✓');
@@ -413,6 +427,22 @@ export default function SettingsScreen({ navigation }) {
       setSimLoading(false);
     }
   }, [showFeedback]);
+
+  // Débloque tous les titres du catalogue (Section X) sans passer par leurs
+  // conditions réelles — teste le sélecteur en un clic. Bloqué en production (404).
+  const handleGiveAllTitles = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await giveAllTitles();
+      await refetchUser();
+      showFeedback(res.message || 'Tous les titres débloqués ✓');
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback, refetchUser]);
 
   // Injecte 1 exemplaire de CHAQUE objet existant (consommables + cosmétiques
   // Uniques réclamables) pour tout tester en un clic. Bloqué en production (404).
@@ -963,6 +993,17 @@ export default function SettingsScreen({ navigation }) {
                     popup "X t'invite", rejoindre, se déclarer prêt, faire sa séance,
                     et voir le bonus XP de groupe à la fin (le coéquipier factice suit
                     automatiquement chacun de tes statuts).
+                  </Text>
+                </DevSection>
+
+                {/* ── TITRES (Section X) ── */}
+                <DevSection title="Titres" icon="ribbon">
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Débloquer tous les titres" onPress={handleGiveAllTitles} disabled={simLoading} flex />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Débloque directement les 17 titres du catalogue, sans passer par leurs
+                    conditions réelles - teste le sélecteur de titres en un clic.
                   </Text>
                 </DevSection>
 

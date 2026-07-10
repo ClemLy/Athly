@@ -26,6 +26,9 @@ import {
 } from '../../services/stats.service';
 import { resolveExerciseMeta } from '../../data/majorExercises';
 import { getMyRecords } from '../../services/social.service';
+import { getTitles } from '../../services/title.service';
+import { haptics } from '../../services/haptics.service';
+import { RARITY_META } from '../../services/inventory.service';
 import { syncLocalAchievements } from '../../services/reward.service';
 import { useAvatarFrame } from '../../hooks/useAvatarFrame';
 import { useDevSettings } from '../../hooks/useDevSettings';
@@ -43,6 +46,7 @@ import ActivityHeatmap  from '../../components/profile/ActivityHeatmap';
 import EmberParticles   from '../../components/profile/EmberParticles';
 import StreakBadge      from '../../components/profile/StreakBadge';
 import BorderPicker     from '../../components/profile/BorderPicker';
+import TitlePickerModal from '../../components/profile/TitlePickerModal';
 
 
 function buildBgGradient(isGod, isLegend, isElite, isBlood) {
@@ -60,9 +64,11 @@ export default function ProfileScreen({ navigation }) {
   const { sessionLogs: logs, activityLogs, totalXP, loading: logsLoading } = useWorkoutLogs();
   const { user, loading: profileLoading, refetch: refetchUser } = useUser();
   const [borderPickerVisible, setBorderPickerVisible] = useState(false);
+  const [titlePickerVisible, setTitlePickerVisible] = useState(false);
   const { shapeId, colorId, selectShape, selectColor } = useAvatarFrame();
   const { profileThemeId, godMode, trophyOverrides, reload: reloadDevSettings } = useDevSettings();
   const { featuredIds, toggleFeatured, reload: reloadFeatured } = useFeaturedTrophies();
+  const [equippedTitleMeta, setEquippedTitleMeta] = useState(null); // { label, rarity } | null
 
   // ─── Tutorial ─────────────────────────────────────────────────────────────
   const {
@@ -83,6 +89,21 @@ export default function ProfileScreen({ navigation }) {
       }
     }, [pendingChapterId, startChapter]),
   );
+
+  // Résout le titre équipé (label + couleur de rareté) — rafraîchi à chaque
+  // retour sur l'écran et à chaque fermeture du sélecteur de titres (l'équipement
+  // a pu changer pendant que la popup était ouverte).
+  const loadEquippedTitle = useCallback(async () => {
+    try {
+      const res = await getTitles();
+      const equipped = res.titles.find((t) => t.id === res.equippedTitle);
+      setEquippedTitleMeta(equipped ? { label: equipped.label, rarity: equipped.rarity } : null);
+    } catch (_) {
+      // best-effort — l'absence de titre affiché n'est pas bloquant.
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { loadEquippedTitle(); }, [loadEquippedTitle]));
 
   // Enregistre le ScrollView et la fonction de re-mesure dans le contexte tutoriel.
   // Indispensable pour que scrollY: 260 de l'étape profile_vitrine fonctionne,
@@ -270,6 +291,8 @@ export default function ProfileScreen({ navigation }) {
               shapeId={shapeId}
               colorId={colorId}
               profileTheme={activeTheme}
+              titleLabel={equippedTitleMeta?.label}
+              titleColor={equippedTitleMeta ? RARITY_META[equippedTitleMeta.rarity]?.color : undefined}
             />
             <EmberParticles
               visible={activeTheme ? activeTheme.shimmer : isLegend}
@@ -298,6 +321,12 @@ export default function ProfileScreen({ navigation }) {
               icon="trophy-outline"
               label="Trophées"
               onPress={() => navigation && navigation.navigate('TrophyRoom')}
+              accentColor={isElite ? rank.color : null}
+            />
+            <QuickBtn
+              icon="ribbon-outline"
+              label="Titres"
+              onPress={() => setTitlePickerVisible(true)}
               accentColor={isElite ? rank.color : null}
             />
           </View>
@@ -377,6 +406,11 @@ export default function ProfileScreen({ navigation }) {
         onSelectColor={selectColor}
       />
 
+      <TitlePickerModal
+        visible={titlePickerVisible}
+        onClose={() => { setTitlePickerVisible(false); loadEquippedTitle(); }}
+      />
+
       {activeChapterId === 'profile' && (
         <TutorialOverlay navigation={navigation} />
       )}
@@ -423,7 +457,7 @@ function QuickBtn({ icon, label, onPress, accentColor }) {
   return (
     <TouchableOpacity
       style={[styles.quickBtn, accentColor && { borderColor: accentColor + '28' }]}
-      onPress={onPress}
+      onPress={() => { haptics.success(); if (onPress) onPress(); }}
       activeOpacity={0.82}
     >
       <Ionicons name={icon} size={15} color={accentColor || Colors.textSecondary} />
@@ -449,9 +483,9 @@ const styles = StyleSheet.create({
   heroWrapper: { position: 'relative' },
   streakWrap:  { marginTop: 10 },
 
-  quickActions: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
   quickBtn: {
-    flex: 1,
+    width: '47.5%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

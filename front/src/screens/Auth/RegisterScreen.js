@@ -11,6 +11,7 @@ import { Colors } from '../../constants/theme';
 import AuthInput from '../../components/inputs/AuthInput';
 import NotificationBanner from '../../components/common/NotificationBanner';
 import { register } from '../../services/auth.service';
+import { haptics } from '../../services/haptics.service';
 
 const EMAIL_RE  = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const HAS_UPPER = /[A-Z]/;
@@ -358,6 +359,7 @@ export default function RegisterScreen({ navigation }) {
         setErrType('error');
         setGlobalErr('Cet email est déjà utilisé.');
       } else if (msg.toLowerCase().includes('pseudo')) {
+        haptics.error();
         setPseudoErr('Pseudo non autorisé');
         setPseudoRejectedVisible(true);
       } else {

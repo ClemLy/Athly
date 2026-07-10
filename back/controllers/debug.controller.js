@@ -10,6 +10,7 @@ const WorkoutLobby = require('../models/WorkoutLobby');
 const { xpForLevel, getRankForLevel } = require('../utils/levelHelpers');
 const { addItemAtomic, addUniqueItemOnce } = require('../services/inventory.service');
 const { checkAndUnlockAchievements } = require('./reward.controller');
+const { TITLE_CATALOG } = require('../data/titleCatalog');
 const { recordActivityEvent } = require('../services/activity.service');
 const { sendPushToUser } = require('../services/push.service');
 const { SHAKE_TROLL_MESSAGES } = require('../data/shakeMessages');
@@ -150,6 +151,42 @@ exports.giveAllItems = async (req, res, next) => {
       success:   true,
       message:   `${itemTypes.length} objet(s) ajouté(s) (1 exemplaire de chaque).`,
       inventory: user.inventory,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// giveAllTitles  POST /api/debug/godmode/give-all-titles
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Outil de test : débloque directement TOUS les titres du catalogue (Section X)
+ * dans unlockedTitles, sans passer par leurs conditions réelles — permet de
+ * tester le sélecteur de titres et les cosmétiques associés sans enchaîner
+ * des dizaines d'actions de jeu. Idempotent ($addToSet via Set union).
+ */
+exports.giveAllTitles = async (req, res, next) => {
+  try {
+    const allTitleIds = Object.keys(TITLE_CATALOG);
+
+    const user = await User.findById(req.user.id);
+    if (!user) return next(createError('Utilisateur introuvable.', 404));
+
+    const unlockedSet = new Set(user.unlockedTitles);
+    allTitleIds.forEach((id) => unlockedSet.add(id));
+    user.unlockedTitles = [...unlockedSet];
+    await user.save();
+
+    // TITLE_FIRST / TITLE_COLLECTOR_5 doivent aussi se débloquer ici.
+    const newlyUnlocked = await checkAndUnlockAchievements(req.user.id);
+
+    return res.status(200).json({
+      success:        true,
+      message:        `${allTitleIds.length} titre(s) débloqué(s).`,
+      unlockedTitles: user.unlockedTitles,
+      newlyUnlocked,
     });
   } catch (err) {
     next(err);

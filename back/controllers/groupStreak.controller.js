@@ -7,6 +7,7 @@ const User        = require('../models/User');
 const Workout     = require('../models/Workout');
 const { addUniqueItemOnce } = require('../services/inventory.service');
 const { checkAndUnlockAchievements } = require('./reward.controller');
+const { checkAndUnlockTitles } = require('./title.controller');
 const { levelFromXP, getRankForLevel } = require('../utils/levelHelpers');
 const { sendPushToUser } = require('../services/push.service');
 const { SHAKE_TROLL_MESSAGES } = require('../data/shakeMessages');
@@ -258,12 +259,27 @@ async function detectAndApplyStreakBreak(group) {
   }
 
   const breakers = [];
+  const coveredMemberIds = [];
   for (const memberId of absentMemberIds) {
     const covered = await User.findOneAndUpdate(
       { _id: memberId, streakGels: { $gt: 0 } },
       { $inc: { streakGels: -1 } },
     );
-    if (!covered) breakers.push(memberId);
+    if (covered) {
+      coveredMemberIds.push(memberId);
+    } else {
+      breakers.push(memberId);
+    }
+  }
+
+  // Titre STREAK_INSUBMERSIBLE ("sauver sa streak 3 fois de suite avec un Gel
+  // de Streak") : incrémente pour chaque sauvetage, remis à 0 pour un membre
+  // dès qu'il devient lui-même breaker (rupture non couverte, voir plus bas).
+  if (coveredMemberIds.length > 0) {
+    await User.updateMany(
+      { _id: { $in: coveredMemberIds } },
+      { $inc: { consecutiveStreakGelSaves: 1 } },
+    );
   }
 
   if (breakers.length === 0) {
@@ -271,12 +287,28 @@ async function detectAndApplyStreakBreak(group) {
     // curseur pour ne pas re-consommer un gel supplémentaire au prochain appel.
     group.lastValidatedDate = missedDayStart;
     await group.save();
+    try {
+      await Promise.all(coveredMemberIds.map((id) => checkAndUnlockTitles(id)));
+    } catch (_) {
+      // best-effort — ne doit jamais bloquer la détection de rupture.
+    }
     return group;
   }
 
+  await User.updateMany(
+    { _id: { $in: breakers } },
+    { $set: { consecutiveStreakGelSaves: 0 } },
+  );
+
   group.currentStreak = 0;
   group.shameBreakers = breakers;
+  group.shameBreakersShamedAt = new Date();
   await group.save();
+  try {
+    await Promise.all(coveredMemberIds.map((id) => checkAndUnlockTitles(id)));
+  } catch (_) {
+    // best-effort
+  }
   return group;
 }
 
@@ -526,10 +558,22 @@ exports.shakeMember = async (req, res, next) => {
     group.shakes.push({ from: myId, to: memberId, date: new Date() });
     await group.save();
 
+    // Titres SHAME_BURNING (>15 secousses au total) / SOCIAL_POKE_STRIKER
+    // (3 cibles différentes le même jour) — best-effort, ne bloque jamais
+    // l'envoi de la notification déjà effectué ci-dessus.
+    let newlyUnlockedTitles = [];
+    try {
+      await User.updateOne({ _id: myId }, { $inc: { totalShakesSent: 1 } });
+      newlyUnlockedTitles = await checkAndUnlockTitles(myId);
+    } catch (_) {
+      // ignore
+    }
+
     return res.status(200).json({
       success:  true,
       message:  `Notification envoyée à ${targetPseudo} !`,
       targetId: memberId,
+      newlyUnlockedTitles,
     });
   } catch (err) {
     next(err);
@@ -642,6 +686,16 @@ exports.checkAndUpdateGroupStreaks = async (req, res, next) => {
       await Promise.all(memberIds.map((id) => checkAndUnlockAchievements(id)));
     }
 
+    // Titres GROUP_GUILD_MASTER / SHAME_REPENTANCE — best-effort, ne doit
+    // jamais faire échouer la validation de streak déjà actée ci-dessus.
+    let newlyUnlockedTitlesByUser = {};
+    try {
+      const titleResults = await Promise.all(memberIds.map((id) => checkAndUnlockTitles(id)));
+      memberIds.forEach((id, i) => { newlyUnlockedTitlesByUser[id] = titleResults[i]; });
+    } catch (_) {
+      // ignore
+    }
+
     return res.status(200).json({
       success:       true,
       allValidated:  true,
@@ -651,6 +705,7 @@ exports.checkAndUpdateGroupStreaks = async (req, res, next) => {
       xpUpdates,
       groupBonus: { ...xpBonus, memberCount: memberIds.length },
       bloodSangUnlocked,
+      newlyUnlockedTitles: newlyUnlockedTitlesByUser[myId] ?? [],
     });
   } catch (err) {
     next(err);

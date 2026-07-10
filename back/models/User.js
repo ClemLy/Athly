@@ -154,6 +154,27 @@ const UserSchema = new mongoose.Schema(
     // gradués MULTI_SESSIONS_5 / MULTI_SESSIONS_30 (reward.controller.js).
     totalMultiSessions: { type: Number, default: 0, min: 0 },
 
+    // ── Titres déblocables (Section X) ────────────────────────────────────────
+    // IDs débloqués (voir data/titleCatalog.js pour le catalogue complet) et
+    // titre actuellement affiché sous le pseudo — équipable uniquement parmi
+    // les IDs présents dans unlockedTitles (voir title.controller.js).
+    unlockedTitles: { type: [String], default: [] },
+    equippedTitle:  { type: String, default: null },
+
+    // Compteurs dédiés aux conditions de titres qui ne se déduisent pas d'une
+    // requête ponctuelle (voir checkAndUnlockTitles dans title.controller.js) :
+    //  - totalShakesSent           : nombre total de fois où CET utilisateur a
+    //    secoué quelqu'un (bouton "Secouer", tous groupes confondus).
+    //  - totalSetsCompleted        : cumul des séries validées, toutes séances
+    //    confondues (incrémenté à la clôture backend d'une séance).
+    //  - consecutiveStreakGelSaves : nombre de fois D'AFFILÉE où un Gel de
+    //    Streak a sauvé sa streak personnelle sans rupture intercalée (remis à
+    //    0 dès qu'une rupture NON couverte par un gel survient — voir
+    //    detectAndApplyStreakBreak dans groupStreak.controller.js).
+    totalShakesSent:           { type: Number, default: 0, min: 0 },
+    totalSetsCompleted:        { type: Number, default: 0, min: 0 },
+    consecutiveStreakGelSaves: { type: Number, default: 0, min: 0 },
+
     // Cosmétiques Uniques définitivement débloqués (réclamés depuis
     // l'inventaire — voir inventory.controller.js → claimUniqueItem).
     // Clés libres du catalogue front (BorderPicker.js / profileThemes.js) :

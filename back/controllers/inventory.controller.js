@@ -5,6 +5,7 @@ const { drawChestItem } = require('../services/chest.service');
 const { consumeItemAtomic, addItemAtomic, addUniqueItemOnce, purgeEmptyEntries } = require('../services/inventory.service');
 const { levelFromXP, getRankForLevel } = require('../utils/levelHelpers');
 const { checkAndUnlockAchievements }   = require('./reward.controller');
+const { checkAndUnlockTitles }         = require('./title.controller');
 const { recordActivityEvent }          = require('../services/activity.service');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -171,6 +172,7 @@ exports.openChest = async (req, res, next) => {
 
     const finalUser    = await purgeEmptyEntries(req.user.id);
     const newlyUnlocked = await checkAndUnlockAchievements(req.user.id);
+    const newlyUnlockedTitles = await checkAndUnlockTitles(req.user.id).catch(() => []);
 
     return res.status(200).json({
       success:   true,
@@ -180,6 +182,7 @@ exports.openChest = async (req, res, next) => {
       totalChestsOpened: afterCount ? afterCount.totalChestsOpened : null,
       themeUnlockGranted,
       newlyUnlocked,
+      newlyUnlockedTitles,
     });
   } catch (err) {
     next(err);
@@ -233,6 +236,7 @@ exports.claimUniqueItem = async (req, res, next) => {
     ).select('unlockedCosmetics equippedFrame inventory');
 
     const finalUser = await purgeEmptyEntries(req.user.id);
+    const newlyUnlockedTitles = await checkAndUnlockTitles(req.user.id).catch(() => []);
 
     return res.status(200).json({
       success:           true,
@@ -241,6 +245,7 @@ exports.claimUniqueItem = async (req, res, next) => {
       equippedFrame:     updated.equippedFrame,
       unlockedCosmetics: updated.unlockedCosmetics,
       inventory:         finalUser.inventory,
+      newlyUnlockedTitles,
     });
   } catch (err) {
     next(err);

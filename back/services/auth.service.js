@@ -144,6 +144,10 @@ class AuthService {
         // auth.service → reward.controller → … au chargement des modules)
         const { checkAndUnlockAchievements } = require("../controllers/reward.controller");
         await checkAndUnlockAchievements(referrer._id.toString());
+
+        // Titre REFERRAL_EARLY ("L'Ancien") du FILLEUL — lié dès l'inscription.
+        const { checkAndUnlockTitles } = require("../controllers/title.controller");
+        await checkAndUnlockTitles(newUser._id.toString());
       } catch (err) {
         console.error("⚠️  [register] Récompenses de parrainage partielles :", err.message);
       }
