@@ -1,16 +1,16 @@
 <div align="center">
 
-# 🏋️ ATHLY
+# ATHLY
 
-**Application mobile de fitness gamifiée — React Native + Node.js**
+**Application mobile de fitness gamifiée. React Native, Expo, Node.js, MongoDB**
 
 ![React Native](https://img.shields.io/badge/React_Native-0.81.5-61DAFB?style=flat-square&logo=react)
 ![Expo](https://img.shields.io/badge/Expo-54-000020?style=flat-square&logo=expo)
-![Node.js](https://img.shields.io/badge/Node.js-22.x-339933?style=flat-square&logo=node.js)
+![Node.js](https://img.shields.io/badge/Node.js-20.x-339933?style=flat-square&logo=node.js)
 ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?style=flat-square&logo=mongodb)
-![License](https://img.shields.io/badge/License-ISC-blue?style=flat-square)
+![License](https://img.shields.io/badge/License-GPLv3-blue?style=flat-square)
 
-> Transformez chaque séance d'entraînement en expérience de jeu. XP, streaks, quêtes quotidiennes, trophées et rituels de récupération — progresser n'a jamais été aussi addictif.
+Athly transforme chaque séance d'entraînement en expérience de jeu. XP, niveaux, streaks, quêtes quotidiennes, plus de 60 trophées, 17 titres RPG, coffres à ouvrir, amis, groupes de streak collective et lobby multijoueur : progresser n'a jamais été aussi complet.
 
 </div>
 
@@ -20,25 +20,27 @@
 
 ```
 Athly/
-├── front/    ← Application mobile React Native (Expo)
-└── back/     ← API REST Node.js / Express / MongoDB
+  front/    Application mobile et PWA, React Native (Expo)
+  back/     API REST, Node.js, Express, MongoDB
+  docs/     Documentation transverse (architecture de sécurité)
 ```
 
-Les deux sous-projets ont chacun leur propre README détaillé :
-- [📱 Documentation Front-end](front/README.md) — architecture, composants, gamification
-- [⚙️ Documentation Back-end](back/README.md) — API REST, modèles, tests
+Chaque sous-projet a son propre README détaillé :
+
+- [Documentation Front-end](front/README.md) : fonctionnalités, architecture, gamification, navigation
+- [Documentation Back-end](back/README.md) : API REST complète, modèles de données, tests
 
 ---
 
 ## Prérequis
 
 | Outil | Version minimale |
-|-------|-----------------|
-| Node.js | ≥ 18 |
-| npm | ≥ 9 |
+|-------|--------------------|
+| Node.js | 18 ou supérieur |
+| npm | 9 ou supérieur |
 | Expo Go (téléphone) | dernière version |
 | Compte MongoDB Atlas | cluster M0 gratuit suffit |
-| Compte SMTP | Brevo, Gmail, Yahoo… |
+| Compte SMTP | Brevo, ou équivalent |
 
 ---
 
@@ -51,79 +53,74 @@ git clone https://github.com/ClemLy/Athly.git
 cd Athly
 ```
 
-### 2. Configurer le back-end
+### 2. Configurer le backend
 
 ```bash
 cd back
 npm install
-
-# Créer le fichier de variables d'environnement
 cp .env.example .env
-# → Ouvrir .env et remplir les valeurs (voir section ci-dessous)
+# Ouvrir .env et remplir les valeurs, voir la section Variables d'environnement
 ```
 
-### 3. Configurer le front-end
+### 3. Configurer le frontend
 
 ```bash
 cd ../front
 npm install
-
-# Créer le fichier de variables d'environnement
 cp .env.example .env
-# → Renseigner l'IP locale de votre machine (voir section ci-dessous)
+# Renseigner l'URL du backend, voir la section suivante
 ```
 
 ---
 
 ## Variables d'environnement
 
+Le détail complet de chaque variable, avec son usage exact, se trouve dans les fichiers `.env.example` de chaque sous-projet. Résumé minimal pour démarrer :
+
 ### `back/.env`
 
 ```env
-# Serveur
 PORT=4000
 NODE_ENV=development
-
-# MongoDB Atlas — remplacer par votre URI de connexion
 MONGO_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/athly
-
-# JWT — générer avec : node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-JWT_SECRET=votre_secret_jwt_long_et_aleatoire
+JWT_SECRET=secret_long_et_aleatoire
 JWT_EXPIRES_IN=1d
-
-# SMTP — exemple avec Brevo
 SMTP_HOST=smtp-relay.brevo.com
 SMTP_PORT=587
 SMTP_USER=votre_login_brevo
 SMTP_PASS=votre_cle_api_brevo
 SMTP_FROM=noreply@votre-domaine.com
+# Optionnel, pour activer la connexion Google :
+GOOGLE_CLIENT_IDS=
+# Optionnel, pour restreindre le CORS en production :
+CORS_ORIGINS=
 ```
 
 ### `front/.env`
 
 ```env
-# Adresse IP locale de votre machine (pas localhost — React Native ne le résout pas)
-# Sur Windows : ipconfig | grep IPv4
-# Sur macOS/Linux : ifconfig | grep "inet "
+# Adresse IP locale de la machine, pas localhost : React Native sur un
+# téléphone physique ne peut pas résoudre localhost.
 API_URL=http://VOTRE_IP_LOCALE:4000/api
-
-# Clé de stockage du token JWT (SecureStore)
 TOKEN_KEY=athly_token
-
 APP_ENV=development
+# Optionnel, pour activer le bouton Google (un Client ID par plateforme) :
+GOOGLE_EXPO_CLIENT_ID=
+GOOGLE_IOS_CLIENT_ID=
+GOOGLE_ANDROID_CLIENT_ID=
+GOOGLE_WEB_CLIENT_ID=
 ```
 
-> **Trouver votre IP locale :**
-> - Windows : `ipconfig` → chercher "Adresse IPv4"
-> - macOS / Linux : `ifconfig` ou `ip addr` → chercher l'adresse en `192.168.x.x`
+Trouver son IP locale : `ipconfig` sous Windows, `ifconfig` ou `ip addr` sous macOS et Linux.
 
 ---
 
 ## Lancer l'application
 
-Ouvrir **deux terminaux** :
+Ouvrir deux terminaux.
 
-**Terminal 1 — Back-end**
+**Terminal 1, backend**
+
 ```bash
 cd back
 npm run dev
@@ -131,108 +128,145 @@ npm run dev
 # Vérification : curl http://localhost:4000/health
 ```
 
-**Terminal 2 — Front-end**
+**Terminal 2, frontend**
+
 ```bash
 cd front
 npm start
-# Expo affiche un QR code → scanner avec Expo Go sur votre téléphone
+# Expo affiche un QR code à scanner avec Expo Go
 ```
 
-> Le téléphone et la machine doivent être sur **le même réseau Wi-Fi**.
+Le téléphone et la machine doivent être sur le même réseau Wi-Fi.
 
 ---
 
 ## Architecture globale
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                  TÉLÉPHONE (Expo Go)                 │
-│                                                      │
-│  React Native App                                    │
-│  ├── AuthContext (JWT via SecureStore)               │
-│  ├── WorkoutLogsContext (AsyncStorage — source vérité│
-│  ├── QuestContext · TutorialContext · ToastContext   │
-│  └── 8 services front (stats, quêtes, auth…)        │
-│                                                      │
-│         Axios → http://192.168.x.x:4000/api         │
-└──────────────────────────┬──────────────────────────┘
-                           │  réseau local
-┌──────────────────────────▼──────────────────────────┐
-│              NODE.JS API (port 4000)                 │
-│                                                      │
-│  Routes → Controllers → Services → Mongoose          │
-│  ├── /api/auth     (register, login, OTP, reset)    │
-│  ├── /api/users    (profil, RGPD)                   │
-│  ├── /api/workouts (CRUD, draft, finalize)          │
-│  └── /api/exercises (performances, historique)       │
-│                                                      │
-│         MongoDB Atlas (cloud)   Brevo SMTP           │
-└─────────────────────────────────────────────────────┘
+Téléphone ou navigateur (Expo Go, PWA)
+  React Native / React Native Web
+    AuthContext (JWT via SecureStore)
+    UserContext, WorkoutLogsContext, QuestContext,
+    SavedWorkoutsContext, CustomExercisesContext,
+    TutorialContext, ToastContext
+    17 services front, exposés via un barrel unique
+
+  Axios -> http://votre-serveur:4000/api
+
+API Node.js (port 4000)
+  Routes -> Controllers -> Services -> Mongoose
+    /api/auth        inscription, connexion, OTP, Google, réinitialisation
+    /api/users       profil, cadre équipé, vitrines, synchronisation XP, RGPD
+    /api/workouts    séances, brouillons, finalisation, anti-triche
+    /api/exercises   performances, historique, classement
+    /api/friends     amis, demandes, classement, profil public
+    /api/inventory   coffres, objets, cosmétiques Uniques
+    /api/groups      groupes de streak collective
+    /api/rewards     trophées serveur, anniversaire
+    /api/referral    parrainage
+    /api/profile     titres RPG
+    /api/lobby       lobby multijoueur
+    /api/activity    flux d'activité et réactions
+    /api/weight      historique de poids
+    /api/debug       outillage God Mode, bloqué en production
+
+  MongoDB Atlas        Brevo SMTP        Google OAuth (optionnel)
 ```
 
-**Répartition des responsabilités :**
+### Répartition des responsabilités
 
 | Fonctionnalité | Stockage | Calcul |
-|---------------|----------|--------|
-| Authentification | MongoDB (back) | back |
-| Profil utilisateur | MongoDB (back) | back |
-| Logs de séances | AsyncStorage (front) | front |
-| XP, streak, niveau | AsyncStorage (front) | front |
-| Quêtes quotidiennes | AsyncStorage (front) | front |
-| Rituels de récupération | AsyncStorage (front) | front |
-| Sync séances | MongoDB (best-effort) | front → back |
+|-----------------|----------|--------|
+| Authentification | MongoDB (backend) | backend |
+| Profil utilisateur | MongoDB (backend) | backend |
+| Social, groupes, lobby, inventaire, titres | MongoDB (backend) | backend |
+| Logs de séances | AsyncStorage (frontend) | frontend |
+| XP, streak, niveau local | AsyncStorage (frontend) | frontend |
+| Quêtes quotidiennes, rituels | AsyncStorage (frontend) | frontend |
+| Synchronisation de l'XP totale | MongoDB, best effort | frontend calcule, backend fait autorité |
 
 ---
 
-## Build APK (Android)
+## Build (Android et PWA)
 
-Pour générer un APK de production via EAS Build :
+### APK Android via EAS Build
 
 ```bash
 cd front
-
-# Installer EAS CLI (une seule fois)
 npm install -g eas-cli
 eas login
-
-# Build production
 eas build --platform android --profile production
 ```
 
-Le profil `production` dans `eas.json` pointe vers l'API déployée sur Render (`https://athly-api.onrender.com`). Pour viser votre propre backend, modifier `API_URL` dans la section `env` du profil `production` de `eas.json`.
+Le profil `production` dans `front/eas.json` pointe vers l'API déployée. Pour cibler un autre backend, modifier `API_URL` dans la section `env` de ce profil.
+
+### PWA web
+
+```bash
+cd front
+npm run build:web
+# expo export --platform web, puis copie du service worker
+```
 
 ---
 
 ## Tests
 
-**Back-end**
+**Backend**
+
 ```bash
 cd back
 npm test
 ```
-73 tests : formule XP/niveau (24), anti-cheat serveur (13), intégrité des schémas Mongoose (36). Les tests unitaires tournent sans connexion MongoDB.
 
-**Front-end**
+26 fichiers de tests, exécutés contre une instance MongoDB en mémoire, sans dépendance réseau externe. Couvre l'authentification, le profil, les séances, le social, les groupes, l'inventaire, les trophées, les titres, le lobby multijoueur et l'ensemble des formules de gamification.
+
+**Frontend**
+
 ```bash
 cd front
 npm test
 ```
+
+3 suites Jest sur les modules de données et services purs.
+
+---
+
+## Intégration continue
+
+Le workflow GitHub Actions (`.github/workflows/ci.yml`) exécute deux jobs indépendants, filtrés par dossier modifié :
+
+- Backend : lint, vérification syntaxique, audit de sécurité npm, suite de tests complète, sans base de données externe.
+- Frontend : audit de sécurité npm, build de la PWA (`expo export --platform web`), pour détecter tout composant natif incompatible avec le web.
 
 ---
 
 ## Déploiement
 
 | Composant | Plateforme | Notes |
-|-----------|-----------|-------|
-| Back-end | Render (Free tier) | Cold-start ~20s — absorbé par le timeout Axios 30s du front |
+|-----------|------------|-------|
+| Backend | Render (tier gratuit) | Démarrage à froid d'environ 20 secondes, absorbé par le timeout Axios du front |
 | Base de données | MongoDB Atlas M0 | Gratuit |
-| Emails | Brevo SMTP | Tier gratuit : 300 emails/jour |
-| App mobile | EAS Build | APK Android via `eas build --profile production` |
+| Emails | Brevo SMTP | Tier gratuit à 300 emails par jour |
+| Application mobile | EAS Build | APK Android via `eas build --profile production` |
+| PWA | Build statique | `npm run build:web`, à héberger sur tout service de fichiers statiques |
+
+---
+
+## Sécurité
+
+Le détail complet des protections (headers HTTP, rate limiting, validation, assainissement anti-injection, tolérance aux pannes) est documenté dans [docs/ARCHITECTURE-SECURITE.md](docs/ARCHITECTURE-SECURITE.md).
+
+---
+
+## Licence
+
+Distribué sous licence GNU GPLv3. Voir le fichier [LICENSE](LICENSE).
 
 ---
 
 <div align="center">
 
-Athly · React Native + Expo · Node.js + Express · MongoDB Atlas
+Athly : React Native + Expo, Node.js + Express, MongoDB Atlas
 
 </div>
