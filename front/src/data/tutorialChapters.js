@@ -166,7 +166,7 @@ export const TUTORIAL_CHAPTERS = [
       {
         key: 'trophies_filters',
         title: 'Filtrer par Catégorie',
-        body: "Les onglets 'Force', 'Endurance' et 'Spécial' filtrent les trophées. Les trophées verrouillés montrent leur condition.",
+        body: "Fais défiler les onglets 'Force', 'Endurance', 'Social & Multi', 'Coffres & Raretés' et 'Spécial' pour filtrer les trophées. Les trophées verrouillés montrent leur condition.",
         targetKey: 'trophies_filters', position: 'bottom', scrollY: 0,
       },
       {

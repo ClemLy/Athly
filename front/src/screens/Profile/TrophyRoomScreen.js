@@ -226,12 +226,9 @@ export default function TrophyRoomScreen({ navigation }) {
 
   const allCategories = useMemo(() => [...TROPHY_CATEGORIES, COLLECTION_CATEGORY], []);
 
-  // Rattache "Collection" au filtre "Spécial", sans muter les données source.
-  const filterTabs = useMemo(() => TROPHY_FILTER_TABS.map((tab) => (
-    tab.id === 'special' && tab.categories
-      ? { ...tab, categories: [...tab.categories, 'collection'] }
-      : tab
-  )), []);
+  // TROPHY_FILTER_TABS couvre déjà nativement "collection" via son propre
+  // onglet dédié ("Coffres & Raretés") — plus besoin de patch ad-hoc ici.
+  const filterTabs = TROPHY_FILTER_TABS;
 
   const visibleCategories = useMemo(() => {
     if (activeFilter === 'all') return allCategories;
@@ -294,21 +291,27 @@ export default function TrophyRoomScreen({ navigation }) {
         <View style={{ width: 38 }} />
       </View>
 
-      {/* Filter tabs */}
-      <View style={styles.filterRow} ref={filtersRef} onLayout={onFiltersLayout} collapsable={false}>
-        {filterTabs.map((tab) => {
-          const active = activeFilter === tab.id;
-          return (
-            <TouchableOpacity
-              key={tab.id}
-              style={[styles.filterTab, active && styles.filterTabActive]}
-              onPress={() => setFilter(tab.id)}
-              activeOpacity={0.75}
-            >
-              <Text style={[styles.filterLabel, active && styles.filterLabelActive]}>{tab.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
+      {/* Filter tabs — scroll horizontal (6 onglets ne tiennent plus à plat) */}
+      <View ref={filtersRef} onLayout={onFiltersLayout} collapsable={false}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+        >
+          {filterTabs.map((tab) => {
+            const active = activeFilter === tab.id;
+            return (
+              <TouchableOpacity
+                key={tab.id}
+                style={[styles.filterTab, active && styles.filterTabActive]}
+                onPress={() => setFilter(tab.id)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.filterLabel, active && styles.filterLabelActive]}>{tab.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       <ScrollView
@@ -511,8 +514,8 @@ const styles = StyleSheet.create({
   headerTitle: { color: Colors.textPrimary, fontSize: 17, fontWeight: '800' },
   headerSub:   { color: Colors.textMuted, fontSize: 11, fontWeight: '600', marginTop: 2 },
 
-  filterRow: { flexDirection: 'row', marginHorizontal: 16, paddingBottom: 12, gap: 8 },
-  filterTab: { flex: 1, paddingVertical: 7, borderRadius: 10, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },
+  filterRow: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 12, gap: 8 },
+  filterTab: { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 10, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },
   filterTabActive: { backgroundColor: 'rgba(254,116,57,0.14)', borderColor: Colors.primary + '50' },
   filterLabel:       { fontSize: 11, fontWeight: '700', color: Colors.textMuted, letterSpacing: 0.5 },
   filterLabelActive: { color: Colors.primary },

@@ -21,6 +21,7 @@ import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 import MultiLobbyModal from '../../components/workouts/MultiLobbyModal';
 import ConfirmModal from '../../components/common/ConfirmModal';
 import InfoModal from '../../components/common/InfoModal';
+import ActionSheetModal from '../../components/common/ActionSheetModal';
 
 // Page d'entrée "Séances".
 // Header : titre + 2 icônes (Mes exercices, Créer un exercice).
@@ -115,6 +116,7 @@ export default function WorkoutListScreen({ navigation, route }) {
   }, [route?.params?.pendingLobbyId, navigation]);
 
   const [deleteSavedTarget, setDeleteSavedTarget] = useState(null);
+  const [actionSheetTarget, setActionSheetTarget] = useState(null);
   const [errorInfo, setErrorInfo] = useState(null);
 
   // ─── Tutorial ─────────────────────────────────────────────────────────────
@@ -207,7 +209,19 @@ export default function WorkoutListScreen({ navigation, route }) {
     setConfirmItem(null);
   }, [confirmItem, navigation, loadWorkout]);
 
-  const onLongPressSaved = useCallback((saved) => setDeleteSavedTarget(saved), []);
+  const onLongPressSaved = useCallback((saved) => setActionSheetTarget(saved), []);
+
+  // "Modifier" route vers l'écran de création d'ORIGINE de la séance, pour que
+  // l'interface d'édition soit rigoureusement identique à celle de création :
+  // WorkoutBuilder pour toute séance sur-mesure (isManual: false), même une
+  // séance ancienne créée avant l'ajout du champ criteria (elle rouvrira alors
+  // l'écran sur-mesure avec des critères vierges plutôt qu'un éditeur différent) ;
+  // ManualWorkoutCreator uniquement pour les séances explicitement manuelles.
+  const onEditSaved = useCallback((saved) => {
+    if (!navigation) return;
+    const target = saved.isManual ? 'ManualWorkoutCreator' : 'WorkoutBuilder';
+    navigation.navigate(target, { editWorkout: saved });
+  }, [navigation]);
 
   const confirmDeleteSaved = useCallback(async () => {
     const saved = deleteSavedTarget;
@@ -387,6 +401,16 @@ export default function WorkoutListScreen({ navigation, route }) {
         existingLobbyId={existingLobbyId}
         onClose={() => { setMultiLobbyVisible(false); setExistingLobbyId(null); }}
         onReady={handleMultiReady}
+      />
+
+      <ActionSheetModal
+        visible={!!actionSheetTarget}
+        title={actionSheetTarget?.name}
+        options={[
+          { label: 'Modifier', onPress: () => onEditSaved(actionSheetTarget) },
+          { label: 'Supprimer', destructive: true, onPress: () => setDeleteSavedTarget(actionSheetTarget) },
+        ]}
+        onClose={() => setActionSheetTarget(null)}
       />
 
       <ConfirmModal
