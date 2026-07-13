@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity,
-  Animated, useWindowDimensions, Platform,
+  Animated, useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTutorial } from '../../context/TutorialContext';
@@ -87,11 +87,16 @@ export default function TutorialOverlay({ navigation }) {
     isLastStep, targets, nextStep, dismiss,
   } = useTutorial();
 
-  const { width: W, height: H } = useWindowDimensions();
-  // Sur web desktop, le portail Modal est recadré à 430 px centré (CSS dans index.js).
-  // Les coordonnées renvoyées par measure() sont en coords viewport, donc on soustrait
-  // l'offset gauche du conteneur pour obtenir des coordonnées locales au portail.
-  const modalLeft = Platform.OS === 'web' && W > 430 ? (W - 430) / 2 : 0;
+  const { height: H } = useWindowDimensions();
+  // Sur web, le <Modal> de react-native-web portale dans un <div> en
+  // position:fixed attaché à document.body — INDÉPENDANT du conteneur #root
+  // (recentré à 430 px sur desktop via web/index.html). measure() renvoie déjà
+  // des coordonnées relatives au viewport complet, le même repère que celui
+  // utilisé par ce Modal plein-viewport : aucune correction d'offset n'est à
+  // appliquer. Un ancien code soustrayait un offset "modalLeft" en supposant
+  // le Modal lui-même recentré à 430 px — ce qui décalait le spotlight de
+  // plusieurs centaines de pixels sur une fenêtre desktop large (le cadre se
+  // retrouvait loin de la carte réellement visible, recentrée dans #root).
 
   const slideY  = useRef(new Animated.Value(24)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -120,7 +125,7 @@ export default function TutorialOverlay({ navigation }) {
   const hasSpot    = !!targetRect;
 
   const sp = hasSpot ? {
-    x: (targetRect.x - modalLeft) - SPOTLIGHT_PADDING,
+    x: targetRect.x - SPOTLIGHT_PADDING,
     y: targetRect.y - SPOTLIGHT_PADDING,
     w: targetRect.width  + SPOTLIGHT_PADDING * 2,
     h: targetRect.height + SPOTLIGHT_PADDING * 2,
