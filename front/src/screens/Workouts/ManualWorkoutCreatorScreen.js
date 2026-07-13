@@ -111,11 +111,15 @@ function ExerciseRow({ exercise, index, onRemove, onSetsChange, onRepsChange }) 
   );
 }
 
-export default function ManualWorkoutCreatorScreen({ navigation }) {
-  const { create: createSavedWorkout } = useSavedWorkouts();
+export default function ManualWorkoutCreatorScreen({ navigation, route }) {
+  const { create: createSavedWorkout, update: updateSavedWorkout } = useSavedWorkouts();
 
-  const [name, setName] = useState('');
-  const [exercises, setExercises] = useState([]);
+  // Édition d'une séance existante (venant de WorkoutListScreen → "Modifier",
+  // pour les séances manuelles ou celles sans critères de génération stockés).
+  const editWorkout = route?.params?.editWorkout ?? null;
+
+  const [name, setName] = useState(editWorkout?.name ?? '');
+  const [exercises, setExercises] = useState(editWorkout?.exercises ?? []);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [infoModal, setInfoModal] = useState(null); // { title, body, onCloseNav? }
@@ -177,23 +181,32 @@ export default function ManualWorkoutCreatorScreen({ navigation }) {
     }
     setSaving(true);
     try {
-      await createSavedWorkout({
-        name: trimmed,
-        description: '',
-        exercises,
-        isManual: true,
-      });
-      setInfoModal({
-        title: 'Séance créée',
-        body: `"${trimmed}" est dans tes séances. Tu peux la lancer depuis la page Séances.`,
-        onCloseNav: true,
-      });
+      if (editWorkout?.id) {
+        await updateSavedWorkout(editWorkout.id, { name: trimmed, description: '', exercises });
+        setInfoModal({
+          title: 'Séance mise à jour',
+          body: `"${trimmed}" a été modifiée.`,
+          onCloseNav: true,
+        });
+      } else {
+        await createSavedWorkout({
+          name: trimmed,
+          description: '',
+          exercises,
+          isManual: true,
+        });
+        setInfoModal({
+          title: 'Séance créée',
+          body: `"${trimmed}" est dans tes séances. Tu peux la lancer depuis la page Séances.`,
+          onCloseNav: true,
+        });
+      }
     } catch (e) {
       setInfoModal({ title: 'Erreur', body: e && e.message ? e.message : 'Sauvegarde impossible' });
     } finally {
       setSaving(false);
     }
-  }, [name, exercises, createSavedWorkout, navigation]);
+  }, [name, exercises, editWorkout, createSavedWorkout, updateSavedWorkout, navigation]);
 
   const closeInfoModal = useCallback(() => {
     const shouldGoBack = infoModal?.onCloseNav;
@@ -214,7 +227,7 @@ export default function ManualWorkoutCreatorScreen({ navigation }) {
           >
             <Ionicons name="chevron-back" size={26} color={Colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Créer une séance</Text>
+          <Text style={styles.headerTitle}>{editWorkout ? 'Modifier la séance' : 'Créer une séance'}</Text>
           <View style={styles.headerSide} />
         </View>
 

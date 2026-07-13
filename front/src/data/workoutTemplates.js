@@ -173,7 +173,7 @@ export const TEMPLATES = [
         videoQuery: 'soulevé de terre roumain',
       }),
       buildExercise({
-        name: 'Presse à cuisses',
+        name: 'Leg Press',
         targetMuscle: 'Quadriceps',
         secondaryMuscles: ['Fessiers'],
         equipment: ['Machine'],

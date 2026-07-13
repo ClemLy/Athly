@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/theme';
 
 // ─── ActionSheetModal ─────────────────────────────────────────────────────────
@@ -16,6 +17,8 @@ import { Colors } from '../../constants/theme';
 //   onClose      () => void — appelé après tout choix (y compris Annuler)
 
 export default function ActionSheetModal({ visible, title, options = [], cancelLabel = 'Annuler', onClose }) {
+  const insets = useSafeAreaInsets();
+
   const handlePress = (opt) => {
     onClose?.();
     opt.onPress?.();
@@ -23,7 +26,7 @@ export default function ActionSheetModal({ visible, title, options = [], cancelL
 
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { paddingBottom: Math.max(12, insets.bottom + 8) }]}>
         <View style={styles.card}>
           {!!title && <Text style={styles.title} numberOfLines={2}>{title}</Text>}
 
@@ -52,7 +55,12 @@ const styles = StyleSheet.create({
     flex:            1,
     backgroundColor: 'rgba(0,0,0,0.82)',
     justifyContent:  'flex-end',
-    padding:         12,
+    paddingHorizontal: 12,
+    // zIndex/elevation explicites : garantit que la feuille passe au-dessus de
+    // tout autre contenu positionné (barre d'onglets, headers) — notamment sur
+    // web où le portail du Modal n'a pas de z-index par défaut.
+    zIndex:          999,
+    elevation:       999,
   },
   card: {
     width:           '100%',
@@ -63,7 +71,6 @@ const styles = StyleSheet.create({
     paddingTop:      18,
     paddingHorizontal: 8,
     paddingBottom:   8,
-    marginBottom:    8,
   },
   title: {
     color:         Colors.textMuted,

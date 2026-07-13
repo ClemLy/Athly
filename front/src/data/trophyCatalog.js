@@ -264,11 +264,16 @@ export const TROPHY_CATEGORIES = [
   { id: 'special',     label: 'Spécial',    icon: 'gift',          color: '#FE7439' },
 ];
 
+// Chaque catégorie (locale + backend via BACKEND_CATEGORY_MAP) doit apparaître
+// dans exactement un onglet ci-dessous — pas de doublon, pas de trou — pour que
+// "Tous" et la somme des onglets filtrés restent toujours cohérents.
 export const TROPHY_FILTER_TABS = [
-  { id: 'all',       label: 'Tous' },
-  { id: 'force',     label: 'Force',     categories: ['force', 'corps'] },
-  { id: 'endurance', label: 'Endurance', categories: ['heritage', 'exploration', 'regularite'] },
-  { id: 'special',   label: 'Spécial',   categories: ['secret', 'social', 'special'] },
+  { id: 'all',        label: 'Tous' },
+  { id: 'force',      label: 'Force',            categories: ['force', 'corps'] },
+  { id: 'endurance',  label: 'Endurance',        categories: ['heritage', 'exploration', 'regularite'] },
+  { id: 'social',     label: 'Social & Multi',   categories: ['social'] },
+  { id: 'collection', label: 'Coffres & Raretés', categories: ['collection'] },
+  { id: 'special',    label: 'Spécial',          categories: ['secret', 'special'] },
 ];
 
 // ─── Helper: évalue le catalogue avec overrides (godMode console) ─────────────
