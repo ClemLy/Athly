@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
-import { createLobby, getLobby, joinLobby, inviteToLobby, readyLobby, unreadyLobby } from '../../services/lobby.service';
-import { getFriendsList } from '../../services/social.service';
+import { createLobby, getLobby, joinLobby, inviteToLobby, readyLobby, unreadyLobby } from '../../services';
+import { getFriendsList } from '../../services';
 import { useUser } from '../../context/UserContext';
 
 const POLL_MS = 3000;
@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
   },
   card: {
     width:           '100%',
-    backgroundColor: '#13131C',
+    backgroundColor: Colors.bgDeep2,
     borderRadius:    22,
     borderWidth:     1,
     borderColor:     `${Colors.primary}38`,
@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
   statusDot: {
     position: 'absolute', bottom: -4, right: -4,
     width: 16, height: 16, borderRadius: 8,
-    borderWidth: 1.5, borderColor: '#13131C',
+    borderWidth: 1.5, borderColor: Colors.bgDeep2,
     justifyContent: 'center', alignItems: 'center',
   },
   memberName: { color: Colors.textMuted, fontSize: 10.5, fontWeight: '600', marginTop: 5, textAlign: 'center' },
@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
   // ── BonusTableModal ──────────────────────────────────────────────────────
   tableCard: {
     width:           '100%',
-    backgroundColor: '#13131C',
+    backgroundColor: Colors.bgDeep2,
     borderRadius:    22,
     borderWidth:     1,
     borderColor:     `${Colors.primary}38`,

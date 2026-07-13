@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { joinLobby } from '../../services/lobby.service';
+import { joinLobby } from '../../services';
 import { navigate } from '../../navigation/navigationRef';
 import LobbyInviteModal from './LobbyInviteModal';
 

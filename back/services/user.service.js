@@ -64,14 +64,9 @@ class UserService {
   async deleteAccount(userId) {
     const id = new Types.ObjectId(userId);
 
-    const exerciseResult = await ExerciseRecord.deleteMany({ user: id });
-    console.log(`🗑️  [deleteAccount] ExerciseRecords supprimés : ${exerciseResult.deletedCount}`);
-
-    const workoutResult = await Workout.deleteMany({ user: id });
-    console.log(`🗑️  [deleteAccount] Workouts supprimés      : ${workoutResult.deletedCount}`);
-
+    await ExerciseRecord.deleteMany({ user: id });
+    await Workout.deleteMany({ user: id });
     await User.findByIdAndDelete(id);
-    console.log(`🗑️  [deleteAccount] Utilisateur supprimé    : ${userId}`);
   }
 
   /**

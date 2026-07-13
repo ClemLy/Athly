@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
-import { getWeightHistory } from '../../services/weight.service';
+import { getWeightHistory } from '../../services';
 import WeightReminderModal from './WeightReminderModal';
 import WeightEntryModal from '../common/WeightEntryModal';
 

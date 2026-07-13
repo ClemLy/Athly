@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerText: {
-    color: '#8B95A3',
+    color: Colors.textDim,
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1,

@@ -10,15 +10,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { haptics } from '../../services/haptics.service';
+import { haptics } from '../../services';
 
 import { Colors } from '../../constants/theme';
-import useExerciseSorting, { isFiltering } from '../../hooks/useExerciseSorting';
+import { useExerciseSorting, isFiltering } from '../../hooks';
 import { useWorkoutInProgress } from '../../context/WorkoutInProgressContext';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
-import { useDevSettings } from '../../hooks/useDevSettings';
+import { useDevSettings } from '../../hooks';
 
-import API from '../../api/api';
+import { completeWorkout } from '../../services';
 
 import SortBar from '../../components/workouts/SortBar';
 import SupersetGroup from '../../components/workouts/SupersetGroup';
@@ -27,12 +27,12 @@ import InlineExerciseBlock from '../../components/workouts/InlineExerciseBlock';
 import AddExerciseSheet from '../../components/workouts/AddExerciseSheet';
 import WorkoutRecapModal from '../../components/workouts/WorkoutRecapModal';
 import ShortSessionWarningModal from '../../components/workouts/ShortSessionWarningModal';
-import QuestToast from '../../components/common/QuestToast';
-import ConfirmModal from '../../components/common/ConfirmModal';
+import { QuestToast } from '../../components/common';
+import { ConfirmModal } from '../../components/common';
 import LobbyMembersBar from '../../components/workouts/LobbyMembersBar';
 import LobbyWaitingOverlay from '../../components/workouts/LobbyWaitingOverlay';
 import MultiLootModal from '../../components/workouts/MultiLootModal';
-import { getLobby, finishLobby } from '../../services/lobby.service';
+import { getLobby, finishLobby } from '../../services';
 
 const DEFAULT_FILTERS = { muscles: [], levels: [], equipment: [] };
 
@@ -266,7 +266,7 @@ export default function WorkoutScreen({ route, navigation }) {
       const result = await actions.finalize({ notes: state.notes, durationSeconds: elapsed, ...opts });
 
       if (state.id) {
-        API.post(`/workouts/${state.id}/complete`).catch(() => {});
+        completeWorkout(state.id).catch(() => {});
       }
 
       const builtRecapData = {

@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
-import { ITEM_CATALOG, RARITY_META } from '../../services/inventory.service';
+import { ITEM_CATALOG, RARITY_META } from '../../services';
 import BirthdayConfetti from '../profile/BirthdayConfetti';
 
 // ─── ChestOpeningModal ────────────────────────────────────────────────────────

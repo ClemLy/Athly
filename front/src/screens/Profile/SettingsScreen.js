@@ -6,29 +6,29 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../../constants/theme';
-import ConfirmModal from '../../components/common/ConfirmModal';
-import InfoModal from '../../components/common/InfoModal';
+import { ConfirmModal } from '../../components/common';
+import { InfoModal } from '../../components/common';
 import { useAuth } from '../../context/AuthContext';
 import { useUser } from '../../context/UserContext';
 import { useToast } from '../../context/ToastContext';
 import { useSavedWorkouts } from '../../context/SavedWorkoutsContext';
 import { useQuests } from '../../context/QuestContext';
 import { useCustomExercises } from '../../context/CustomExercisesContext';
-import { deleteAccount } from '../../services/auth.service';
+import { deleteAccount } from '../../services';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import {
   xpToLevel, xpForLevel, computeStreak,
   debugAddXP, debugSetLevel, debugAddSessions,
   debugSimulateReps, debugSetStreak, debugClearDebugLogs,
   debugResetDailyXP,
-} from '../../services/stats.service';
+} from '../../services';
 import { PROFILE_THEMES, isThemeLocked } from '../../data/profileThemes';
 import { TROPHY_CATALOG, TROPHY_CATEGORIES, ULTIMATE_TROPHY, evaluateTrophies } from '../../data/trophyCatalog';
 import { COLLECTION_CATEGORY, BACKEND_CATEGORY_MAP } from '../../data/backendTrophyCategories';
-import { getAchievements } from '../../services/reward.service';
+import { getAchievements } from '../../services';
 import { normalizeAchievement } from '../../components/profile/AchievementShowcase';
 import { TrophyIcon } from '../../components/profile/TrophySlot';
-import { useDevSettings } from '../../hooks/useDevSettings';
+import { useDevSettings } from '../../hooks';
 import { useFocusEffect } from '@react-navigation/native';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
@@ -38,13 +38,13 @@ import {
   fireTestNotification,
   scheduleDailyReminder,
   cancelDailyReminder,
-} from '../../services/notificationService';
+} from '../../services';
 import {
   syncBackendLevel, giveChests, generateMockSocial, giveAllItems,
   simulateChestsOpened, simulateReferral, simulateBirthday,
   simulateGroup, simulateActivityEvent, simulateStreakBreak, simulateShakeSelf,
   simulateSearchableFriend, simulateLobbyInvite, giveAllTitles,
-} from '../../services/debug.service';
+} from '../../services';
 
 const UNIT_WEIGHT_KEY   = 'athly:unit:weight:v1';
 const UNIT_DIST_KEY     = 'athly:unit:distance:v1';
@@ -1208,7 +1208,7 @@ export default function SettingsScreen({ navigation }) {
 
         {/* ─── Suppression définitive du compte ────────────────────────────── */}
         <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => setDeleteModal1(true)} activeOpacity={0.7}>
-          <Ionicons name="trash-outline" size={15} color="#FF4D4D" style={{ marginRight: 8 }} />
+          <Ionicons name="trash-outline" size={15} color={Colors.error} style={{ marginRight: 8 }} />
           <Text style={styles.deleteAccountText}>Supprimer le compte</Text>
         </TouchableOpacity>
 
@@ -1224,7 +1224,7 @@ export default function SettingsScreen({ navigation }) {
         <View style={styles.dmBackdrop}>
           <View style={[styles.dmCard, styles.welcomeCard]}>
             <View style={styles.welcomeIconWrap}>
-              <Ionicons name="rocket-outline" size={30} color="#6E6AF0" />
+              <Ionicons name="rocket-outline" size={30} color={Colors.secondaryAccent} />
             </View>
             <Text style={styles.dmTitle}>Bienvenue à bord !</Text>
             <Text style={styles.dmBody}>
@@ -1254,7 +1254,7 @@ export default function SettingsScreen({ navigation }) {
         <View style={styles.dmBackdrop}>
           <View style={styles.dmCard}>
             <View style={styles.dmIconWrap}>
-              <Ionicons name="warning-outline" size={28} color="#EF4444" />
+              <Ionicons name="warning-outline" size={28} color={Colors.destructive} />
             </View>
             <Text style={styles.dmTitle}>Êtes-vous sûr ?</Text>
             <Text style={styles.dmBody}>
@@ -1280,7 +1280,7 @@ export default function SettingsScreen({ navigation }) {
         <View style={styles.dmBackdrop}>
           <View style={[styles.dmCard, styles.dmCardFinal]}>
             <View style={styles.dmIconFinalWrap}>
-              <Ionicons name="skull-outline" size={28} color="#EF4444" />
+              <Ionicons name="skull-outline" size={28} color={Colors.destructive} />
             </View>
             <Text style={styles.dmTitle}>Confirmation finale</Text>
             <Text style={styles.dmBody}>
@@ -1440,7 +1440,7 @@ function DevBtn({ label, onPress, disabled, variant = 'default', flex, fullWidth
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root:          { flex: 1, backgroundColor: '#080910' },
+  root:          { flex: 1, backgroundColor: Colors.bgAbyss },
   scroll:        { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 8 },
 
@@ -1482,7 +1482,7 @@ const styles = StyleSheet.create({
   themeItemSel:    { backgroundColor: 'rgba(255,255,255,0.07)', borderColor: 'rgba(255,255,255,0.25)' },
   themeItemLocked: { opacity: 0.35 },
   themeSwatch:     { width: 32, height: 32, borderRadius: 16, marginBottom: 5 },
-  themeCheck:      { position: 'absolute', top: 6, right: 6, width: 14, height: 14, borderRadius: 7, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#13131C' },
+  themeCheck:      { position: 'absolute', top: 6, right: 6, width: 14, height: 14, borderRadius: 7, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: Colors.bgDeep2 },
   themeLockOverlay:{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   themeLabel:      { color: Colors.textMuted, fontSize: 8, fontWeight: '600', textAlign: 'center' },
   themeLabelLocked:{ color: Colors.textMuted },
@@ -1546,7 +1546,7 @@ const styles = StyleSheet.create({
   devBtnTextDestructive: { color: Colors.error },
   devBtnTextDim:         { color: Colors.textMuted },
   devBtnTextOrange:      { color: '#FF6B00' },
-  devBtnTextViolet:      { color: '#8B5CF6' },
+  devBtnTextViolet:      { color: Colors.rankViolet },
   devBtnTextDisabled:    { color: Colors.textMuted },
 
   devHint: { color: 'rgba(255,215,0,0.40)', fontSize: 10, fontWeight: '500', lineHeight: 14, marginTop: -4 },
@@ -1605,16 +1605,16 @@ const styles = StyleSheet.create({
   // ── Welcome modal (fin tutoriel) ─────────────────────────────────────────────
   welcomeCard:    { borderColor: 'rgba(110,106,240,0.30)' },
   welcomeIconWrap:{ width: 64, height: 64, borderRadius: 20, backgroundColor: 'rgba(110,106,240,0.12)', borderWidth: 1, borderColor: 'rgba(110,106,240,0.30)', justifyContent: 'center', alignItems: 'center', marginBottom: 18 },
-  welcomeBtn:     { flexDirection: 'row', alignItems: 'center', width: '100%', height: 50, borderRadius: 13, backgroundColor: '#6E6AF0', justifyContent: 'center', marginBottom: 10, shadowColor: '#6E6AF0', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.40, shadowRadius: 12, elevation: 6 },
+  welcomeBtn:     { flexDirection: 'row', alignItems: 'center', width: '100%', height: 50, borderRadius: 13, backgroundColor: Colors.secondaryAccent, justifyContent: 'center', marginBottom: 10, shadowColor: Colors.secondaryAccent, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.40, shadowRadius: 12, elevation: 6 },
   welcomeBtnTxt:  { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
 
   // ── Delete Account button ────────────────────────────────────────────────────
   deleteAccountBtn:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12, paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(239,68,68,0.15)', backgroundColor: 'transparent' },
-  deleteAccountText: { color: '#FF4D4D', fontSize: 13, fontWeight: '600', opacity: 0.75 },
+  deleteAccountText: { color: Colors.error, fontSize: 13, fontWeight: '600', opacity: 0.75 },
 
   // ── Delete Account Modals ────────────────────────────────────────────────────
   dmBackdrop:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
-  dmCard:         { width: '100%', backgroundColor: '#13131C', borderRadius: 22, borderWidth: 1, borderColor: 'rgba(239,68,68,0.22)', padding: 28, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.65, shadowRadius: 32, elevation: 20 },
+  dmCard:         { width: '100%', backgroundColor: Colors.bgDeep2, borderRadius: 22, borderWidth: 1, borderColor: 'rgba(239,68,68,0.22)', padding: 28, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.65, shadowRadius: 32, elevation: 20 },
   dmCardFinal:    { borderColor: 'rgba(220,38,38,0.35)' },
   dmIconWrap:     { width: 60, height: 60, borderRadius: 18, backgroundColor: 'rgba(239,68,68,0.10)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)', justifyContent: 'center', alignItems: 'center', marginBottom: 18 },
   dmIconFinalWrap:{ width: 60, height: 60, borderRadius: 18, backgroundColor: 'rgba(220,38,38,0.14)', borderWidth: 1, borderColor: 'rgba(220,38,38,0.35)', justifyContent: 'center', alignItems: 'center', marginBottom: 18 },
@@ -1623,7 +1623,7 @@ const styles = StyleSheet.create({
   dmKeepBtn:      { flexDirection: 'row', alignItems: 'center', width: '100%', height: 50, borderRadius: 13, backgroundColor: Colors.primary, justifyContent: 'center', marginBottom: 10, shadowColor: Colors.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 6 },
   dmKeepTxt:      { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
   dmContinueBtn:  { width: '100%', height: 44, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
-  dmContinueTxt:  { color: '#EF4444', fontSize: 14, fontWeight: '600' },
+  dmContinueTxt:  { color: Colors.destructive, fontSize: 14, fontWeight: '600' },
   dmDestroyBtn:   { flexDirection: 'row', alignItems: 'center', width: '100%', height: 50, borderRadius: 13, backgroundColor: '#DC2626', justifyContent: 'center', marginBottom: 10, shadowColor: '#DC2626', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.45, shadowRadius: 12, elevation: 6 },
   dmDestroyTxt:   { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
   dmBackBtn:      { width: '100%', height: 44, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },

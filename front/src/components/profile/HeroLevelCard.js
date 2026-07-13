@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
-import { xpToLevel, getRank } from '../../services/stats.service';
+import { xpToLevel, getRank } from '../../services';
 import AvatarFrame, { getFrameFootprint } from './AvatarFrame';
 
 const AVATAR_SIZE = 90;

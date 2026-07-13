@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTutorial } from '../../context/TutorialContext';
 import { CHAPTER_IDS } from '../../data/tutorialChapters';
-import { haptics } from '../../services/haptics.service';
+import { haptics } from '../../services';
 import { Colors } from '../../constants/theme';
 
 // Padding visuel autour du spotlight (léger, ne perturbe pas les coordonnées)
@@ -262,7 +262,7 @@ export default function TutorialOverlay({ navigation }) {
                 <Text style={styles.skipTxt}>Passer</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.nextBtn, { backgroundColor: '#6E6AF0' }]}
+                style={[styles.nextBtn, { backgroundColor: Colors.secondaryAccent }]}
                 onPress={handleNext}
                 activeOpacity={0.82}
               >

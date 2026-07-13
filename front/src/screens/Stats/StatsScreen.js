@@ -8,8 +8,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '../../constants/theme';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import { useUser } from '../../context/UserContext';
-import { aggregateGlobal } from '../../services/stats.service';
-import { getWeightHistory } from '../../services/weight.service';
+import { aggregateGlobal } from '../../services';
+import { getWeightHistory } from '../../services';
 import PeriodSegmentedControl from '../../components/stats/PeriodSegmentedControl';
 import VolumeBarChart from '../../components/stats/VolumeBarChart';
 import MuscleDistributionPieChart from '../../components/stats/MuscleDistributionPieChart';
@@ -18,9 +18,9 @@ import WorkoutCalendar from '../../components/stats/WorkoutCalendar';
 import XPProgressBar from '../../components/stats/XPProgressBar';
 import WorkoutHistoryList from '../../components/stats/WorkoutHistoryList';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
-import WeightEntryModal from '../../components/common/WeightEntryModal';
-import ConfirmModal from '../../components/common/ConfirmModal';
-import InfoModal from '../../components/common/InfoModal';
+import { WeightEntryModal } from '../../components/common';
+import { ConfirmModal } from '../../components/common';
+import { InfoModal } from '../../components/common';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 import { MOCK_TUTORIAL_LOGS } from '../../data/mockTutorialStats';
 
@@ -189,7 +189,7 @@ export default function StatsScreen({ navigation }) {
       {/* Bandeau mock data */}
       {activeChapterId === 'stats' && (
         <View style={styles.mockBanner}>
-          <Ionicons name="flask-outline" size={12} color="#FFD700" />
+          <Ionicons name="flask-outline" size={12} color={Colors.gold} />
           <Text style={styles.mockBannerText}>Données de démonstration - disparaîtront à la fin du chapitre</Text>
         </View>
       )}
@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,215,0,0.25)',
     paddingHorizontal: 16, paddingVertical: 8,
   },
-  mockBannerText: { color: '#FFD700', fontSize: 11, fontWeight: '600', flex: 1 },
+  mockBannerText: { color: Colors.gold, fontSize: 11, fontWeight: '600', flex: 1 },
 
   header:   { marginBottom: 16 },
   title:    { color: Colors.textPrimary, fontSize: 26, fontWeight: '900', letterSpacing: -0.5 },

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView } from 'rea
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
-import { getActivityFeed, reactToActivityEvent } from '../../services/social.service';
+import { getActivityFeed, reactToActivityEvent } from '../../services';
 
 // ─── ActivityFeedModal ─────────────────────────────────────────────────────────
 // Flux d'activité « Taquineries & High-Fives » (Section IV) : au lancement de
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
   card: {
     width:           '100%',
     maxHeight:       '78%',
-    backgroundColor: '#13131C',
+    backgroundColor: Colors.bgDeep2,
     borderRadius:    22,
     borderWidth:     1,
     borderColor:     'rgba(255,255,255,0.08)',

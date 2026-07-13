@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
-import { haptics } from '../../services/haptics.service';
+import { haptics } from '../../services';
 
 // Ligne de série : [-] SET | POIDS (KG) | REPS | VALIDER
 //

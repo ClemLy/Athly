@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   },
   card: {
     width:           '100%',
-    backgroundColor: '#13131C',
+    backgroundColor: Colors.bgDeep2,
     borderRadius:    18,
     borderWidth:     1,
     borderColor:     'rgba(255,255,255,0.08)',
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
   },
   optionBtnLast: { marginBottom: 8 },
   optionTxt: { color: Colors.textPrimary, fontSize: 15.5, fontWeight: '600' },
-  optionTxtDestructive: { color: '#EF4444' },
+  optionTxtDestructive: { color: Colors.destructive },
   cancelBtn: {
     height: 50,
     justifyContent: 'center',

@@ -629,7 +629,7 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     width: '100%',
-    backgroundColor: '#13131C',
+    backgroundColor: Colors.bgDeep2,
     borderRadius: 26,
     borderWidth: 1,
     paddingHorizontal: 24,

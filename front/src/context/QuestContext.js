@@ -12,7 +12,7 @@ import {
   getTemplateById,
   QUEST_XP,
   BONUS_XP,
-} from '../services/quest.service';
+} from '../services';
 import { useWorkoutLogs } from './WorkoutLogsContext';
 
 const QuestContext = createContext(null);

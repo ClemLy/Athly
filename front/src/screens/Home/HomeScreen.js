@@ -19,7 +19,7 @@ import {
   recommendNextMuscleGroup,
   aggregateGlobal,
   xpToLevel,
-} from '../../services/stats.service';
+} from '../../services';
 import { findMuscleGroup } from '../../constants/exerciseFilters';
 import {
   TEMPLATES,
@@ -35,7 +35,7 @@ import DailyQuestsCard from '../../components/home/DailyQuestsCard';
 import RecoveryRitualsCard from '../../components/home/RecoveryRitualsCard';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
-import { useDevSettings } from '../../hooks/useDevSettings';
+import { useDevSettings } from '../../hooks';
 import { MOCK_TUTORIAL_LOGS } from '../../data/mockTutorialStats';
 
 // Écran d'accueil. Bascule entre EmptyHomeState (compte vierge) et état actif
@@ -189,7 +189,7 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={styles.safe}>
       {isTutorialDashboard && (
         <View style={styles.mockBanner}>
-          <Ionicons name="flask-outline" size={12} color="#FFD700" />
+          <Ionicons name="flask-outline" size={12} color={Colors.gold} />
           <Text style={styles.mockBannerText}>Données de démonstration - disparaîtront à la fin du chapitre</Text>
         </View>
       )}
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,215,0,0.20)',
     paddingHorizontal: 16, paddingVertical: 8,
   },
-  mockBannerText: { color: '#FFD700', fontSize: 11, fontWeight: '600', flex: 1 },
+  mockBannerText: { color: Colors.gold, fontSize: 11, fontWeight: '600', flex: 1 },
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: 20,

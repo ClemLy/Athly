@@ -4,13 +4,14 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '../../constants/theme';
 
 // ─── Config par type ─────────────────────────────────────────────────────────
 
 const TYPE_CONFIG = {
-  success: { icon: 'checkmark-circle',   color: '#22C55E' },
-  error:   { icon: 'close-circle',        color: '#FF4D4D' },
-  warning: { icon: 'warning',             color: '#F59E0B' },
+  success: { icon: 'checkmark-circle',   color: Colors.valid },
+  error:   { icon: 'close-circle',        color: Colors.error },
+  warning: { icon: 'warning',             color: Colors.warningAmber },
   info:    { icon: 'information-circle',  color: '#4A9EFF' },
 };
 
@@ -132,7 +133,7 @@ const styles = StyleSheet.create({
   },
   message: {
     flex: 1,
-    color: '#FFFFFF',
+    color: Colors.textPrimary,
     fontSize: 14,
     fontWeight: '600',
     lineHeight: 20,

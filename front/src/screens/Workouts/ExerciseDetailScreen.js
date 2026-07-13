@@ -18,7 +18,7 @@ import {
   primaryMuscleLabel,
   secondaryMusclesLabels,
 } from '../../constants/exerciseFilters';
-import useEffortTimer from '../../hooks/useEffortTimer';
+import { useEffortTimer } from '../../hooks';
 import { useWorkoutInProgress } from '../../context/WorkoutInProgressContext';
 import ExerciseHeader from '../../components/workouts/ExerciseHeader';
 import SetTable from '../../components/workouts/SetTable';

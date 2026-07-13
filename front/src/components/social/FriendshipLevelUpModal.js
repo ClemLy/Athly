@@ -8,7 +8,7 @@ import BirthdayConfetti from '../profile/BirthdayConfetti';
 // même esprit que RANK_COLORS dans LevelUpModal.js, mais indexé par niveau
 // d'amitié (1 à 5) plutôt que par rang de niveau de joueur.
 const FRIENDSHIP_LEVEL_COLORS = {
-  1: '#9AA0AE',
+  1: Colors.textSecondary,
   2: '#FF8FA3',
   3: '#FF4D6D',
   4: '#E11D48',
@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
   },
   card: {
     width:           '100%',
-    backgroundColor: '#13131C',
+    backgroundColor: Colors.bgDeep2,
     borderRadius:    22,
     borderWidth:     1,
     padding:         28,

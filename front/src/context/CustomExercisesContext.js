@@ -4,7 +4,7 @@ import {
   addCustomExercise,
   updateCustomExercise,
   removeCustomExercise,
-} from '../services/customExercises.service';
+} from '../services';
 
 // Context global pour les exercices personnalisés.
 // - Charge la liste depuis AsyncStorage au montage

@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
   cardInSuperset: {
     marginHorizontal: 10,
     marginBottom: 8,
-    backgroundColor: '#1f1f27',
+    backgroundColor: Colors.borderSubtle,
   },
   row: {
     flexDirection: 'row',
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 12,
-    backgroundColor: '#0e0e12',
+    backgroundColor: Colors.cardInner,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,

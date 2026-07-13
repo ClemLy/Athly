@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, ScrollView, TouchableOpacity, Pressable, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
-import { RARITY_META } from '../../services/inventory.service';
+import { RARITY_META } from '../../services';
 import { FeaturedModal, TrophyIcon } from './TrophySlot';
 
 // ─── AchievementShowcase ──────────────────────────────────────────────────────
@@ -78,14 +78,14 @@ const CATEGORY_COLOR = {
   profile:     Colors.rankViolet,
   collection:  Colors.primary,
   social:      '#22D3EE',
-  heritage:    '#FE7439',
+  heritage:    Colors.primary,
   force:       '#DC2626',
-  exploration: '#22C55E',
+  exploration: Colors.valid,
   secret:      '#6366F1',
   corps:       '#D1D5DB',
   regularite:  '#10B981',
-  special:     '#FE7439',
-  ultime:      '#FFD700',
+  special:     Colors.primary,
+  ultime:      Colors.gold,
 };
 
 const CATEGORY_LABELS = {

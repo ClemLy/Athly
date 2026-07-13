@@ -10,10 +10,10 @@ import {
 } from 'react-native';
 
 import { Colors } from '../../constants/theme';
-import API from '../../api/api';
+import { updateMyProfile } from '../../services';
 import { useUser } from '../../context/UserContext';
 import { useToast } from '../../context/ToastContext';
-import { setBirthdate } from '../../services/reward.service';
+import { setBirthdate } from '../../services';
 import BirthdatePicker from '../../components/profile/BirthdatePicker';
 
 // ─── EditProfileScreen ────────────────────────────────────────────────────────
@@ -107,8 +107,8 @@ export default function EditProfileScreen({ navigation }) {
       ...(parsedRythme     !== null && { rythme:     parsedRythme }),
     };
     try {
-      const res = await API.put('/users/me', payload);
-      if (res.data.success) {
+      const res = await updateMyProfile(payload);
+      if (res.success) {
         refetchUser(); // met à jour le UserContext → ProfileScreen + SettingsScreen sync instantané
         showToast('Profil mis à jour avec succès !', 'success');
         navigation.goBack();
@@ -351,7 +351,7 @@ const GRP_BORDER = 'rgba(255,255,255,0.09)';
 const SEP        = 'rgba(255,255,255,0.07)';
 
 const styles = StyleSheet.create({
-  root:   { flex: 1, backgroundColor: '#080910' },
+  root:   { flex: 1, backgroundColor: Colors.bgAbyss },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 8 },
 

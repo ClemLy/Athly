@@ -1,5 +1,12 @@
 import API from '../api/api';
 
+// Met à jour les informations du profil (nom, mensurations, objectif, rythme…).
+// Renvoie la réponse brute — l'appelant gère le refetch du UserContext.
+export async function updateMyProfile(payload) {
+  const res = await API.put('/users/me', payload);
+  return res.data;
+}
+
 // Synchronise le cadre de profil équipé (forme + couleur) vers le backend,
 // pour qu'il soit visible sur le profil public par les amis (useAvatarFrame
 // reste la source de vérité locale pour l'affichage instantané côté soi-même).

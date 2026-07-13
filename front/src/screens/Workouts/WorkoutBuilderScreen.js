@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1f1f27',
+    borderBottomColor: Colors.borderSubtle,
   },
   headerTitle: {
     color: Colors.textPrimary,
@@ -387,7 +387,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 9,
-    backgroundColor: '#0e0e12',
+    backgroundColor: Colors.cardInner,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
     paddingBottom: 26,
     backgroundColor: Colors.background,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#1f1f27',
+    borderTopColor: Colors.borderSubtle,
   },
   launchBtn: {
     flexDirection: 'row',

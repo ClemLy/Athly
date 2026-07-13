@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, FlatList, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
-import { getMyRecords } from '../../services/social.service';
-import { updateRecordsShowcase } from '../../services/profile.service';
+import { getMyRecords } from '../../services';
+import { updateRecordsShowcase } from '../../services';
 
 const MAX_SHOWCASED = 6;
 
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#13131C',
+    backgroundColor: Colors.bgDeep2,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,

@@ -10,7 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
-import { aggregateExercise } from '../../services/stats.service';
+import { aggregateExercise } from '../../services';
 import ExerciseStatsChart from '../../components/stats/ExerciseStatsChart';
 import PRCard from '../../components/stats/PRCard';
 

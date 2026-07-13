@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { useQuests } from '../../context/QuestContext';
-import { QUEST_XP, BONUS_XP } from '../../services/quest.service';
+import { QUEST_XP, BONUS_XP } from '../../services';
 
 export default function DailyQuestsCard() {
   const { quests, completedCount, bonusClaimed, loading } = useQuests();
@@ -56,13 +56,13 @@ export default function DailyQuestsCard() {
           <Ionicons
             name={allDone ? 'star' : 'star-outline'}
             size={10}
-            color={allDone ? '#FFD700' : Colors.textMuted}
+            color={allDone ? Colors.gold : Colors.textMuted}
           />
           <Text style={[styles.bonusText, allDone && styles.bonusTextDone]}>
             Bonus toutes quêtes : +{BONUS_XP} XP
           </Text>
           {allDone && (
-            <Ionicons name="checkmark-circle" size={11} color="#FFD700" />
+            <Ionicons name="checkmark-circle" size={11} color={Colors.gold} />
           )}
         </View>
       </View>
@@ -230,5 +230,5 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
   },
-  bonusTextDone: { color: '#FFD700' },
+  bonusTextDone: { color: Colors.gold },
 });

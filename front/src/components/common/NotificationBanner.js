@@ -1,11 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '../../constants/theme';
 
 const VARIANTS = {
   error: {
     icon: 'alert-circle',
-    color: '#FF4D4D',
+    color: Colors.error,
     bg: 'rgba(255, 77, 77, 0.10)',
     border: 'rgba(255, 77, 77, 0.30)',
     iconBg: 'rgba(255, 77, 77, 0.15)',
@@ -26,7 +27,7 @@ const VARIANTS = {
   },
   success: {
     icon: 'checkmark-circle',
-    color: '#44FF88',
+    color: Colors.success,
     bg: 'rgba(68, 255, 136, 0.10)',
     border: 'rgba(68, 255, 136, 0.28)',
     iconBg: 'rgba(68, 255, 136, 0.15)',
