@@ -1,5 +1,5 @@
 import { useReducer, useEffect, useRef, useCallback, useMemo } from 'react';
-import API from '../api/api';
+import { createWorkoutDraft, updateWorkoutDraft, finalizeWorkout } from '../services/workouts.service';
 
 // ---------------------------------------------------------------------------
 // useWorkoutState
@@ -229,27 +229,22 @@ export default function useWorkoutState(initial = {}) {
     isSaving.current = true;
     try {
       if (!state.id) {
-        const res = await API.post('/workouts/draft', {
+        const workout = await createWorkoutDraft({
           name: state.name,
           exercises: state.exercises,
           notes: state.notes,
-          status: 'draft',
         });
-        const data = res && res.data ? res.data : res;
-        const workout = data && data.workout ? data.workout : null;
         if (workout) {
           dispatch({ type: ACTIONS.SET_WORKOUT, payload: { id: workout._id } });
           return workout;
         }
         return null;
       }
-      const res = await API.patch(`/workouts/${state.id}/draft`, {
+      return await updateWorkoutDraft(state.id, {
         exercises: state.exercises,
         notes: state.notes,
         durationSeconds: state.durationSeconds,
       });
-      const data = res && res.data ? res.data : res;
-      return data && data.workout ? data.workout : data;
     } catch (error) {
       // Pas de Alert ici pour éviter le spam — on le centralise dans finalize/handler explicite.
       return null;
@@ -267,13 +262,12 @@ export default function useWorkoutState(initial = {}) {
     const saved = await saveDraft();
     const workoutId = state.id || (saved && (saved._id || saved.id));
     if (!workoutId) throw new Error('no_id');
-    const res = await API.post(`/workouts/${workoutId}/finalize`, {
+    const data = await finalizeWorkout(workoutId, {
       exercises: state.exercises,
       notes: state.notes,
       durationSeconds: state.durationSeconds,
       ...options,
     });
-    const data = res && res.data ? res.data : res;
     if (data && data.stats) {
       dispatch({ type: ACTIONS.MARK_FINISHED });
       return data.stats;

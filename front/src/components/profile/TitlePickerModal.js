@@ -3,9 +3,9 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '../../constants/theme';
-import { getTitles, equipTitle } from '../../services/title.service';
-import { RARITY_META } from '../../services/inventory.service';
-import { haptics } from '../../services/haptics.service';
+import { getTitles, equipTitle } from '../../services';
+import { RARITY_META } from '../../services';
+import { haptics } from '../../services';
 
 // ─── TitleInfoModal ───────────────────────────────────────────────────────────
 // Affiche la quête exacte pour un titre encore verrouillé, avec une barre de
@@ -188,7 +188,7 @@ const s = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20,
   },
   sheet: {
-    width: '100%', maxHeight: '85%', backgroundColor: '#13131C',
+    width: '100%', maxHeight: '85%', backgroundColor: Colors.bgDeep2,
     borderRadius: 24, borderWidth: 1, borderColor: `${Colors.primary}38`,
     padding: 22, paddingTop: 40,
   },
@@ -227,7 +227,7 @@ const s = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24,
   },
   infoCard: {
-    width: '100%', backgroundColor: '#13131C', borderRadius: 22, borderWidth: 1,
+    width: '100%', backgroundColor: Colors.bgDeep2, borderRadius: 22, borderWidth: 1,
     padding: 28, alignItems: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.65, shadowRadius: 32, elevation: 20,
   },

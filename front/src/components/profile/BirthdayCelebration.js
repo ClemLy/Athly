@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
-import { checkBirthday } from '../../services/reward.service';
+import { checkBirthday } from '../../services';
 import BirthdayModal from './BirthdayModal';
 
 const SHOWN_KEY = 'athly:birthday:shown_date:v1';

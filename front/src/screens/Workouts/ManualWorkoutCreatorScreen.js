@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1f1f27',
+    borderBottomColor: Colors.borderSubtle,
   },
   headerTitle: {
     color: Colors.textPrimary,
@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: '#0e0e12',
+    backgroundColor: Colors.cardInner,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -470,7 +470,7 @@ const styles = StyleSheet.create({
   stepper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0e0e12',
+    backgroundColor: Colors.cardInner,
     borderRadius: 10,
     paddingHorizontal: 4,
   },
@@ -488,7 +488,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   repsInput: {
-    backgroundColor: '#0e0e12',
+    backgroundColor: Colors.cardInner,
     color: Colors.textPrimary,
     fontSize: 14,
     fontWeight: '700',
@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
     paddingBottom: 26,
     backgroundColor: Colors.background,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#1f1f27',
+    borderTopColor: Colors.borderSubtle,
   },
   saveBtn: {
     flexDirection: 'row',

@@ -9,9 +9,9 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '../../constants/theme';
 import AuthInput from '../../components/inputs/AuthInput';
-import NotificationBanner from '../../components/common/NotificationBanner';
-import { register } from '../../services/auth.service';
-import { haptics } from '../../services/haptics.service';
+import { NotificationBanner } from '../../components/common';
+import { register } from '../../services';
+import { haptics } from '../../services';
 
 const EMAIL_RE  = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const HAS_UPPER = /[A-Z]/;
@@ -32,7 +32,7 @@ function getStrength(pwd) {
 function StrengthBar({ password }) {
   const score = getStrength(password);
   if (!password) return null;
-  const color = score === 3 ? '#44FF88' : score === 2 ? '#FFA500' : '#FF4D4D';
+  const color = score === 3 ? Colors.success : score === 2 ? '#FFA500' : Colors.error;
   const label = score === 3 ? 'Fort' : score === 2 ? 'Moyen' : 'Faible';
   return (
     <View style={sb.wrap}>
@@ -76,7 +76,7 @@ function WeakPasswordModal({ visible, onImprove, onCreate, loading }) {
 
           {/* Icône */}
           <View style={wm.iconWrap}>
-            <Ionicons name="warning-outline" size={28} color="#F59E0B" />
+            <Ionicons name="warning-outline" size={28} color={Colors.warningAmber} />
           </View>
 
           <Text style={wm.title}>Mot de passe simple</Text>
@@ -124,7 +124,7 @@ const wm = StyleSheet.create({
   },
   card: {
     width: '100%',
-    backgroundColor: '#13131C',
+    backgroundColor: Colors.bgDeep2,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: 'rgba(245,158,11,0.25)',
@@ -219,7 +219,7 @@ function PseudoRejectedModal({ visible, onClose }) {
       <View style={pm.backdrop}>
         <View style={pm.card}>
           <View style={pm.iconWrap}>
-            <Ionicons name="alert-circle" size={30} color="#EF4444" />
+            <Ionicons name="alert-circle" size={30} color={Colors.destructive} />
           </View>
 
           <Text style={pm.title}>Pseudo non autorisé</Text>
@@ -251,7 +251,7 @@ const pm = StyleSheet.create({
   },
   card: {
     width: '100%',
-    backgroundColor: '#13131C',
+    backgroundColor: Colors.bgDeep2,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: 'rgba(239,68,68,0.35)',
@@ -271,11 +271,11 @@ const pm = StyleSheet.create({
   },
   title: { color: Colors.textPrimary, fontSize: 19, fontWeight: '800', letterSpacing: -0.3, marginBottom: 12, textAlign: 'center' },
   body: { color: Colors.textSecondary, fontSize: 14, lineHeight: 21, textAlign: 'center', marginBottom: 14 },
-  warning: { color: '#EF4444', fontSize: 12.5, fontWeight: '700', lineHeight: 18, textAlign: 'center', marginBottom: 24 },
+  warning: { color: Colors.destructive, fontSize: 12.5, fontWeight: '700', lineHeight: 18, textAlign: 'center', marginBottom: 24 },
   closeBtn: {
     width: '100%', height: 50, borderRadius: 13,
-    backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#EF4444', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
+    backgroundColor: Colors.destructive, justifyContent: 'center', alignItems: 'center',
+    shadowColor: Colors.destructive, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
   },
   closeTxt: { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
 });

@@ -23,16 +23,16 @@ import {
   xpToLevel,
   computeStreak,
   getRank,
-} from '../../services/stats.service';
+} from '../../services';
 import { resolveExerciseMeta } from '../../data/majorExercises';
-import { getMyRecords } from '../../services/social.service';
-import { getTitles } from '../../services/title.service';
-import { haptics } from '../../services/haptics.service';
-import { RARITY_META } from '../../services/inventory.service';
-import { syncLocalAchievements } from '../../services/reward.service';
-import { useAvatarFrame } from '../../hooks/useAvatarFrame';
-import { useDevSettings } from '../../hooks/useDevSettings';
-import { useFeaturedTrophies } from '../../hooks/useFeaturedTrophies';
+import { getMyRecords } from '../../services';
+import { getTitles } from '../../services';
+import { haptics } from '../../services';
+import { RARITY_META } from '../../services';
+import { syncLocalAchievements } from '../../services';
+import { useAvatarFrame } from '../../hooks';
+import { useDevSettings } from '../../hooks';
+import { useFeaturedTrophies } from '../../hooks';
 import { getTheme } from '../../data/profileThemes';
 import { evaluateTrophies, ULTIMATE_TROPHY } from '../../data/trophyCatalog';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
@@ -296,7 +296,7 @@ export default function ProfileScreen({ navigation }) {
             />
             <EmberParticles
               visible={activeTheme ? activeTheme.shimmer : isLegend}
-              color={isBlood ? Colors.uniqueBloodBright : (isGod || activeTheme?.bgVariant === 'god' ? '#FFD700' : '#C084FC')}
+              color={isBlood ? Colors.uniqueBloodBright : (isGod || activeTheme?.bgVariant === 'god' ? Colors.gold : Colors.legendAccent)}
             />
           </View>
 

@@ -16,8 +16,8 @@ const SCREEN_H = Dimensions.get('window').height;
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Colors } from '../../constants/theme';
-import { xpToLevel, getRank } from '../../services/stats.service';
-import { QUEST_XP, BONUS_XP } from '../../services/quest.service';
+import { xpToLevel, getRank } from '../../services';
+import { QUEST_XP, BONUS_XP } from '../../services';
 
 const LOGO_VIOLET = require('../../../assets/logo-violet.png');
 
@@ -464,13 +464,13 @@ export default function WorkoutRecapModal({
               {streakBonusXP > 0 && (
                 <View style={styles.xpDetailRow}>
                   <Text style={styles.xpDetailLabel}>Bonus Régularité ×{xpMultiplier}</Text>
-                  <Text style={[styles.xpDetailValue, { color: '#FE7439' }]}>+{streakBonusXP.toLocaleString('fr-FR')} XP</Text>
+                  <Text style={[styles.xpDetailValue, { color: Colors.primary }]}>+{streakBonusXP.toLocaleString('fr-FR')} XP</Text>
                 </View>
               )}
               {questXPEarned > 0 && (
                 <View style={styles.xpDetailRow}>
                   <Text style={styles.xpDetailLabel}>Bonus Quêtes</Text>
-                  <Text style={[styles.xpDetailValue, { color: '#FFD700' }]}>+{questXPEarned.toLocaleString('fr-FR')} XP</Text>
+                  <Text style={[styles.xpDetailValue, { color: Colors.gold }]}>+{questXPEarned.toLocaleString('fr-FR')} XP</Text>
                 </View>
               )}
               <View style={styles.xpDetailDivider} />
@@ -557,9 +557,9 @@ export default function WorkoutRecapModal({
               ))}
               {bonusUnlocked ? (
                 <View style={styles.questRow}>
-                  <Ionicons name="star" size={13} color="#FFD700" />
-                  <Text style={[styles.questName, { color: '#FFD700' }]}>Bonus toutes quêtes</Text>
-                  <Text style={[styles.questXP, { color: '#FFD700' }]}>+{BONUS_XP} XP</Text>
+                  <Ionicons name="star" size={13} color={Colors.gold} />
+                  <Text style={[styles.questName, { color: Colors.gold }]}>Bonus toutes quêtes</Text>
+                  <Text style={[styles.questXP, { color: Colors.gold }]}>+{BONUS_XP} XP</Text>
                 </View>
               ) : null}
             </View>

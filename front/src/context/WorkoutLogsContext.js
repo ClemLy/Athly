@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { AppState } from 'react-native';
-import { listLogs, addLog, removeLog, totalCumulativeXP, addRitualLog, addBonusXpLog } from '../services/stats.service';
-import { syncXp, retryPendingXpSync } from '../services/xpSync.service';
+import { listLogs, addLog, removeLog, totalCumulativeXP, addRitualLog, addBonusXpLog } from '../services';
+import { syncXp, retryPendingXpSync } from '../services';
 
 // Context global pour l'historique des séances finalisées (logs).
 // Source de vérité unique pour StatsScreen, ExerciseStatsScreen, ProfileScreen.

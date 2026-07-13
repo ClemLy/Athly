@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { MAX_FEATURED } from '../../hooks/useFeaturedTrophies';
+import { MAX_FEATURED } from '../../hooks';
 import { TrophySlot, EmptySlot, FeaturedModal } from './TrophySlot';
 
 // featuredIds + toggleFeatured proviennent du parent (ProfileScreen via useFeaturedTrophies)

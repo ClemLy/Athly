@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#1f1f27',
+    borderColor: Colors.borderSubtle,
   },
   groupCardActive: {
     borderColor: 'rgba(254, 116, 57, 0.5)',
@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 10,
-    backgroundColor: '#0e0e12',
+    backgroundColor: Colors.cardInner,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,

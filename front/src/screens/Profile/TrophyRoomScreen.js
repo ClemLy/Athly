@@ -17,7 +17,7 @@ import {
   TROPHY_FILTER_TABS,
   evaluateTrophies,
 } from '../../data/trophyCatalog';
-import { useFeaturedTrophies, MAX_FEATURED } from '../../hooks/useFeaturedTrophies';
+import { useFeaturedTrophies } from '../../hooks/useFeaturedTrophies';
 import { useFocusEffect } from '@react-navigation/native';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
@@ -100,7 +100,7 @@ function UltimateTile({ unlocked, unlockedCount, totalCount, onPress }) {
         styles.ultimateTile,
         unlocked && {
           borderColor: 'rgba(255,215,0,0.6)',
-          borderTopColor: '#FFD700',
+          borderTopColor: Colors.gold,
         },
         { transform: [{ scale }] },
       ]}>
@@ -118,7 +118,7 @@ function UltimateTile({ unlocked, unlockedCount, totalCount, onPress }) {
           {/* Icon */}
           <Animated.View style={[
             styles.ultimateIconWrap,
-            unlocked && { shadowColor: '#FFD700', shadowOpacity, shadowOffset: { width: 0, height: 0 }, shadowRadius: 32, elevation: 32 },
+            unlocked && { shadowColor: Colors.gold, shadowOpacity, shadowOffset: { width: 0, height: 0 }, shadowRadius: 32, elevation: 32 },
           ]}>
             {unlocked ? (
               <LinearGradient
@@ -142,7 +142,7 @@ function UltimateTile({ unlocked, unlockedCount, totalCount, onPress }) {
 
           {/* Text */}
           <View style={styles.ultimateTextCol}>
-            <Text style={[styles.ultimateLabel, { color: unlocked ? '#FFD700' : Colors.textMuted }]}>
+            <Text style={[styles.ultimateLabel, { color: unlocked ? Colors.gold : Colors.textMuted }]}>
               {ULTIMATE_TROPHY.label}
             </Text>
             <Text style={[styles.ultimateCond, { color: unlocked ? 'rgba(255,215,0,0.7)' : 'rgba(255,255,255,0.15)' }]}>
@@ -150,7 +150,7 @@ function UltimateTile({ unlocked, unlockedCount, totalCount, onPress }) {
             </Text>
             {unlocked && (
               <View style={styles.ultimateBadge}>
-                <Ionicons name="infinite" size={10} color="#FFD700" />
+                <Ionicons name="infinite" size={10} color={Colors.gold} />
                 <Text style={styles.ultimateBadgeText}>DIAMOND · ULTIME</Text>
               </View>
             )}
@@ -325,9 +325,9 @@ export default function TrophyRoomScreen({ navigation }) {
           <View style={styles.categorySection}>
             <View style={styles.categoryHeader}>
               <View style={[styles.catIconBox, { backgroundColor: 'rgba(255,215,0,0.15)', borderColor: 'rgba(255,215,0,0.35)' }]}>
-                <Ionicons name="infinite" size={14} color="#FFD700" />
+                <Ionicons name="infinite" size={14} color={Colors.gold} />
               </View>
-              <Text style={[styles.categoryLabel, { color: '#FFD700' }]}>Trophée Ultime</Text>
+              <Text style={[styles.categoryLabel, { color: Colors.gold }]}>Trophée Ultime</Text>
               <Text style={styles.categoryCount}>{ultimateUnlocked ? '1/1' : '0/1'}</Text>
             </View>
             <View ref={ultimateRef} onLayout={onUltimateLayout} collapsable={false}>
@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start',
     borderWidth: 1, borderColor: 'rgba(255,215,0,0.35)',
   },
-  ultimateBadgeText: { color: '#FFD700', fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  ultimateBadgeText: { color: Colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   ultimateHint: { color: 'rgba(255,255,255,0.2)', fontSize: 10, fontWeight: '500', textAlign: 'center', marginTop: 12 },
 
   // ── Tile ──────────────────────────────────────────────────────────────────

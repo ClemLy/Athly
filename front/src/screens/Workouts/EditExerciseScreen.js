@@ -17,8 +17,8 @@ import { EQUIPMENTS, LEVELS } from '../../constants/exerciseFilters';
 import SelectableChip from '../../components/workouts/SelectableChip';
 import MuscleHierarchyPicker from '../../components/workouts/MuscleHierarchyPicker';
 import { useCustomExercises } from '../../context/CustomExercisesContext';
-import ConfirmModal from '../../components/common/ConfirmModal';
-import InfoModal from '../../components/common/InfoModal';
+import { ConfirmModal } from '../../components/common';
+import { InfoModal } from '../../components/common';
 
 // Form add/edit d'un exercice perso. Aligné sur la structure du catalogue (sous-muscles
 // précis), donc directement compatible avec le Builder et l'algo de tri.
@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1f1f27',
+    borderBottomColor: Colors.borderSubtle,
   },
   headerTitle: {
     color: Colors.textPrimary,

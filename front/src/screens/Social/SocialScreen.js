@@ -9,7 +9,7 @@ import { Colors } from '../../constants/theme';
 import { useToast } from '../../context/ToastContext';
 import { useUser } from '../../context/UserContext';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
-import ConfirmModal from '../../components/common/ConfirmModal';
+import { ConfirmModal } from '../../components/common';
 import FriendshipLevelUpModal from '../../components/social/FriendshipLevelUpModal';
 import FriendPreviewModal from '../../components/social/FriendPreviewModal';
 import AddFriendModal from '../../components/social/AddFriendModal';
@@ -18,7 +18,7 @@ import {
   cancelFriendRequest, removeFriend,
   getFriendsList, getPendingRequests, getLeaderboard, getExerciseLeaderboard,
   getMyGroup, inviteToGroup, respondToGroupInvite, shakeMember, checkGroupStreak, leaveGroup,
-} from '../../services/social.service';
+} from '../../services';
 import { MAJOR_EXERCISES } from '../../data/majorExercises';
 import ExercisePickerModal from '../../components/social/ExercisePickerModal';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
@@ -26,7 +26,7 @@ import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 
 // Podium / classements : positions 1-3 affichées en médaille colorée plutôt
 // qu'en emoji 🥇🥈🥉.
-const MEDAL_COLORS = { 1: '#FFD700', 2: '#C0C0C0', 3: '#CD7F32' };
+const MEDAL_COLORS = { 1: Colors.gold, 2: '#C0C0C0', 3: '#CD7F32' };
 
 function MedalBadge({ position, size = 16 }) {
   const color = MEDAL_COLORS[position];
@@ -439,7 +439,7 @@ function FriendsSegment({
 
 // ═══ Segment Classement ═══════════════════════════════════════════════════════
 
-const PODIUM_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32'];
+const PODIUM_COLORS = [Colors.gold, '#C0C0C0', '#CD7F32'];
 
 function LeaderboardSegment({ leaderboard }) {
   const [mode, setMode] = useState('xp'); // 'xp' | 'records'
@@ -879,7 +879,7 @@ function AnimatedRow({ index, children }) {
 // dans `member.weatherStatus`. Affiché uniquement quand présent (les listes
 // amis/requêtes n'en portent pas — seuls les membres de groupe en ont un).
 const WEATHER_META = {
-  done:     { icon: 'checkmark-circle', color: '#22C55E', label: 'Séance validée' },
+  done:     { icon: 'checkmark-circle', color: Colors.valid, label: 'Séance validée' },
   active:   { icon: 'flash',            color: '#FBBF24', label: 'Séance active' },
   ready:    { icon: 'flame',            color: Colors.primary, label: 'Prêt' },
   sleeping: { icon: 'moon',             color: Colors.textMuted, label: 'En sommeil' },

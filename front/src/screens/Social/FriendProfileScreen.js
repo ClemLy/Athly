@@ -8,9 +8,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { useToast } from '../../context/ToastContext';
-import { getRank, xpToLevel } from '../../services/stats.service';
-import { getFriendProfile, getMyGroup, shakeMember } from '../../services/social.service';
-import { RARITY_META } from '../../services/inventory.service';
+import { getRank, xpToLevel } from '../../services';
+import { getFriendProfile, getMyGroup, shakeMember } from '../../services';
+import { RARITY_META } from '../../services';
 
 import HeroLevelCard        from '../../components/profile/HeroLevelCard';
 import StreakBadge          from '../../components/profile/StreakBadge';
@@ -174,7 +174,7 @@ export default function FriendProfileScreen({ route, navigation }) {
             />
             <EmberParticles
               visible={isLegend}
-              color={isGod ? '#FFD700' : '#C084FC'}
+              color={isGod ? Colors.gold : Colors.legendAccent}
             />
           </View>
 

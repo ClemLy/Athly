@@ -1,7 +1,7 @@
 import React, { createContext, useState, useContext, useCallback, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TUTORIAL_CHAPTERS, CHAPTER_MAP, CHAPTER_IDS } from '../data/tutorialChapters';
-import { completeOnboarding } from '../services/onboarding.service';
+import { CHAPTER_MAP, CHAPTER_IDS } from '../data/tutorialChapters';
+import { completeOnboarding } from '../services';
 
 const DONE_KEY    = 'athly:tutorial:completed:v1';
 const PENDING_KEY = 'athly:tutorial:pendingChapter:v1';

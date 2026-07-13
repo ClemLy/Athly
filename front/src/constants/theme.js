@@ -51,9 +51,10 @@ export const Colors = {
   uniqueBloodGlow:   'rgba(163,0,0,0.65)',
 
   // ── Feedback ───────────────────────────────────────────────────────────────
-  valid:   '#22C55E',   // sets / exercices validés (vert chaud)
-  success: '#44FF88',   // XP / gains (vert néon)
-  error:   '#FF4D4D',
+  valid:       '#22C55E',   // sets / exercices validés (vert chaud)
+  success:     '#44FF88',   // XP / gains (vert néon)
+  error:       '#FF4D4D',
+  destructive: '#EF4444',   // actions destructrices (Supprimer…), accent rouge des modales
 
   // ── Utilitaires ────────────────────────────────────────────────────────────
   chevron: '#888888',

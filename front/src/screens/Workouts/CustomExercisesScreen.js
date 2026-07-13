@@ -16,8 +16,8 @@ import {
   secondaryMusclesLabels,
   primaryEquipmentLabel,
 } from '../../constants/exerciseFilters';
-import ConfirmModal from '../../components/common/ConfirmModal';
-import InfoModal from '../../components/common/InfoModal';
+import { ConfirmModal } from '../../components/common';
+import { InfoModal } from '../../components/common';
 
 export default function CustomExercisesScreen({ navigation }) {
   const { items, loading, remove } = useCustomExercises();
@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1f1f27',
+    borderBottomColor: Colors.borderSubtle,
   },
   headerTitle: {
     color: Colors.textPrimary,
@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 12,
-    backgroundColor: '#0e0e12',
+    backgroundColor: Colors.cardInner,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,

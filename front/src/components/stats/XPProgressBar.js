@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Colors } from '../../constants/theme';
-import { xpToLevel } from '../../services/stats.service';
+import { xpToLevel } from '../../services';
 
 // Bar de progression niveau / XP. Reçoit le total XP cumulé.
 // Visualise : niveau actuel + barre + xp restant pour next level.

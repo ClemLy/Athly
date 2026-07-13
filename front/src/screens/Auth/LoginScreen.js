@@ -9,10 +9,10 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '../../constants/theme';
 import AuthInput from '../../components/inputs/AuthInput';
-import NotificationBanner from '../../components/common/NotificationBanner';
-import { login, googleLogin } from '../../services/auth.service';
+import { NotificationBanner } from '../../components/common';
+import { login, googleLogin } from '../../services';
 import { useAuth } from '../../context/AuthContext';
-import { useGoogleAuth } from '../../hooks/useGoogleAuth';
+import { useGoogleAuth } from '../../hooks';
 
 const LOGO_ORANGE = require('../../../assets/logo-orange.png');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

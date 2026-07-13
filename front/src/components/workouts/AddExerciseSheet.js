@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: '#0e0e12',
+    backgroundColor: Colors.cardInner,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,

@@ -6,7 +6,7 @@ import { ToastProvider } from './src/context/ToastContext';
 
 import AppNavigator from './src/navigation';
 import DesktopInstallPage from './src/components/web/DesktopInstallPage';
-import ErrorBoundary from './src/components/common/ErrorBoundary';
+import { ErrorBoundary } from './src/components/common';
 
 const isDesktopWeb =
   Platform.OS === 'web' &&

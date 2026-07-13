@@ -4,7 +4,7 @@ import {
   saveWorkout,
   updateSavedWorkout,
   removeSavedWorkout,
-} from '../services/savedWorkouts.service';
+} from '../services';
 
 // Context global pour les séances sauvegardées (favoris / réutilisables).
 // Chargement initial depuis AsyncStorage, mise à jour optimiste après chaque action.

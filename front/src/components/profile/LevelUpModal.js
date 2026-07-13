@@ -8,16 +8,16 @@ import BirthdayConfetti from './BirthdayConfetti';
 // getRankForLevel() (back/utils/levelHelpers.js), indexé par le libellé
 // backend puisque cette modale reçoit `rank` en toutes lettres.
 const RANK_COLORS = {
-  'ATHLY GOD':    '#FFD700',
-  'Légende':      '#C084FC',
-  'Grand Maître': '#A855F7',
-  'Maître':       '#8B5CF6',
-  'Élite':        '#6E6AF0',
-  'Warrior':      '#6E6AF0',
+  'ATHLY GOD':    Colors.gold,
+  'Légende':      Colors.legendAccent,
+  'Grand Maître': Colors.rankPurple,
+  'Maître':       Colors.rankViolet,
+  'Élite':        Colors.secondaryAccent,
+  'Warrior':      Colors.secondaryAccent,
   'Compétiteur':  '#3B82F6',
-  'Athlète':      '#22C55E',
+  'Athlète':      Colors.valid,
   'Initié':       '#FBBF24',
-  'Novice':       '#FE7439',
+  'Novice':       Colors.primary,
 };
 
 // ─── LevelUpModal ─────────────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
   },
   card: {
     width:           '100%',
-    backgroundColor: '#13131C',
+    backgroundColor: Colors.bgDeep2,
     borderRadius:    22,
     borderWidth:     1,
     padding:         28,

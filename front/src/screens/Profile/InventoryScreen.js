@@ -9,12 +9,12 @@ import { Colors } from '../../constants/theme';
 import { useUser } from '../../context/UserContext';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import { useToast } from '../../context/ToastContext';
-import { openChest, useItem, claimUniqueItem, ITEM_CATALOG, RARITY_META } from '../../services/inventory.service';
-import { xpForLevel, xpToLevel } from '../../services/stats.service';
-import { useAvatarFrame } from '../../hooks/useAvatarFrame';
-import { useDevSettings } from '../../hooks/useDevSettings';
+import { openChest, useItem, claimUniqueItem, ITEM_CATALOG, RARITY_META } from '../../services';
+import { xpForLevel, xpToLevel } from '../../services';
+import { useAvatarFrame } from '../../hooks';
+import { useDevSettings } from '../../hooks';
 import ChestOpeningModal from '../../components/inventory/ChestOpeningModal';
-import { haptics } from '../../services/haptics.service';
+import { haptics } from '../../services';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 

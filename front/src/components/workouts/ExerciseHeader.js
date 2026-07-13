@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 22,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1f1f27',
+    borderBottomColor: Colors.borderSubtle,
   },
   topRow: {
     flexDirection: 'row',

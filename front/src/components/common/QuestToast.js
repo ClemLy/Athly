@@ -79,7 +79,7 @@ export default function QuestToast({ visible, questLabel, isBonus = false, onHid
           <Ionicons
             name={isBonus ? 'star' : 'checkmark-circle'}
             size={20}
-            color={isBonus ? '#FFD700' : Colors.primary}
+            color={isBonus ? Colors.gold : Colors.primary}
           />
         </View>
         <View style={styles.content}>
@@ -145,6 +145,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   labelBonus: {
-    color: '#FFD700',
+    color: Colors.gold,
   },
 });
