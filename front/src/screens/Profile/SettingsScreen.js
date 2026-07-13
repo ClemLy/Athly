@@ -56,8 +56,8 @@ const SEP      = 'rgba(255,255,255,0.07)';
 const GOLD_BG  = 'rgba(255,215,0,0.06)';
 const GOLD_BDR = 'rgba(255,215,0,0.22)';
 
-// ─── Tap trigger to reveal dev section : 10 taps ─────────────────────────────
-const DEV_TAP_TARGET = 10;
+// ─── Tap trigger to reveal dev section : 20 taps ─────────────────────────────
+const DEV_TAP_TARGET = 20;
 
 export default function SettingsScreen({ navigation }) {
   const { signOut }                       = useAuth();
