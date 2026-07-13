@@ -46,17 +46,30 @@ export default function InventoryScreen({ navigation }) {
 
   // ─── Tutorial (chapitre Inventaire) ──────────────────────────────────────────
   const { pendingChapterId, activeChapterId, startChapter } = useTutorial();
-  const { ref: chestRef, onLayout: onChestLayout } = useTutorialTarget('inventory_chest');
+  const { ref: chestRef, onLayout: onChestLayout, remeasure: rChest } = useTutorialTarget('inventory_chest');
 
   useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
 
   useFocusEffect(
     useCallback(() => {
-      if (pendingChapterId === 'inventory') {
-        const t = setTimeout(() => startChapter('inventory'), 400);
-        return () => clearTimeout(t);
-      }
-    }, [pendingChapterId, startChapter]),
+      if (pendingChapterId !== 'inventory') return;
+      // ProfileStack (@react-navigation/stack) glisse cet écran depuis la
+      // droite : mesurer la cible pendant la transition capture sa position
+      // mi-glissement → spotlight décalé à droite, hors-cadre. On attend la
+      // fin RÉELLE de la transition (transitionEnd) avant de re-mesurer et de
+      // démarrer le chapitre ; le setTimeout reste un filet de sécurité si
+      // l'event ne se déclenche pas (écran déjà stable, pas de transition).
+      let started = false;
+      const launch = () => {
+        if (started) return;
+        started = true;
+        rChest();
+        setTimeout(() => startChapter('inventory'), 50);
+      };
+      const unsub = navigation.addListener('transitionEnd', launch);
+      const t = setTimeout(launch, 500);
+      return () => { unsub(); clearTimeout(t); };
+    }, [pendingChapterId, startChapter, navigation, rChest]),
   );
 
   const inventory = user?.inventory ?? [];

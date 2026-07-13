@@ -225,8 +225,17 @@ export function useTutorialTarget(key) {
     });
   }, [key, registerTarget]);
 
+  // Plusieurs mesures échelonnées sur ~1s : sur un écran atteint via une
+  // transition de stack (slide horizontal, @react-navigation/stack), la
+  // position mesurée juste après le premier layout peut encore refléter un
+  // état transitoire (mi-glissement, décalé vers la droite) plutôt que la
+  // position de repos finale — measure() renvoie la position réellement
+  // rendue à l'écran, transform en cours inclus. Chaque mesure écrase la
+  // précédente (registerTarget), donc la dernière — une fois la transition
+  // calmée — corrige automatiquement le spotlight, quel que soit le
+  // mécanisme ou la durée exacte de la transition.
   const onLayout = useCallback(() => {
-    setTimeout(measure, 80);
+    [80, 250, 450, 700, 1000].forEach((delay) => setTimeout(measure, delay));
   }, [measure]);
 
   return { ref, onLayout, remeasure: measure };
