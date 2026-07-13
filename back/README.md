@@ -1,1212 +1,759 @@
 <div align="center">
 
-# ⚙️ ATHLY — API Backend
+# ATHLY : API Backend
 
-**Node.js · Express · MongoDB · JWT · Nodemailer**
+**Node.js, Express, MongoDB, JWT, Google OAuth, Nodemailer**
 
-![Node.js](https://img.shields.io/badge/Node.js-22.x-339933?style=flat-square&logo=node.js)
+![Node.js](https://img.shields.io/badge/Node.js-20.x-339933?style=flat-square&logo=node.js)
 ![Express](https://img.shields.io/badge/Express-5.2.1-000000?style=flat-square&logo=express)
 ![MongoDB](https://img.shields.io/badge/MongoDB-Mongoose_9-47A248?style=flat-square&logo=mongodb)
-![JWT](https://img.shields.io/badge/Auth-JWT_+_OTP-orange?style=flat-square)
+![JWT](https://img.shields.io/badge/Auth-JWT_+_OTP_+_Google-orange?style=flat-square)
 ![Jest](https://img.shields.io/badge/Tests-Jest_30-C21325?style=flat-square&logo=jest)
 
-> API REST pour l'application mobile Athly. Gère l'authentification (JWT + OTP email), les profils utilisateurs, les séances d'entraînement et la synchronisation des performances.
+API REST pour l'application mobile Athly. Gère l'authentification (mot de passe, OTP email, Google OAuth), les profils, les séances d'entraînement, ainsi que l'ensemble du système social et de gamification (amis, groupes de streak, coffres, titres, trophées, lobby multijoueur, parrainage).
 
 </div>
 
 ---
 
-## 📋 Table des matières
+## Table des matières
 
-1. [Vue d'ensemble](#-vue-densemble)
-2. [Stack technique](#-stack-technique)
-3. [Installation & lancement](#-installation--lancement)
-4. [Variables d'environnement](#-variables-denvironnement)
-5. [Structure du projet](#-structure-du-projet)
-6. [Architecture](#-architecture)
-7. [Authentification](#-authentification)
-8. [Documentation API](#-documentation-api)
-   - [Auth — `/api/auth`](#1-auth--apiauth)
-   - [Utilisateurs — `/api/users`](#2-utilisateurs--apiusers)
-   - [Séances — `/api/workouts`](#3-séances--apiworkouts)
-   - [Exercices — `/api/exercises`](#4-exercices--apiexercises)
-9. [Modèles de données](#-modèles-de-données)
-10. [Services & logique métier](#-services--logique-métier)
-11. [Tests](#-tests)
-12. [Intégration continue (CI)](#️-intégration-continue-ci)
-13. [Sécurité](#-sécurité)
+1. [Vue d'ensemble](#vue-densemble)
+2. [Stack technique](#stack-technique)
+3. [Installation et lancement](#installation-et-lancement)
+4. [Variables d'environnement](#variables-denvironnement)
+5. [Structure du projet](#structure-du-projet)
+6. [Architecture](#architecture)
+7. [Authentification](#authentification)
+8. [Documentation de l'API](#documentation-de-lapi)
+9. [Modèles de données](#modèles-de-données)
+10. [Services et logique métier](#services-et-logique-métier)
+11. [Catalogues de données](#catalogues-de-données)
+12. [Formules de gamification](#formules-de-gamification)
+13. [Tests](#tests)
+14. [Intégration continue](#intégration-continue)
+15. [Sécurité](#sécurité)
 
 ---
 
-## 🎯 Vue d'ensemble
+## Vue d'ensemble
 
-L'API Athly est un backend **Node.js + Express + MongoDB** indispensable au fonctionnement de l'application mobile. L'authentification (connexion, inscription, vérification email) passe obligatoirement par ce backend. Une fois connecté, les données de progression (logs, XP, quêtes) sont calculées et stockées côté client (AsyncStorage) ; le backend reçoit les séances finalisées en best-effort pour la persistance cloud.
+L'API Athly est un backend Node.js, Express et MongoDB. L'authentification (inscription, connexion, vérification email, connexion Google, réinitialisation de mot de passe) passe obligatoirement par ce backend. Une fois connecté, les données de progression immédiate (logs de séances, XP calculé, quêtes, rituels) sont calculées et stockées côté client dans AsyncStorage pour la fluidité, tandis que le backend fait autorité pour tout ce qui touche à la persistance cloud, au multijoueur et aux fonctionnalités sociales : profil, inventaire, coffres, titres, trophées, amis, groupes de streak et lobby multijoueur.
 
 ### Rôle du backend
 
 | Fonction | Description |
-|----------|-------------|
-| **Authentification** | Inscription, connexion JWT, vérification email OTP, reset password |
-| **Profil utilisateur** | Données physiques, objectifs, équipements, XP/niveau |
-| **Séances** | Création, finalisation, historique des workouts |
-| **Performances** | Enregistrement des séries, historique par exercice |
-| **Exercices externes** | Proxy vers l'API WGER (catalogue 1000+ exercices) |
-| **Email transactionnel** | Codes OTP via SMTP Yahoo (Nodemailer) |
+|----------|--------------|
+| Authentification | Inscription, connexion par mot de passe, connexion Google OAuth, vérification email par OTP, réinitialisation de mot de passe |
+| Profil utilisateur | Données physiques, objectifs, équipements, XP et niveau, cadre de profil équipé, RGPD |
+| Séances | Création, brouillon, finalisation, historique, anti-triche serveur |
+| Performances | Enregistrement des séries par exercice, historique de progression, classement par exercice |
+| Synchronisation XP | Réception de l'XP totale calculée côté client, recalcul du niveau et du rang, ratchet anti-régression |
+| Inventaire et coffres | Ouverture de coffres, utilisation d'objets, réclamation de cosmétiques Uniques |
+| Amis et classement | Demandes d'amis, liste, recherche par tag, classement XP, profil public |
+| Groupes de streak | Groupe de 5 membres maximum, invitations, streak collective, action Secouer |
+| Titres RPG | Catalogue de 17 titres déblocables, équipement |
+| Trophées | Catalogue serveur, synchronisation des trophées locaux, anniversaire, parrainage |
+| Lobby multijoueur | Création de lobby, invitations, statut prêt, bonus d'XP de groupe |
+| Flux d'activité | Réactions entre amis (bravo, respect, hue, jaloux) sur des événements marquants |
+| Poids | Historique de pesées |
+| Email transactionnel | Codes OTP et notifications via SMTP (Brevo) |
+| Notifications push | Enregistrement du token Expo, envoi via expo-server-sdk |
+| Outillage de test (God Mode) | Endpoints réservés au développement pour simuler des états de jeu |
 
 ---
 
-## 🛠 Stack technique
+## Stack technique
 
 | Couche | Technologie | Version |
 |--------|-------------|---------|
-| Runtime | Node.js | ≥ 18 |
+| Runtime | Node.js | 20.x (CI), 18+ en local |
 | Framework HTTP | Express | 5.2.1 |
-| ODM | Mongoose | 9.0.0 |
-| Base de données | MongoDB Atlas | — |
-| Authentification | JSON Web Token | 9.0.3 |
-| Hash passwords | bcrypt | 6.0.0 |
-| Email | Nodemailer (SMTP) | 8.0.10 |
-| Validation | Joi | 18.0.2 |
+| ODM | Mongoose | 9.7.3 |
+| Base de données | MongoDB Atlas (production), mongodb-memory-server (tests) | |
+| Authentification par mot de passe | JSON Web Token | 9.0.3 |
+| Authentification sociale | google-auth-library | 10.x |
+| Hash des mots de passe | bcrypt | 6.0.0 |
+| Email | Nodemailer (SMTP) | 9.0.3 |
+| Notifications push | expo-server-sdk | 6.x |
+| Validation | Joi | 18.2.3 |
 | Sécurité HTTP | Helmet | 8.0.0 |
+| Rate limiting | express-rate-limit | 8.x |
 | CORS | cors | 2.8.5 |
 | Logging | Morgan | 1.10.0 |
-| Variables d'env | dotenv | 17.2.3 |
-| Tests | Jest + Supertest | 30.2.0 |
+| Variables d'environnement | dotenv | 17.2.3 |
+| Tests | Jest, Supertest, mongodb-memory-server | 30.4.2 |
 | Dev | Nodemon | 3.1.11 |
 
 ---
 
-## 🚀 Installation & lancement
+## Installation et lancement
 
 ### Prérequis
 
-- Node.js ≥ 18
-- Un cluster MongoDB (local ou Atlas)
-- Un compte SMTP pour l'envoi d'emails (Yahoo, Gmail, etc.)
+- Node.js 18 ou supérieur
+- Un cluster MongoDB (Atlas ou local) pour la production. Les tests n'en nécessitent pas : ils démarrent leur propre instance en mémoire.
+- Un compte SMTP pour l'envoi d'emails (Brevo recommandé, tier gratuit à 300 emails par jour)
+- Optionnel : des Client IDs Google OAuth si la connexion Google doit être active
 
 ### Étapes
 
 ```bash
-# 1. Cloner le dépôt
 git clone https://github.com/ClemLy/Athly.git
 cd Athly/back
 
-# 2. Installer les dépendances
 npm install
 
-# 3. Configurer les variables d'environnement
 cp .env.example .env
-# Éditer .env (voir section suivante)
+# Éditer .env, voir la section Variables d'environnement ci-dessous
 
-# 4. Lancer en développement (avec hot-reload)
-npm run dev
-
-# 5. Lancer en production
-npm start
+npm run dev    # développement, avec rechargement à chaud (nodemon)
+npm start      # production
 ```
 
 ### Vérifier que le serveur tourne
 
 ```bash
 curl http://localhost:4000/health
-# → {"status":"OK","uptime":42.3}
+# {"status":"OK","uptime":42.3}
 ```
 
 ---
 
-## 🔑 Variables d'environnement
+## Variables d'environnement
 
-Créer un fichier `.env` à la racine du projet :
+Toutes les variables sont documentées avec leur usage exact dans `.env.example`. Résumé :
 
 ```env
 # Serveur
 PORT=4000
 NODE_ENV=development
 
-# MongoDB
+# MongoDB (obligatoire au démarrage)
 MONGO_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/<dbname>?retryWrites=true&w=majority
 
-# JWT
-JWT_SECRET=votre_secret_jwt_tres_long_et_aleatoire
+# JWT (obligatoire au démarrage)
+JWT_SECRET=secret_long_et_aleatoire
 JWT_EXPIRES_IN=1d
 
-# Email SMTP (exemple avec Yahoo)
-SMTP_HOST=smtp.mail.yahoo.com
-SMTP_PORT=465
-SMTP_USER=votre.adresse@yahoo.fr
-SMTP_PASS=votre_app_password_yahoo
+# Refresh token (optionnel, non utilisé par l'implémentation actuelle)
+REFRESH_TOKEN_SECRET=
+REFRESH_TOKEN_EXPIRES_IN=7d
+
+# Email SMTP (exemple Brevo)
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=587
+SMTP_USER=votre_login_brevo
+SMTP_PASS=votre_cle_api_brevo
+SMTP_FROM=noreply@votre-domaine.com
+
+# Google OAuth (optionnel : sans valeur, POST /api/auth/google répond 501)
+# Liste séparée par des virgules : un Client ID par plateforme front
+# (iOS, Android, Web, Expo Go), car le claim "aud" du token contient
+# exactement celui qui l'a émis.
+GOOGLE_CLIENT_IDS=
+
+# CORS (production uniquement)
+# Allowlist des origines web autorisées, séparées par des virgules.
+# Les requêtes sans header Origin (app mobile native) ne sont pas concernées.
+# Non définie : comportement permissif en développement, avertissement en production.
+CORS_ORIGINS=
 ```
 
-> **Important :** Ne jamais committer le `.env` — il est dans `.gitignore`. Les credentials SMTP doivent être des **app passwords** (pas votre mot de passe principal).
+Ne jamais committer le fichier `.env` : il est dans `.gitignore`. Les identifiants SMTP doivent être des clés d'application dédiées, jamais un mot de passe de compte personnel.
 
 ---
 
-## 📁 Structure du projet
+## Structure du projet
 
 ```
-back-projet-final-ClemLy/
-├── server.js                   # Point d'entrée : listen()
-├── app.js                      # Config Express, routes, middlewares
-├── package.json
-├── jest.config.js              # Configuration Jest
-├── eslint.config.mjs           # Configuration ESLint
-│
-├── config/
-│   ├── db.js                   # Connexion Mongoose (connectDB)
-│   └── env.js                  # Validation et export des variables d'env
-│
-├── controllers/                # Handlers HTTP (entrée/sortie)
-│   ├── auth.controller.js      # register, login, verifyEmail, forgotPassword…
-│   ├── user.controller.js      # getMe, updateMe, deleteAccount
-│   ├── workout.controller.js   # CRUD séances, draft, finalize, complete
-│   └── exercise.controller.js  # createRecord, getHistory, getByWorkout
-│
-├── services/                   # Logique métier (pur, testable)
-│   ├── auth.service.js         # Création compte, OTP, JWT
-│   ├── user.service.js         # Profil, XP/level, suppression cascade
-│   ├── workout.service.js      # Calculs volume, XP séance, draft/finalize
-│   ├── exercise.service.js     # Records, historique progressions
-│   ├── email.service.js        # Templates HTML + envoi SMTP
-│   └── wger.service.js         # Proxy API WGER (exercices externes)
-│
-├── models/                     # Schémas Mongoose
-│   ├── User.js
-│   ├── Workout.js
-│   └── ExerciseRecord.js
-│
-├── routes/                     # Déclaration des routes
-│   ├── auth.routes.js
-│   ├── user.routes.js
-│   ├── workout.routes.js
-│   └── exercise.routes.js
-│
-├── middleware/
-│   ├── auth.middleware.js      # Vérification JWT (protect)
-│   ├── validate.middleware.js  # Validation Joi (validateBody)
-│   ├── error.middleware.js     # Gestionnaire d'erreurs global
-│   └── not-found.middleware.js # 404 handler
-│
-├── validators/                 # Schémas Joi
-│   ├── auth.validator.js
-│   ├── user.validator.js
-│   ├── workout.validator.js
-│   └── exercise.validator.js
-│
-├── tests/
-│   ├── levelHelpers.test.js     # Formule XP/niveau — 24 tests (unitaires)
-│   ├── workoutAnticheat.test.js # Anti-cheat serveur — 13 tests (mocks Mongoose)
-│   ├── modelsIntegrity.test.js  # Intégrité des schémas Mongoose — 36 tests
-│   ├── auth.test.js
-│   ├── user.test.js
-│   ├── workout.test.js
-│   ├── exercise.test.js
-│   └── health.test.js
-│
-├── utils/
-│   └── levelHelpers.js          # Source de vérité XP/niveau (xpForLevel, levelFromXP)
-│
-└── scripts/
-    └── populateWorkouts.js      # Seed de données de test
+back/
+  server.js                    Point d'entrée : connexion DB puis listen()
+  app.js                       Configuration Express : middlewares, montage des routes
+  eslint.config.mjs
+  jest.config.js
+
+  config/
+    db.js                      Connexion Mongoose (connectDB)
+    env.js                     Lecture et validation des variables d'environnement
+
+  models/                      8 schémas Mongoose
+    User.js
+    Workout.js
+    ExerciseRecord.js
+    Friendship.js
+    StreakGroup.js
+    WorkoutLobby.js
+    ActivityEvent.js
+    WeightHistory.js
+
+  controllers/                 14 fichiers, handlers HTTP
+    auth.controller.js
+    user.controller.js
+    workout.controller.js
+    exercise.controller.js
+    friend.controller.js
+    inventory.controller.js
+    groupStreak.controller.js
+    reward.controller.js
+    referral.controller.js
+    title.controller.js
+    workoutLobby.controller.js
+    weight.controller.js
+    activity.controller.js
+    debug.controller.js
+
+  services/                    9 fichiers, logique métier pure et testable
+    auth.service.js
+    user.service.js
+    workout.service.js
+    exercise.service.js
+    email.service.js
+    push.service.js
+    chest.service.js
+    inventory.service.js
+    activity.service.js
+
+  routes/                      14 fichiers, déclaration des endpoints
+  validators/                  7 fichiers, schémas Joi
+  middleware/
+    auth.middleware.js         Vérification JWT (protect)
+    devOnly.middleware.js      Bloque une route en production (404)
+    validate.middleware.js     Validation Joi du corps de requête
+    sanitize.middleware.js     Assainissement anti-injection NoSQL
+    rateLimit.middleware.js    Limiteurs global et authentification
+    error.middleware.js        Gestionnaire d'erreurs global
+    not-found.middleware.js    404 handler
+
+  data/
+    titleCatalog.js            17 titres RPG déblocables
+    localTrophyCatalog.js      Miroir des 40 trophées locaux du front, plus le trophée Souverain Absolu
+    shakeMessages.js           Messages aléatoires du bouton Secouer
+
+  utils/
+    levelHelpers.js            Source de vérité XP et niveau (xpForLevel, levelFromXP, getRankForLevel)
+    profanityFilter.js         Filtre de pseudos
+
+  tests/                       26 fichiers de tests, voir la section Tests
+  scripts/
+    populateWorkouts.js        Seed de données de test
+    jest-staged.js             Utilisé par lint-staged
 ```
 
 ---
 
-## 🏗 Architecture
+## Architecture
 
 ### Flux d'une requête
 
 ```
-Client (React Native)
-        │
-        ▼
+Client (React Native / PWA)
+        |
+        v
    Express Router
-        │
-        ├─→ Middleware auth.middleware (JWT protect)
-        │         └─ Vérifie Bearer token → req.user = payload
-        │
-        ├─→ Middleware validate.middleware (Joi)
-        │         └─ Valide req.body contre le schéma
-        │
-        ▼
+        |
+        +--> Middleware auth.middleware (JWT protect)
+        |         Vérifie le Bearer token, injecte req.user
+        |
+        +--> Middleware validate.middleware (Joi)
+        |         Valide req.body contre le schéma de la route
+        |
+        v
    Controller
-        │  Handler HTTP : valide entrées, appelle service, retourne réponse
-        ▼
+        |    Handler HTTP : lit la requête, appelle le service, formate la réponse
+        v
    Service
-        │  Logique métier pure, indépendante d'Express
-        ▼
+        |    Logique métier pure, indépendante d'Express
+        v
    Model (Mongoose)
-        │
-        ▼
-   MongoDB Atlas
+        |
+        v
+   MongoDB
 ```
+
+Séparation stricte : les routes ne font que déclarer method plus path plus middleware plus controller. Les controllers ne contiennent aucune requête Mongoose directe pour la logique complexe (délégation au service), à l'exception de quelques controllers qui restent volontairement compacts pour des opérations simples de lecture ou d'écriture directe (par exemple `activity.controller.js`, `weight.controller.js`). Les services ne connaissent jamais `req` ou `res`.
 
 ### Gestion des erreurs
 
-Toutes les erreurs non gérées remontent au middleware `error.middleware.js` qui normalise le format :
+Toutes les erreurs non gérées remontent au middleware `error.middleware.js`, qui normalise la réponse :
 
 ```json
 {
-  "status": "error",
+  "success": false,
   "message": "Description de l'erreur",
-  "code": 400
+  "status": 400
 }
 ```
 
+### Résilience
+
+- `unhandledRejection` est logué sans tuer le process.
+- `uncaughtException` déclenche un arrêt propre (log puis exit, l'orchestrateur redémarre).
+- Arrêt gracieux sur SIGTERM et SIGINT : drain des requêtes en cours, fermeture de la connexion MongoDB, garde-fou de 10 secondes.
+- MongoDB se reconnecte automatiquement en cas de coupure (Mongoose), les événements sont logués.
+- Les opérations sensibles à la concurrence (par exemple la consommation du dernier objet d'inventaire) utilisent des mises à jour atomiques (`findOneAndUpdate` conditionnel avec `$inc`), pas de lecture puis écriture.
+
+Voir `docs/ARCHITECTURE-SECURITE.md` à la racine du dépôt pour le détail complet des protections et de la tolérance aux pannes.
+
 ---
 
-## 🔐 Authentification
+## Authentification
 
-### Flux complet d'inscription
+### Inscription par email
 
 ```
 POST /api/auth/register
-  └─ Crée le compte (isVerified: false)
-  └─ Génère un code OTP 6 chiffres (valide 10 min)
-  └─ Envoie un email avec le code
-        │
-        ▼
+  Crée le compte (isVerified: false)
+  Génère un code OTP à 6 chiffres, valide 10 minutes
+  Envoie un email avec le code
+  Génère un code de parrainage et un discriminant à 4 chiffres
+
 POST /api/auth/verify-email
-  └─ Vérifie le code OTP
-  └─ isVerified → true
-  └─ Retourne JWT token (connexion automatique)
+  Vérifie le code OTP
+  isVerified passe à true
+  Retourne le token JWT (connexion automatique)
 ```
 
-### Flux de reset password
+### Connexion Google
+
+```
+POST /api/auth/google
+  Vérifie l'idToken auprès de Google (audience parmi GOOGLE_CLIENT_IDS)
+  Crée le compte au premier login (isVerified: true d'office, email garanti par Google)
+  Retourne le token JWT
+```
+
+Sans `GOOGLE_CLIENT_IDS` configuré côté serveur, la route répond 501 plutôt que de faire planter le démarrage du serveur.
+
+### Réinitialisation de mot de passe
 
 ```
 POST /api/auth/forgot-password
-  └─ Génère un code reset (valide 15 min)
-  └─ Envoie l'email
-        │
-        ▼
+  Génère un code de réinitialisation, valide 15 minutes
+  Envoie l'email
+  Répond toujours 200, même si l'email n'existe pas (ne révèle jamais l'existence d'un compte)
+
 POST /api/auth/reset-password
-  └─ Vérifie le code
-  └─ Hash le nouveau password (bcrypt)
-  └─ Invalide le code
+  Vérifie le code
+  Hash le nouveau mot de passe
+  Invalide le code
 ```
 
-### Protection brute-force
+### Protection contre le brute-force
 
-- Maximum **5 tentatives** de vérification OTP avant blocage
-- Les codes OTP expirent automatiquement (10 min vérif, 15 min reset)
-- Mongoose TTL index sur `codeExpires`
+- Maximum 5 tentatives de vérification OTP avant blocage (nécessite un nouveau code).
+- Les codes OTP expirent automatiquement (10 minutes pour la vérification, 15 minutes pour la réinitialisation).
+- Le rate limiter d'authentification limite à 20 requêtes par 15 minutes, avec une clé combinant IP et email ciblé.
 
 ### Utiliser le token JWT
 
-Toutes les routes protégées nécessitent :
-
 ```
-Authorization: Bearer <votre_token_jwt>
+Authorization: Bearer <token>
 ```
 
-Le token expire selon `JWT_EXPIRES_IN` (défaut : `1d`).
+Expiration selon `JWT_EXPIRES_IN` (défaut 1 jour). Algorithme épinglé HS256, jamais de log du token ou des headers d'authentification.
 
 ---
 
-## 📖 Documentation API
+## Documentation de l'API
 
-**Base URL :** `http://votre-serveur:4000/api`
+URL de base : `http://votre-serveur:4000/api`
 
----
+Sauf mention contraire, toutes les routes ci-dessous nécessitent `Authorization: Bearer <token>`.
 
-### 1. Auth — `/api/auth`
+### 1. Authentification : `/api/auth` (public)
 
-Toutes ces routes sont **publiques** (pas de JWT requis).
+| Méthode | Route | Description |
+|---------|-------|--------------|
+| POST | `/register` | Créer un compte, envoie un OTP de vérification |
+| POST | `/login` | Connexion par email et mot de passe |
+| POST | `/google` | Connexion ou création de compte via Google OAuth |
+| POST | `/verify-email` | Valider le code OTP reçu par email |
+| POST | `/resend-verification` | Renvoyer un nouveau code de vérification |
+| POST | `/forgot-password` | Demander un code de réinitialisation |
+| POST | `/reset-password` | Réinitialiser le mot de passe avec le code reçu |
 
----
+Exemple, connexion réussie :
 
-#### `POST /api/auth/register`
-
-Créer un nouveau compte utilisateur.
-
-**Body**
 ```json
-{
-  "pseudo": "AthlèteExemple",
-  "email": "athlete@mail.com",
-  "password": "motdepasse123"
-}
-```
+POST /api/auth/login
+{ "email": "athlete@mail.com", "password": "motdepasse123" }
 
-**Réponse 201**
-```json
-{
-  "message": "Compte créé. Vérifiez votre email.",
-  "email": "athlete@mail.com"
-}
-```
-
-**Erreurs**
-| Code | Cause |
-|------|-------|
-| 400 | Email déjà utilisé |
-| 422 | Validation Joi échouée (email invalide, password trop court) |
-
----
-
-#### `POST /api/auth/login`
-
-Connexion et récupération du token JWT.
-
-**Body**
-```json
-{
-  "email": "athlete@mail.com",
-  "password": "motdepasse123"
-}
-```
-
-**Réponse 200**
-```json
+200 OK
 {
   "message": "Connexion réussie.",
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "_id": "64f2a...",
-    "pseudo": "AthlèteExemple",
-    "email": "athlete@mail.com",
-    "isVerified": true,
-    "xp": 2400,
-    "level": 8
-  }
+  "user": { "_id": "...", "pseudo": "Athlete", "xp": 2400, "level": 8, "rank": "Initié" }
 }
 ```
 
-**Erreurs**
-| Code | Cause |
-|------|-------|
-| 401 | Mauvais email ou password |
-| 403 | Email non vérifié |
+### 2. Utilisateurs : `/api/users`
 
----
+| Méthode | Route | Description |
+|---------|-------|--------------|
+| GET | `/me` | Profil complet de l'utilisateur connecté |
+| PUT | `/me` | Mettre à jour le profil (champs optionnels) |
+| PUT | `/me/frame` | Mettre à jour le cadre de profil équipé (forme et couleur) |
+| PUT | `/me/showcase` | Mettre à jour la vitrine de trophées mis en avant (3 maximum) |
+| PUT | `/me/records-showcase` | Mettre à jour les records d'exercices mis en avant (6 maximum) |
+| PUT | `/me/push-token` | Enregistrer ou effacer le token de notification push Expo |
+| POST | `/me/complete-onboarding` | Marquer le tutoriel interactif comme terminé (idempotent) |
+| POST | `/me/sync-xp` | Synchroniser l'XP totale calculée côté client vers le serveur |
+| DELETE | `/delete-account` | Supprimer définitivement le compte et toutes ses données (RGPD) |
 
-#### `POST /api/auth/verify-email`
+`POST /me/sync-xp` est le point d'entrée qui fait du serveur la source de vérité pour tout ce qui est contrôlé côté backend (déblocage de coffres au niveau 11, conditions de titres). Il applique un ratchet : l'XP ne redescend jamais, un envoi tardif ou redondant est toujours sans danger.
 
-Vérifier son email avec le code OTP reçu.
-
-**Body**
 ```json
-{
-  "email": "athlete@mail.com",
-  "code": "847291"
-}
+POST /api/users/me/sync-xp
+{ "xp": 15420 }
+
+200 OK
+{ "success": true, "level": 22, "xp": 15420, "rank": "Initié", "newlyUnlockedTitles": ["PERFORM_LEVEL_20"] }
 ```
 
-**Réponse 200**
-```json
-{
-  "message": "Email vérifié avec succès.",
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": { ... }
-}
+Suppression de compte : cascade `ExerciseRecord` puis `Workout` puis `User`.
+
+### 3. Séances : `/api/workouts`
+
+| Méthode | Route | Description |
+|---------|-------|--------------|
+| POST | `/` | Créer et enregistrer une séance déjà terminée |
+| GET | `/` | Lister toutes les séances de l'utilisateur, triées par date décroissante |
+| GET | `/:id` | Détail complet d'une séance |
+| DELETE | `/:id` | Supprimer une séance |
+| POST | `/draft` | Créer un brouillon de séance |
+| PATCH | `/:id/draft` | Mettre à jour un brouillon (auto-save pendant l'entraînement) |
+| POST | `/:id/finalize` | Finaliser une séance : calcule les totaux et applique l'anti-triche serveur |
+| POST | `/:id/complete` | Marquer une séance comme complétée (variante allégée de finalize) |
+
+Anti-triche temporel, appliqué côté serveur en miroir du calcul client :
+
+```javascript
+if (shortSession === true || duration < 300)   xp = 0             // moins de 5 minutes
+else if (duration < 900)                        xp = round(xp / 10) // 5 à 15 minutes
+// 15 minutes ou plus : XP plein
 ```
 
-**Erreurs**
-| Code | Cause |
-|------|-------|
-| 400 | Code incorrect ou expiré |
-| 429 | Trop de tentatives (> 5) |
+### 4. Exercices : `/api/exercises`
 
----
+| Méthode | Route | Description |
+|---------|-------|--------------|
+| POST | `/` | Enregistrer les performances d'un exercice pour une séance |
+| GET | `/leaderboard` | Classement des amis sur un exercice donné |
+| GET | `/my-records` | Tous mes records personnels |
+| GET | `/history/:name` | Historique de progression d'un exercice (pour les graphes) |
+| GET | `/workout/:workoutId` | Tous les records associés à une séance |
 
-#### `POST /api/auth/resend-verification`
+### 5. Amis : `/api/friends`
 
-Renvoyer un nouveau code de vérification.
+| Méthode | Route | Description |
+|---------|-------|--------------|
+| POST | `/request` | Envoyer une demande d'ami |
+| PUT | `/accept/:requestId` | Accepter une demande reçue |
+| PUT | `/decline/:requestId` | Refuser une demande reçue |
+| DELETE | `/request/:requestId` | Annuler une demande envoyée |
+| DELETE | `/:friendshipId` | Retirer un ami |
+| GET | `/list` | Liste de tous mes amis acceptés |
+| GET | `/pending` | Demandes reçues en attente |
+| GET | `/search` | Rechercher un utilisateur par tag exact (Pseudo suivi de son discriminant) |
+| GET | `/leaderboard` | Classement XP entre amis |
+| GET | `/profile/:friendId` | Profil public d'un ami |
 
-**Body**
-```json
-{ "email": "athlete@mail.com" }
+Chaque amitié possède son propre niveau (1 à 5), qui progresse avec l'XP d'interactions partagées (paliers à 0, 100, 300, 700 et 1500).
+
+### 6. Inventaire : `/api/inventory`
+
+| Méthode | Route | Description |
+|---------|-------|--------------|
+| POST | `/chest/open` | Ouvrir un coffre (consomme une CHEST_KEY) |
+| POST | `/item/use` | Utiliser un objet consommable |
+| POST | `/claim` | Réclamer un cosmétique Unique débloqué |
+
+Un coffre s'obtient toutes les 2 heures de séance cumulées, débloqué à partir du rang Initié (niveau 11). Table de drop : commun 60 pour cent, rare 25 pour cent, épique 12 pour cent, légendaire 3 pour cent.
+
+### 7. Groupes de streak : `/api/groups`
+
+| Méthode | Route | Description |
+|---------|-------|--------------|
+| GET | `/my-group` | Mon groupe actuel, invitations en attente |
+| POST | `/leave` | Quitter le groupe |
+| POST | `/invite` | Inviter un ami dans le groupe |
+| PUT | `/respond/:groupId` | Accepter ou refuser une invitation |
+| POST | `/:groupId/shake/:memberId` | Secouer un membre en retard (notification push) |
+| POST | `/:groupId/check-streak` | Vérifier et mettre à jour la streak collective du jour |
+
+Un groupe compte 5 membres maximum. La streak collective s'incrémente si tous les membres valident leur journée. Une streak de groupe de 30 jours à taille maximale débloque, une seule fois, le cosmétique Unique Rouge Sang pour chaque membre.
+
+### 8. Récompenses : `/api/rewards`
+
+| Méthode | Route | Description |
+|---------|-------|--------------|
+| POST | `/birthdate` | Enregistrer la date de naissance (verrouillée après la première saisie) |
+| POST | `/birthday/check` | Vérifier si c'est l'anniversaire du jour et distribuer la récompense |
+| GET | `/achievements` | Trophées débloqués côté serveur (catalogue de 20 entrées) |
+| PUT | `/achievements/sync` | Synchroniser les trophées débloqués localement côté client |
+| POST | `/check` | Forcer une réévaluation des conditions de trophées |
+
+### 9. Parrainage : `/api/referral`
+
+| Méthode | Route | Description |
+|---------|-------|--------------|
+| POST | `/claim` | Valider un code de parrainage reçu |
+
+Récompense le filleul et le parrain d'un Gel de Streak et d'un Coupon de niveau chacun. Impossible d'utiliser son propre code ou un compte déjà parrainé.
+
+### 10. Titres RPG : `/api/profile`
+
+| Méthode | Route | Description |
+|---------|-------|--------------|
+| GET | `/titles` | Mes titres débloqués et le titre actuellement équipé |
+| POST | `/equip-title` | Équiper un titre parmi ceux débloqués |
+
+Catalogue de 17 titres, déblocables par des conditions variées (niveau, records, séances en groupe, entraide).
+
+### 11. Lobby multijoueur : `/api/lobby`
+
+| Méthode | Route | Description |
+|---------|-------|--------------|
+| POST | `/create` | Créer un lobby |
+| GET | `/:id` | État du lobby |
+| POST | `/:id/invite` | Inviter un ami |
+| POST | `/:id/join` | Rejoindre un lobby existant |
+| POST | `/:id/ready` | Se déclarer prêt |
+| POST | `/:id/unready` | Annuler son statut prêt |
+| POST | `/:id/finish` | Terminer la séance en groupe |
+
+Bonus d'XP de groupe selon le nombre de participants : 2 membres 15 pour cent, 3 membres 25 pour cent, 4 membres 35 pour cent, 5 membres 50 pour cent.
+
+### 12. Flux d'activité : `/api/activity`
+
+| Méthode | Route | Description |
+|---------|-------|--------------|
+| GET | `/feed` | Événements récents des amis (record battu, coffre légendaire) |
+| POST | `/:eventId/react` | Réagir à un événement (bravo, respect, hue, jaloux) |
+
+### 13. Poids : `/api/weight`
+
+| Méthode | Route | Description |
+|---------|-------|--------------|
+| GET | `/history` | Historique de pesées |
+| POST | `/` | Enregistrer une nouvelle pesée |
+
+### 14. Outillage de développement : `/api/debug` (bloqué en production)
+
+Bloc d'endpoints God Mode utilisés pour simuler des états de jeu pendant le développement et les tests manuels (synchronisation de niveau, attribution de coffres et d'objets, simulation de parrainage, d'anniversaire, de groupe, d'événements sociaux, d'invitation de lobby, attribution de tous les titres). Chaque route est protégée par `devOnly.middleware.js`, qui répond 404 dès que `NODE_ENV=production`, pour ne même pas révéler leur existence.
+
+### Santé
+
 ```
-
-**Réponse 200**
-```json
-{ "message": "Code renvoyé." }
-```
-
----
-
-#### `POST /api/auth/forgot-password`
-
-Demander un code de reset de mot de passe.
-
-**Body**
-```json
-{ "email": "athlete@mail.com" }
-```
-
-**Réponse 200**
-```json
-{ "message": "Code de réinitialisation envoyé par email." }
-```
-
-> **Note :** Renvoie toujours 200 même si l'email n'existe pas (sécurité — ne révèle pas si un compte existe).
-
----
-
-#### `POST /api/auth/reset-password`
-
-Réinitialiser le mot de passe avec le code reçu.
-
-**Body**
-```json
-{
-  "email": "athlete@mail.com",
-  "code": "391847",
-  "newPassword": "nouveauMotDePasse456"
-}
-```
-
-**Réponse 200**
-```json
-{ "message": "Mot de passe réinitialisé avec succès." }
-```
-
----
-
-### 2. Utilisateurs — `/api/users`
-
-Toutes ces routes nécessitent `Authorization: Bearer <token>`.
-
----
-
-#### `GET /api/users/me`
-
-Récupérer le profil de l'utilisateur connecté.
-
-**Réponse 200**
-```json
-{
-  "user": {
-    "_id": "64f2a...",
-    "pseudo": "AthlèteExemple",
-    "email": "athlete@mail.com",
-    "age": 25,
-    "sexe": "H",
-    "poids": 80,
-    "poidsCible": 75,
-    "taille": 180,
-    "niveauSportif": "Intermédiaire",
-    "objectif": "prise de masse",
-    "rythme": 4,
-    "equipements": ["Haltères", "Barre", "Poulie"],
-    "xp": 2400,
-    "level": 8,
-    "createdAt": "2024-01-15T10:30:00.000Z"
-  }
-}
-```
-
----
-
-#### `PUT /api/users/me`
-
-Mettre à jour le profil utilisateur.
-
-**Body** (tous les champs sont optionnels)
-```json
-{
-  "pseudo": "NouveauPseudo",
-  "age": 26,
-  "poids": 78,
-  "poidsCible": 72,
-  "taille": 180,
-  "niveauSportif": "Avancé",
-  "objectif": "force",
-  "rythme": 5,
-  "equipements": ["Haltères", "Barre", "Anneaux"]
-}
-```
-
-**Réponse 200**
-```json
-{
-  "message": "Profil mis à jour.",
-  "user": { ... }
-}
-```
-
----
-
-#### `DELETE /api/users/delete-account`
-
-Supprimer définitivement le compte et toutes ses données (RGPD).
-
-> **Suppression en cascade :** ExerciseRecord → Workout → User
-
-**Réponse 200**
-```json
-{ "message": "Compte supprimé avec succès." }
+GET /health   (public)
+200 OK  { "status": "OK", "uptime": 3600.42 }
 ```
 
 ---
 
-### 3. Séances — `/api/workouts`
-
-Toutes ces routes nécessitent `Authorization: Bearer <token>`.
-
----
-
-#### `POST /api/workouts`
-
-Créer et enregistrer une séance.
-
-**Body**
-```json
-{
-  "name": "Push Day — Pectoraux",
-  "exercises": [
-    {
-      "name": "Développé couché",
-      "targetMuscle": "pectoraux",
-      "equipment": ["Barre", "Banc"],
-      "sets": [
-        { "weight": 80, "reps": 8, "completed": true },
-        { "weight": 80, "reps": 7, "completed": true },
-        { "weight": 75, "reps": 8, "completed": true }
-      ]
-    },
-    {
-      "name": "Pompes inclinées",
-      "targetMuscle": "pectoraux",
-      "equipment": [],
-      "sets": [
-        { "weight": 0, "reps": 15, "completed": true }
-      ]
-    }
-  ],
-  "durationSeconds": 3240,
-  "notes": "Bonne séance, PR sur le développé couché !"
-}
-```
-
-**Réponse 201**
-```json
-{
-  "message": "Séance créée.",
-  "workout": {
-    "_id": "65a3b...",
-    "user": "64f2a...",
-    "name": "Push Day — Pectoraux",
-    "exercises": [ ... ],
-    "durationSeconds": 3240,
-    "totalVolume": 1845,
-    "setsCompleted": 7,
-    "xpEarned": 185,
-    "status": "finished",
-    "date": "2024-09-15T14:22:00.000Z"
-  }
-}
-```
-
----
-
-#### `GET /api/workouts`
-
-Récupérer toutes les séances de l'utilisateur connecté (triées par date décroissante).
-
-**Réponse 200**
-```json
-{
-  "workouts": [
-    {
-      "_id": "65a3b...",
-      "name": "Push Day",
-      "date": "2024-09-15T14:22:00.000Z",
-      "totalVolume": 1845,
-      "setsCompleted": 7,
-      "durationSeconds": 3240,
-      "status": "finished"
-    },
-    ...
-  ],
-  "total": 42
-}
-```
-
----
-
-#### `GET /api/workouts/:id`
-
-Récupérer le détail complet d'une séance.
-
-**Réponse 200**
-```json
-{
-  "workout": {
-    "_id": "65a3b...",
-    "name": "Push Day — Pectoraux",
-    "exercises": [
-      {
-        "name": "Développé couché",
-        "targetMuscle": "pectoraux",
-        "sets": [
-          { "weight": 80, "reps": 8, "completed": true },
-          ...
-        ]
-      }
-    ],
-    "totalVolume": 1845,
-    "setsCompleted": 7,
-    "xpEarned": 185,
-    "durationSeconds": 3240,
-    "notes": "Bonne séance !",
-    "status": "finished",
-    "date": "2024-09-15T14:22:00.000Z"
-  }
-}
-```
-
-**Erreurs**
-| Code | Cause |
-|------|-------|
-| 404 | Séance introuvable ou n'appartient pas à l'utilisateur |
-
----
-
-#### `DELETE /api/workouts/:id`
-
-Supprimer une séance.
-
-**Réponse 200**
-```json
-{ "message": "Séance supprimée." }
-```
-
----
-
-#### `POST /api/workouts/draft`
-
-Créer un brouillon de séance (séance non commencée).
-
-**Body**
-```json
-{
-  "name": "Ma prochaine séance Pull",
-  "exercises": []
-}
-```
-
-**Réponse 201**
-```json
-{
-  "workout": {
-    "_id": "65a3c...",
-    "status": "draft",
-    "name": "Ma prochaine séance Pull"
-  }
-}
-```
-
----
-
-#### `PATCH /api/workouts/:id/draft`
-
-Mettre à jour un brouillon (ajouter des exercices, modifier le nom…).
-
-**Body** (champs partiels)
-```json
-{
-  "name": "Pull Day — Dos",
-  "exercises": [
-    { "name": "Tractions", "targetMuscle": "dos" }
-  ]
-}
-```
-
-**Réponse 200**
-```json
-{ "workout": { ... } }
-```
-
----
-
-#### `POST /api/workouts/:id/finalize`
-
-Finaliser une séance en cours. Calcule les totaux et attribue de l'XP.
-
-**Body** (optionnel)
-```json
-{
-  "durationSeconds": 3600,
-  "notes": "Super séance"
-}
-```
-
-**XP calculé :** `100 + 5 × setsCompleted`
-
-**Réponse 200**
-```json
-{
-  "message": "Séance finalisée.",
-  "workout": {
-    "_id": "65a3b...",
-    "status": "finished",
-    "totalVolume": 2140,
-    "setsCompleted": 18,
-    "xpEarned": 190
-  },
-  "xpGained": 190,
-  "newLevel": 9
-}
-```
-
----
-
-#### `POST /api/workouts/:id/complete`
-
-Compléter une séance (variante alternative de finalisation).
-
-**XP calculé :** `100 + 10 × exercisesWithCompletedSets`
-
-**Réponse 200**
-```json
-{
-  "message": "Séance complétée.",
-  "xpGained": 140,
-  "newLevel": 9
-}
-```
-
----
-
-#### `GET /api/workouts/exercises`
-
-Récupérer la liste d'exercices depuis l'API WGER, filtrée par muscle et équipement.
-
-**Query params**
-```
-?muscleId=10&equipmentId=3&includeDetails=true
-```
-
-**Réponse 200**
-```json
-{
-  "exercises": [
-    {
-      "id": 192,
-      "name": "Bench Press",
-      "videoUrl": "https://wger.de/en/exercise/192/view/bench-press"
-    },
-    ...
-  ]
-}
-```
-
----
-
-### 4. Exercices — `/api/exercises`
-
-Toutes ces routes nécessitent `Authorization: Bearer <token>`.
-
----
-
-#### `POST /api/exercises`
-
-Enregistrer les performances d'un exercice pour une séance donnée.
-
-**Body**
-```json
-{
-  "workout": "65a3b...",
-  "exerciceNom": "Développé couché",
-  "series": [
-    { "poids": 80, "repetitions": 8 },
-    { "poids": 82.5, "repetitions": 6 },
-    { "poids": 80, "repetitions": 7 }
-  ],
-  "note": "Léger PR sur la série 2"
-}
-```
-
-**Réponse 201**
-```json
-{
-  "record": {
-    "_id": "65b1c...",
-    "exerciceNom": "Développé couché",
-    "series": [ ... ],
-    "recommandedNextWeight": 85,
-    "createdAt": "2024-09-15T14:22:00.000Z"
-  }
-}
-```
-
----
-
-#### `GET /api/exercises/history/:name`
-
-Récupérer l'historique de progression d'un exercice (pour les graphes).
-
-**Exemple :** `GET /api/exercises/history/Développé%20couché`
-
-**Réponse 200**
-```json
-{
-  "history": [
-    {
-      "_id": "65b1c...",
-      "workout": "65a3b...",
-      "series": [
-        { "poids": 80, "repetitions": 8 }
-      ],
-      "createdAt": "2024-09-15T14:22:00.000Z"
-    },
-    {
-      "_id": "65b0a...",
-      "workout": "65a2d...",
-      "series": [
-        { "poids": 77.5, "repetitions": 8 }
-      ],
-      "createdAt": "2024-09-12T09:15:00.000Z"
-    }
-  ]
-}
-```
-
----
-
-#### `GET /api/exercises/workout/:workoutId`
-
-Récupérer tous les records d'exercices associés à une séance spécifique.
-
-**Réponse 200**
-```json
-{
-  "records": [
-    {
-      "_id": "65b1c...",
-      "exerciceNom": "Développé couché",
-      "series": [ ... ]
-    },
-    {
-      "_id": "65b1d...",
-      "exerciceNom": "Dips",
-      "series": [ ... ]
-    }
-  ]
-}
-```
-
----
-
-#### `GET /health`
-
-Point de terminaison de santé (public, sans auth).
-
-**Réponse 200**
-```json
-{
-  "status": "OK",
-  "uptime": 3600.42
-}
-```
-
----
-
-## 🗄 Modèles de données
+## Modèles de données
 
 ### User
 
-```javascript
-{
-  // Identité
-  pseudo:     String (required, trim),
-  email:      String (required, unique, lowercase),
-  password:   String (required, bcrypt hash),
-
-  // Vérification email
-  isVerified:        Boolean  (default: false),
-  verificationCode:  String,
-  verifyAttempts:    Number   (default: 0, max: 5),
-
-  // Reset password
-  resetPasswordCode: String,
-  codeExpires:       Date,    // TTL : 10 min (vérif) / 15 min (reset)
-
-  // Profil physique
-  age:           Number,
-  sexe:          Enum ["H", "F", "Autre"],
-  poids:         Number,   // kg
-  poidsCible:    Number,   // kg
-  taille:        Number,   // cm
-  niveauSportif: Enum ["Débutant", "Intermédiaire", "Avancé"],
-  objectif:      Enum ["prise de masse", "perte de poids", "entretien", "force"],
-  rythme:        Number,   // 1-7 séances/semaine
-  equipements:   [String],
-
-  // Gamification
-  xp:    Number (default: 0),
-  level: Number (default: 1),
-
-  // Timestamps Mongoose
-  createdAt, updatedAt
-}
-```
+Le modèle central. Identité, vérification email, Google OAuth, profil physique, gamification (XP, niveau, rang calculé), inventaire, coffres, titres débloqués et équipé, cosmétiques Uniques, onboarding, push token, parrainage, trophées, vitrine, cadre de profil équipé. Deux index composés notables : email unique, et le combo pseudo plus discriminant unique (insensible à la casse), qui permet à deux comptes de partager le même pseudo affiché tout en restant identifiables sans ambiguïté pour l'ajout d'ami.
 
 ### Workout
 
-```javascript
-{
-  user:  ObjectId → User (required),
-  date:  Date (default: Date.now),
-  name:  String (default: "Séance"),
-
-  exercises: [
-    {
-      exerciseId:    ObjectId → Exercise (optional),
-      name:          String (required),
-      targetMuscle:  String,
-      equipment:     [String],
-      sets: [
-        {
-          weight:    Number,
-          reps:      Number,
-          completed: Boolean (default: false),
-          timestamp: Date
-        }
-      ],
-      notes:    String,
-      videoUrl: String
-    }
-  ],
-
-  // Métriques (calculées à la finalisation)
-  durationSeconds: Number,
-  totalVolume:     Number,   // kg · reps cumulé
-  setsCompleted:   Number,
-  xpEarned:        Number,
-  notes:           String,
-
-  // Statut
-  status:      Enum ["draft", "in_progress", "finished", "completed"],
-  completedAt: Date,
-
-  // Timestamps Mongoose
-  createdAt, updatedAt
-}
-
-// Méthodes d'instance
-workout.computeTotals()      // → {totalVolume, setsCompleted}
-workout.finalize(options)    // → {totalVolume, setsCompleted, xp}
-```
+Une séance : liste d'exercices avec leurs séries (poids, répétitions, complété), volume total, sets complétés, XP gagné, durée, statut (`draft`, `in_progress`, `finished`, `completed`). Porte les méthodes d'instance `computeTotals()` et `finalize(options)`.
 
 ### ExerciseRecord
 
-```javascript
-{
-  user:    ObjectId → User    (required),
-  workout: ObjectId → Workout (required),
+Performance d'un exercice pour une séance donnée : nom, liste de séries (poids et répétitions), note, poids recommandé pour la prochaine séance.
 
-  exerciceNom: String (required),
-  series: [
-    {
-      poids:       Number,  // kg (0 si bodyweight)
-      repetitions: Number
-    }
-  ],
-  note:                    String,
-  recommandedNextWeight:   Number,  // suggestion poids prochaine séance
+### Friendship
 
-  // Timestamps Mongoose
-  createdAt, updatedAt
-}
-```
+Relation entre deux utilisateurs (`requester`, `recipient`), statut (`pending`, `accepted`, `rejected`), XP et niveau d'amitié (1 à 5).
+
+### StreakGroup
+
+Groupe de streak collective : membres, invitations en attente, streak courante, date de dernière validation, historique des Secouer envoyés, statut d'attribution du cosmétique Rouge Sang.
+
+### WorkoutLobby
+
+Lobby multijoueur : créateur, membres avec leur statut individuel (`waiting`, `ready`, `finished`), statut global du lobby (`waiting`, `active`, `completed`), pourcentage de bonus d'XP calculé selon le nombre de membres.
+
+### ActivityEvent
+
+Événement du flux d'activité social (record battu, coffre légendaire ouvert) avec ses réactions (`bravo`, `respect`, `boo`, `jealous`) par ami.
+
+### WeightHistory
+
+Historique de pesées : poids et date, un enregistrement par entrée.
 
 ---
 
-## 🧠 Services & logique métier
+## Services et logique métier
 
 ### auth.service.js
 
-| Fonction | Description |
-|----------|-------------|
-| `register(pseudo, email, password)` | Hash password, crée User, génère OTP 6 chiffres, envoie email |
-| `login(email, password)` | Vérifie identifiants, génère JWT, retourne user |
-| `verifyEmail(email, code)` | Vérifie OTP, active compte, retourne JWT |
-| `resendVerification(email)` | Génère nouveau code, envoie email |
-| `forgotPassword(email)` | Génère code reset, envoie email |
-| `resetPassword(email, code, newPassword)` | Vérifie code, hash nouveau password, invalide code |
-
-**Constantes :**
-```javascript
-MAX_OTP_ATTEMPTS  = 5         // Tentatives max avant blocage
-CODE_TTL_VERIFY   = 10 * 60   // 10 minutes (en secondes)
-CODE_TTL_RESET    = 15 * 60   // 15 minutes
-```
+Inscription, connexion par mot de passe, connexion Google, vérification email, renvoi de code, mot de passe oublié, réinitialisation. Génère également les codes de parrainage et discriminants uniques utilisés par `user.service.js`.
 
 ### user.service.js
 
-| Fonction | Description |
-|----------|-------------|
-| `getUserProfile(userId)` | Retourne user sans password |
-| `updateUser(userId, data)` | Mise à jour profil (whitelist de champs) |
-| `deleteAccount(userId)` | Suppression cascade : ExerciseRecord → Workout → User |
-| `addExperience(userId, xp)` | `user.xp += xp`, recalcule level = `floor(sqrt(xp / 250))` |
+Lecture et mise à jour du profil, mise à jour du cadre équipé, de la vitrine de trophées et de records, enregistrement du push token, marquage de l'onboarding, synchronisation de l'XP avec ratchet anti-régression, suppression de compte en cascade.
 
 ### workout.service.js
 
-| Fonction | Description |
-|----------|-------------|
-| `createWorkout(userId, data)` | Crée et sauvegarde une séance |
-| `getMyWorkouts(userId)` | Toutes les séances, triées par date desc |
-| `getWorkoutById(userId, id)` | Détail + vérification ownership |
-| `deleteWorkout(userId, id)` | Suppression (ownership check) |
-| `createDraft(userId, data)` | Brouillon (status: "draft") |
-| `updateDraft(userId, id, patch)` | Mise à jour partielle du brouillon |
-| `finalizeWorkout(userId, id, opts)` | Calcule totaux, applique l'anti-cheat, crédite XP et recalcule le niveau |
-| `completeWorkout(userId, id)` | `xp = 100 + 10×exercisesWithSets`, crédite XP et recalcule le niveau |
+Création, lecture, suppression de séances, gestion des brouillons, finalisation avec calcul des totaux et application de l'anti-triche temporel serveur.
 
-**Anti-cheat temporel (miroir du front-end) :**
-```javascript
-if (shortSession === true || duration < 300)  xp = 0          // < 5 min → 0 XP
-else if (duration < 900)                       xp = round(xp/10) // 5–15 min → XP ÷ 10
-// ≥ 15 min → XP plein
-```
+### exercise.service.js
 
-**Formule de niveau (harmonisée avec le front-end) :**
-```javascript
-// utils/levelHelpers.js — source de vérité unique
-xpForLevel(n) = Math.round(4665 * (1.03^n - 1))
-levelFromXP(xp) // recherche binaire inverse
-// Exemples : ~1 600 XP → L10 · ~85 000 XP → L100 · ~1 150 000 XP → L200
-```
+Enregistrement des performances, historique de progression par exercice, classement entre amis sur un exercice donné.
 
 ### email.service.js
 
-Templates HTML professionnels (fond dark `#0D1018`, logo Athly) pour :
-- **Vérification d'email** : code OTP 6 chiffres en grande police
-- **Reset password** : même format, texte différent
+Templates HTML de la marque (fond sombre, logo Athly) pour les codes de vérification et de réinitialisation, envoyés via Nodemailer.
 
-Utilise Nodemailer avec SSL/TLS sur le port 465.
+### push.service.js
 
-### wger.service.js
+Envoi de notifications push via expo-server-sdk, utilisé pour Secouer, les invitations de groupe et de lobby, les réactions du flux d'activité.
 
-Proxy vers `https://wger.de/api/v2` :
+### chest.service.js
+
+Table de drop pondérée et tirage aléatoire d'un objet à l'ouverture d'un coffre.
+
+### inventory.service.js
+
+Logique de consommation atomique des objets d'inventaire, pour éviter toute condition de course sur la dernière unité disponible.
+
+### activity.service.js
+
+Construction et filtrage du flux d'activité social visible par un utilisateur.
+
+---
+
+## Catalogues de données
+
+### `data/titleCatalog.js`
+
+17 titres RPG déblocables, avec leurs conditions (niveau, records personnels, séances en groupe, participation communautaire).
+
+### `data/localTrophyCatalog.js`
+
+Miroir des métadonnées d'affichage des 40 trophées locaux définis côté front, plus le trophée capstone Souverain Absolu qui se débloque automatiquement une fois tous les autres trophées obtenus. Les conditions de déblocage sont évaluées côté client (elles dépendent des logs de séances stockés en AsyncStorage) : ce fichier ne porte que les métadonnées et sert d'allowlist pour la synchronisation.
+
+### `data/shakeMessages.js`
+
+Messages aléatoires envoyés par notification push lors d'un Secouer entre membres de groupe.
+
+### Catalogue de trophées serveur
+
+Défini directement dans `reward.controller.js` (`ACHIEVEMENT_CATALOG`), 20 entrées réparties en trois catégories : profil (anniversaire, parrainage), social (amitié, groupe), collection (raretés d'objets et paliers de coffres ouverts).
+
+---
+
+## Formules de gamification
+
+### Courbe XP et niveau
+
+Source de vérité unique : `utils/levelHelpers.js`, identique à la formule utilisée côté front.
 
 ```javascript
-getExercisesByMuscleAndEquipment(muscleId, equipmentId, includeDetails)
-// → [{id, name, videoUrl}]
+xpForLevel(n) = Math.round(4665 * (1.03 ** min(n, 200) - 1))
+levelFromXP(xp)   // recherche binaire inverse, plafonnée au niveau 200
+
+// Repères : niveau 1 environ 140 XP, niveau 10 environ 1600 XP,
+// niveau 100 environ 85 000 XP, niveau 200 environ 1 720 000 XP
 ```
+
+### Rangs
+
+Dix paliers, du niveau 1 au niveau 200 et au-delà : Novice, Initié (11), Athlète (31), Compétiteur (51), Warrior (71), Élite (91), Maître (111), Grand Maître (141), Légende (171), ATHLY GOD (200).
+
+### Bonus de groupe (lobby multijoueur)
+
+| Membres | Bonus d'XP |
+|---------|------------|
+| 2 | 15 pour cent |
+| 3 | 25 pour cent |
+| 4 | 35 pour cent |
+| 5 | 50 pour cent |
 
 ---
 
-## 🧪 Tests
+## Tests
 
 ```bash
-# Lancer tous les tests
-npm test
-
-# Tests en mode watch
-npm test -- --watch
-
-# Couverture de code
-npm test -- --coverage
+npm test                    # suite complète
+npm test -- --watch         # mode watch
+npm test -- --coverage      # couverture de code
 ```
 
-### Tests unitaires et d'intégrité (sans base de données)
+26 fichiers de tests, exécutés contre une instance MongoDB en mémoire (mongodb-memory-server), démarrée et arrêtée automatiquement par `tests/globalSetup.js` et `tests/globalTeardown.js`. Aucune connexion réseau requise, y compris en intégration continue.
 
-Ces trois suites tournent sans connexion MongoDB — elles sont la cible principale de la CI.
-
-#### `tests/levelHelpers.test.js` — 24 tests
-
-Vérifie la formule XP/niveau définie dans `utils/levelHelpers.js` :
-
-| Groupe | Ce qui est testé |
-|--------|-----------------|
-| `xpForLevel` | Niveau 0, 1, 10, 100, 200 ; cap >200 ; valeurs négatives ; progression strictement croissante |
-| `levelFromXP` | 0 XP → L0 ; valeurs nulles/NaN/négatives ; bijectivité `levelFromXP(xpForLevel(n)) === n` pour n ∈ {1,5,10,25,50,75,100,150,200} ; 85 000 XP → L100 |
-
-#### `tests/workoutAnticheat.test.js` — 13 tests
-
-Vérifie la logique d'anti-cheat serveur dans `workout.service.js::finalizeWorkout` via `jest.mock()` (aucun appel MongoDB) :
-
-| Scénario | XP attendu |
-|----------|-----------|
-| `durationSeconds = 0` | 0 |
-| `durationSeconds = 150` (< 5 min) | 0 |
-| `durationSeconds = 299` | 0 |
-| `shortSession: true` + 1 800 s | 0 |
-| `durationSeconds = 300` (seuil exact) | XP ÷ 10 |
-| `durationSeconds = 600` | XP ÷ 10 |
-| `durationSeconds = 899` | XP ÷ 10 |
-| `durationSeconds = 900` (seuil exact) | XP plein |
-| `durationSeconds = 3 600` | XP plein |
-| User null (absent en BDD) | pas de crash |
-| Workout introuvable | lance une erreur |
-
-#### `tests/modelsIntegrity.test.js` — 36 tests
-
-Vérifie l'état des schémas Mongoose sans requête réseau :
-
-| Groupe | Ce qui est testé |
-|--------|-----------------|
-| Imports réels | User, Workout, ExerciseRecord s'importent sans erreur |
-| Modèles fantômes | UserQuest, RefreshToken, WorkoutLog, RitualLog, UserProgress, Notification → `MODULE_NOT_FOUND` |
-| Schéma User | Champs email/password/xp/level/isVerified ; contrainte unique email ; xp défaut 0 ; level défaut 1 |
-| Schéma Workout | Champs user/exercises/xpEarned/durationSeconds/status/notes ; méthodes `finalize()` et `computeTotals()` ; enum status contient draft/in_progress/finished |
-| Schéma ExerciseRecord | Champs user/workout/exerciceNom/series ; refs User et Workout |
-
-### Tests d'intégration HTTP (avec base de données)
-
-| Fichier | Routes couvertes |
-|---------|-----------------|
-| `health.test.js` | `GET /health` |
-| `auth.test.js` | Register, login, verify-email, forgot/reset password |
-| `user.test.js` | `GET/PUT /me`, delete account |
-| `workout.test.js` | CRUD séances, draft, finalize, complete |
-| `exercise.test.js` | Create record, get history, get by workout |
-
-Ces tests utilisent **Supertest** et nécessitent un cluster MongoDB accessible (variable `MONGO_URI`).
+| Fichier | Périmètre |
+|---------|-----------|
+| `levelHelpers.test.js` | Formule XP et niveau : bornes, plafond, bijectivité |
+| `workoutAnticheat.test.js` | Anti-triche serveur sur la finalisation de séance |
+| `modelsIntegrity.test.js` | Intégrité des 8 schémas Mongoose |
+| `health.test.js` | Point de santé |
+| `auth.test.js` | Inscription, connexion, vérification, mot de passe oublié |
+| `googleAuth.test.js` | Connexion et création de compte via Google OAuth |
+| `discriminator.test.js` | Unicité du combo pseudo et discriminant |
+| `user.test.js` | Profil, cadre, vitrines, push token, onboarding, synchronisation XP, suppression de compte |
+| `workout.test.js` | CRUD séances, brouillon, finalisation, complétion |
+| `exercise.test.js` | Enregistrement de performances, historique, classement |
+| `friendship.test.js` | Demandes d'amis, acceptation, refus, retrait, recherche |
+| `socialEngine.test.js` | Classement, profil public, niveaux d'amitié |
+| `groupStreak.test.js` | Groupes, invitations, streak collective, Secouer |
+| `inventory.test.js` | Ouverture de coffres, consommation atomique, réclamation de cosmétiques |
+| `reward.test.js` | Trophées serveur, synchronisation, anniversaire |
+| `trophyUnification.test.js` | Cohérence du catalogue combiné local plus serveur |
+| `bloodSangRewards.test.js` | Attribution du cosmétique Unique de groupe |
+| `referral.test.js` | Parrainage, récompenses, garde-fous anti-triche |
+| `titles.test.js` | Déblocage et équipement des titres |
+| `activityFeed.test.js` | Flux d'activité et réactions |
+| `weight.test.js` | Historique de pesées |
+| `workoutLobby.test.js` | Cycle de vie complet du lobby multijoueur |
+| `debug.test.js` | Endpoints God Mode, blocage en production |
+| `profanityFilter.test.js` | Filtre de pseudos |
+| `deepIntegration.test.js` | Scénarios croisés de bout en bout |
 
 ---
 
-## ⚙️ Intégration continue (CI)
+## Intégration continue
 
-Les tests unitaires et d'intégrité (`levelHelpers`, `workoutAnticheat`, `modelsIntegrity`) sont conçus pour s'exécuter **sans base de données** dans n'importe quel environnement CI/CD.
+Le workflow GitHub Actions (`.github/workflows/ci.yml`) exécute deux jobs indépendants, chacun déclenché uniquement si son dossier a changé :
 
-Exemple de workflow GitHub Actions :
+- **Backend** : installation, lint ESLint, vérification syntaxique de `server.js`, audit de sécurité npm sur les dépendances de production (bloquant à partir du niveau élevé), puis suite de tests complète. Aucune base de données externe n'est requise, la suite Jest démarre sa propre instance en mémoire.
+- **Frontend** : installation avec `--legacy-peer-deps`, audit de sécurité npm, puis build de la PWA via `expo export --platform web`, qui détecte immédiatement tout composant natif non compatible avec le web.
 
-```yaml
-name: Tests
-
-on: [push, pull_request]
-
-jobs:
-  unit-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-      - run: npm ci
-      - run: npx jest tests/levelHelpers.test.js tests/workoutAnticheat.test.js tests/modelsIntegrity.test.js --runInBand --forceExit
-```
-
-> Les tests d'intégration HTTP (`auth`, `user`, `workout`, `exercise`) nécessitent un secret `MONGO_URI` configuré dans les variables d'environnement du runner CI.
+Un push qui ne touche que `front/` ne déclenche pas le job backend, et inversement.
 
 ---
 
-## 🔒 Sécurité
+## Sécurité
 
 | Mesure | Implémentation |
-|--------|---------------|
-| Passwords hashés | bcrypt avec salt rounds = 10 |
-| JWT court-vécu | Expiration 1 jour (configurable) |
-| Vérification email | OTP 6 chiffres, expiration 10 min |
+|--------|-----------------|
+| Mots de passe hashés | bcrypt |
+| JWT à courte durée de vie | Expiration configurable, 1 jour par défaut |
+| Vérification email | OTP à 6 chiffres, expiration 10 minutes |
 | Brute-force OTP | Blocage après 5 tentatives |
-| Headers sécurisés | Helmet (X-Frame-Options, CSP, HSTS, etc.) |
-| CORS | Configuré pour les origines autorisées |
-| Validation entrées | Joi sur tous les body de requête |
-| Ownership check | Chaque workout/record vérifié contre `req.user.id` |
-| Logs HTTP | Morgan en mode `dev` |
+| Headers sécurisés | Helmet (CSP, HSTS, noSniff, frameguard) |
+| CORS | Allowlist via `CORS_ORIGINS`, permissif uniquement en développement |
+| Rate limiting global | 300 requêtes par 15 minutes et par IP sur `/api` |
+| Rate limiting authentification | 20 requêtes par 15 minutes, clé IP plus email ciblé |
+| Injection NoSQL | Assainissement récursif des clés suspectes avant toute route |
+| Validation des entrées | Schémas Joi sur toutes les routes à corps de requête |
+| Limite de payload | 1 Mo maximum par requête |
+| Vérification de propriété | Chaque séance ou record est vérifié contre `req.user.id` |
+| Cache | `Cache-Control: no-store` sur toutes les réponses `/api` |
+| Logs HTTP | Morgan, désactivé pendant les tests |
 | Variables sensibles | Jamais en dur, toujours via `.env` |
+
+Détail complet de l'architecture de sécurité et de résilience : `docs/ARCHITECTURE-SECURITE.md` à la racine du dépôt.
 
 ---
 
 <div align="center">
 
-**Athly API** · Node.js + Express + MongoDB · Authentification JWT + OTP
+Athly API : Node.js, Express, MongoDB. Authentification par mot de passe, OTP et Google OAuth.
 
 </div>
