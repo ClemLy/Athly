@@ -53,10 +53,11 @@ function startOfToday() {
 
 /**
  * XP d'amitié attribué par validation de streak de groupe.
- * Palier : +10 XP de base, +10 tous les 7 jours de streak consécutive.
+ * Palier : +5 XP de base, +5 tous les 30 jours de streak consécutive
+ * (environ 4 mois de streak ininterrompue pour atteindre le niveau 5 maximum).
  */
 function computeGroupFriendshipXpGain(currentStreak) {
-  return 10 * (Math.floor(currentStreak / 7) + 1);
+  return 5 * (Math.floor((currentStreak - 1) / 30) + 1);
 }
 
 /**
