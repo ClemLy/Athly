@@ -8,8 +8,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '../../constants/theme';
-import NotificationBanner from '../../components/common/NotificationBanner';
-import { verifyEmail, resendVerificationEmail } from '../../services/auth.service';
+import { NotificationBanner } from '../../components/common';
+import { verifyEmail, resendVerificationEmail } from '../../services';
 import { useAuth } from '../../context/AuthContext';
 
 const CODE_LENGTH = 6;

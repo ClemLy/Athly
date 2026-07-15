@@ -15,6 +15,23 @@ const config = {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
+
+  // ── Google OAuth (Section VIII) ─────────────────────────────────────────────
+  // Non requis pour démarrer le serveur (contrairement à mongoUri/jwtSecret) :
+  // tant que GOOGLE_CLIENT_IDS est vide, /api/auth/google répond 501
+  // "non configuré" au lieu de planter tout le serveur au démarrage.
+  //
+  // Liste (pas un seul ID) : le front obtient un idToken via l'un de PLUSIEURS
+  // Client IDs selon la plateforme (iOS/Android/Web/Expo Go — voir
+  // front/.env.example), et le claim `aud` du token contient EXACTEMENT celui
+  // qui l'a émis. verifyIdToken doit donc accepter cette liste complète comme
+  // audience valide, sinon la connexion échouerait silencieusement sur toutes
+  // les plateformes sauf une. GOOGLE_CLIENT_ID (singulier) reste supporté pour
+  // compat ascendante si un seul ID est configuré.
+  googleClientIds: (process.env.GOOGLE_CLIENT_IDS || process.env.GOOGLE_CLIENT_ID || "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean),
 };
 
 if (!config.mongoUri) {

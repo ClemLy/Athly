@@ -2,6 +2,11 @@
 
 const User              = require('../models/User');
 const { drawChestItem } = require('../services/chest.service');
+const { consumeItemAtomic, addItemAtomic, addUniqueItemOnce, purgeEmptyEntries } = require('../services/inventory.service');
+const { levelFromXP, getRankForLevel } = require('../utils/levelHelpers');
+const { checkAndUnlockAchievements }   = require('./reward.controller');
+const { checkAndUnlockTitles }         = require('./title.controller');
+const { recordActivityEvent }          = require('../services/activity.service');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -13,64 +18,86 @@ function createError(message, statusCode = 400) {
 
 const MIN_LEVEL_FOR_CHEST = 11;
 
-// Correspondance niveau → rang (ordre décroissant : premier match gagné)
-const RANK_THRESHOLDS = [
-  { min: 200, rank: 'ATHLY GOD'    },
-  { min: 171, rank: 'Légende'      },
-  { min: 141, rank: 'Grand Maître' },
-  { min: 111, rank: 'Maître'       },
-  { min:  91, rank: 'Élite'        },
-  { min:  71, rank: 'Warrior'      },
-  { min:  51, rank: 'Compétiteur'  },
-  { min:  31, rank: 'Athlète'      },
-  { min:  11, rank: 'Initié'       },
-  { min:   1, rank: 'Novice'       },
-];
+// Coffres cumulés à vie nécessaires pour débloquer le thème cosmétique
+// Unique "Rouge Sang Unique" (Réglages → Apparence).
+const CHESTS_FOR_BLOOD_SANG_THEME = 100;
 
-function getRankForLevel(level) {
-  const match = RANK_THRESHOLDS.find((t) => level >= t.min);
-  return match ? match.rank : 'Novice';
-}
-
-/**
- * Ajoute un item à l'inventaire en incrémentant la quantité si déjà présent.
- * Modifie le tableau en place.
- */
-function addToInventory(inventory, itemType, rarity, quantity = 1) {
-  const existing = inventory.find((i) => i.itemType === itemType);
-  if (existing) {
-    existing.quantity += quantity;
-  } else {
-    inventory.push({ itemType, rarity, quantity });
-  }
-}
+// ─── Cosmétiques Uniques réclamables (voir claimUniqueItem) ──────────────────
+// itemType (inventaire) → { cosmetic (flag persisté), equip (auto-équipement) }
+// equip est optionnel : uniquement pour les cosmétiques de cadre (forme/couleur).
+const CLAIMABLE_COSMETICS = {
+  PROFILE_FRAME_BLOOD_BOND: {
+    cosmetic: 'FRAME_SHAPE_DRAGONFANG',
+    equip:    { field: 'equippedFrame.shapeId', value: 'dragonfang' },
+  },
+  FRAME_COLOR_BLOOD_SANG: {
+    cosmetic: 'FRAME_COLOR_BLOODSANG',
+    equip:    { field: 'equippedFrame.colorId', value: 'bloodsang' },
+  },
+  THEME_UNLOCK_BLOOD_SANG: {
+    cosmetic: 'THEME_BLOODSANG',
+    equip:    null, // le thème de profil est une préférence locale (voir profileThemes.js front)
+  },
+};
 
 /**
- * Consomme `quantity` unités d'un item dans l'inventaire.
- * Supprime l'entrée si la quantité tombe à 0.
- * Retourne false si l'item est introuvable ou en quantité insuffisante.
+ * Crédite atomiquement `amount` XP et recalcule level/rank si un palier est
+ * franchi. Deux écritures ($inc puis $set conditionnel) mais aucune lecture
+ * intermédiaire mutable : pas de fenêtre de perte d'XP entre deux consommations
+ * simultanées (contrairement à un read → mutate en mémoire → save()).
  */
-function consumeFromInventory(inventory, itemType, quantity = 1) {
-  const idx = inventory.findIndex((i) => i.itemType === itemType);
-  if (idx === -1 || inventory[idx].quantity < quantity) return false;
-  inventory[idx].quantity -= quantity;
-  if (inventory[idx].quantity === 0) inventory.splice(idx, 1);
-  return true;
+async function applyXpGain(userId, amount) {
+  const updated = await User.findOneAndUpdate(
+    { _id: userId },
+    { $inc: { xp: amount } },
+    { returnDocument: 'after' },
+  );
+  if (!updated) return null;
+
+  const newLevel = levelFromXP(updated.xp);
+  if (newLevel === updated.level) return updated;
+
+  return User.findOneAndUpdate(
+    { _id: userId },
+    { $set: { level: newLevel, rank: getRankForLevel(newLevel) } },
+    { returnDocument: 'after' },
+  );
 }
 
-// Effets des consommables — chaque fonction modifie user en place
-// Note : DOUBLE/TRIPLE/QUINTUPLE_XP donnent un XP instantané.
-// Un système de boost temporaire (multiplicateur) est prévu dans une brique future.
+// Effets des consommables — chaque effet est une opération atomique côté DB,
+// jamais un mutate-en-mémoire + save() (qui perdrait des écritures concurrentes
+// sur xp/streakGels si deux items sont utilisés au même instant).
 const ITEM_EFFECTS = {
-  ENERGY_DRINK:        (user) => { user.xp += 150; },
-  STREAK_FREEZE:       (user) => { user.streakGels = Math.min(user.streakGels + 1, 3); },
-  SUPER_STREAK_FREEZE: (user) => { user.streakGels = 3; },
-  DOUBLE_XP:           (user) => { user.xp += 200; },
-  TRIPLE_XP:           (user) => { user.xp += 300; },
-  QUINTUPLE_XP:        (user) => { user.xp += 500; },
-  LEVEL_COUPON: (user) => {
-    user.level += 1;
-    user.rank   = getRankForLevel(user.level);
+  ENERGY_DRINK:        (userId) => applyXpGain(userId, 150),
+  DOUBLE_XP:           (userId) => applyXpGain(userId, 200),
+  TRIPLE_XP:           (userId) => applyXpGain(userId, 300),
+  QUINTUPLE_XP:        (userId) => applyXpGain(userId, 500),
+
+  // Pipeline d'agrégation dans l'update : le plafond à 3 est calculé côté
+  // MongoDB en une seule écriture atomique (pas de read-then-clamp en JS).
+  STREAK_FREEZE: (userId) => User.findOneAndUpdate(
+    { _id: userId },
+    [{ $set: { streakGels: { $min: [{ $add: ['$streakGels', 1] }, 3] } } }],
+    { returnDocument: 'after', updatePipeline: true },
+  ),
+  SUPER_STREAK_FREEZE: (userId) => User.findOneAndUpdate(
+    { _id: userId },
+    { $set: { streakGels: 3 } },
+    { returnDocument: 'after' },
+  ),
+
+  LEVEL_COUPON: async (userId) => {
+    const updated = await User.findOneAndUpdate(
+      { _id: userId },
+      { $inc: { level: 1 } },
+      { returnDocument: 'after' },
+    );
+    if (!updated) return null;
+    return User.findOneAndUpdate(
+      { _id: userId },
+      { $set: { rank: getRankForLevel(updated.level) } },
+      { returnDocument: 'after' },
+    );
   },
 };
 
@@ -91,35 +118,134 @@ const VALID_USE_ITEMS = Object.keys(ITEM_EFFECTS);
  *  1. Consomme 1 CHEST_KEY.
  *  2. Tire un item aléatoire via l'algorithme de tirage pondéré.
  *  3. Ajoute l'item à l'inventaire (incrémente si déjà présent).
+ *  4. Incrémente le compteur totalChestsOpened (trophées gradués, thème
+ *     cosmétique Unique à 100 coffres) et débloque les trophées éligibles.
  */
 exports.openChest = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id);
-    if (!user) return next(createError('Utilisateur introuvable.', 404));
+    // Consommation atomique : clé décrémentée UNIQUEMENT si possédée ET niveau
+    // suffisant, en une seule écriture — aucune fenêtre de double-spend.
+    const afterConsume = await consumeItemAtomic(req.user.id, 'CHEST_KEY', {
+      level: { $gte: MIN_LEVEL_FOR_CHEST },
+    });
 
-    if (user.level < MIN_LEVEL_FOR_CHEST) {
-      return next(createError("Fonctionnalité bloquée jusqu'au niveau 11.", 403));
-    }
-
-    const hasKey = user.inventory.some((i) => i.itemType === 'CHEST_KEY' && i.quantity > 0);
-    if (!hasKey) {
+    if (!afterConsume) {
+      // Diagnostic du refus pour renvoyer l'erreur historique appropriée.
+      const user = await User.findById(req.user.id).select('level inventory');
+      if (!user) return next(createError('Utilisateur introuvable.', 404));
+      if (user.level < MIN_LEVEL_FOR_CHEST) {
+        return next(createError("Fonctionnalité bloquée jusqu'au niveau 11.", 403));
+      }
       return next(createError('Aucun coffre disponible dans votre inventaire.', 400));
     }
 
-    consumeFromInventory(user.inventory, 'CHEST_KEY');
-
     const drawnItem = drawChestItem();
-    addToInventory(user.inventory, drawnItem.itemType, drawnItem.rarity);
+    await addItemAtomic(req.user.id, drawnItem.itemType, drawnItem.rarity);
 
-    // markModified nécessaire : Mongoose ne détecte pas les mutations des tableaux de sous-documents
-    user.markModified('inventory');
-    await user.save();
+    // Flux d'activité (Section IV) : un coffre Légendaire mérite d'être
+    // annoncé au groupe — silencieux si l'utilisateur n'a pas de groupe.
+    if (drawnItem.rarity === 'legendary') {
+      const opener = await User.findById(req.user.id).select('pseudo');
+      const pseudo = opener?.pseudo ?? 'Un membre';
+      await recordActivityEvent(
+        req.user.id,
+        'chest_legendary',
+        `${pseudo} a ouvert un coffre Légendaire !`,
+        { itemType: drawnItem.itemType },
+      );
+    }
+
+    // Compteur à vie — indépendant de l'inventaire courant (purgé plus bas).
+    const afterCount = await User.findOneAndUpdate(
+      { _id: req.user.id },
+      { $inc: { totalChestsOpened: 1 } },
+      { returnDocument: 'after' },
+    ).select('totalChestsOpened');
+
+    // Palier 100 coffres : octroie l'item Unique à réclamer (idempotent —
+    // addUniqueItemOnce ne ré-ajoute jamais si déjà possédé/réclamé).
+    let themeUnlockGranted = false;
+    if (afterCount && afterCount.totalChestsOpened >= CHESTS_FOR_BLOOD_SANG_THEME) {
+      const granted = await addUniqueItemOnce(req.user.id, 'THEME_UNLOCK_BLOOD_SANG', 'unique');
+      themeUnlockGranted = Boolean(granted);
+    }
+
+    const finalUser    = await purgeEmptyEntries(req.user.id);
+    const newlyUnlocked = await checkAndUnlockAchievements(req.user.id);
+    const newlyUnlockedTitles = await checkAndUnlockTitles(req.user.id).catch(() => []);
 
     return res.status(200).json({
       success:   true,
       message:   'Coffre ouvert !',
       drawnItem,
-      inventory: user.inventory,
+      inventory: finalUser.inventory,
+      totalChestsOpened: afterCount ? afterCount.totalChestsOpened : null,
+      themeUnlockGranted,
+      newlyUnlocked,
+      newlyUnlockedTitles,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// claimUniqueItem  POST /api/inventory/claim
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Réclame un cosmétique Unique en attente dans l'inventaire (cadre "Lien de
+ * Sang", couleur "Rouge Sang Unique", thème "Rouge Sang Unique"…).
+ *
+ * Body : { itemType: string } — doit être une clé de CLAIMABLE_COSMETICS.
+ *
+ * Flux atomique :
+ *  1. Consomme 1 unité de l'item (garde anti double-spend habituelle).
+ *  2. Débloque définitivement le cosmétique ($addToSet unlockedCosmetics)
+ *     et, pour les cadres, l'équipe automatiquement — en une seule écriture
+ *     avec l'étape précédente pour éviter toute fenêtre incohérente.
+ *
+ * Idempotent au sens sécurité : sans l'item en inventaire, rien ne se passe.
+ */
+exports.claimUniqueItem = async (req, res, next) => {
+  try {
+    const { itemType } = req.body;
+    const spec = CLAIMABLE_COSMETICS[itemType];
+
+    if (!itemType || !spec) {
+      return next(createError(
+        `itemType invalide. Valeurs acceptées : ${Object.keys(CLAIMABLE_COSMETICS).join(', ')}.`,
+        400,
+      ));
+    }
+
+    const consumed = await consumeItemAtomic(req.user.id, itemType);
+    if (!consumed) {
+      const exists = await User.exists({ _id: req.user.id });
+      if (!exists) return next(createError('Utilisateur introuvable.', 404));
+      return next(createError('Vous ne possédez pas cet objet à réclamer.', 400));
+    }
+
+    const update = { $addToSet: { unlockedCosmetics: spec.cosmetic } };
+    if (spec.equip) update.$set = { [spec.equip.field]: spec.equip.value };
+
+    const updated = await User.findOneAndUpdate(
+      { _id: req.user.id },
+      update,
+      { returnDocument: 'after' },
+    ).select('unlockedCosmetics equippedFrame inventory');
+
+    const finalUser = await purgeEmptyEntries(req.user.id);
+    const newlyUnlockedTitles = await checkAndUnlockTitles(req.user.id).catch(() => []);
+
+    return res.status(200).json({
+      success:           true,
+      message:           'Cosmétique Unique débloqué !',
+      unlockedCosmetic:  spec.cosmetic,
+      equippedFrame:     updated.equippedFrame,
+      unlockedCosmetics: updated.unlockedCosmetics,
+      inventory:         finalUser.inventory,
+      newlyUnlockedTitles,
     });
   } catch (err) {
     next(err);
@@ -151,18 +277,20 @@ exports.useItem = async (req, res, next) => {
       ));
     }
 
-    const user = await User.findById(req.user.id);
-    if (!user) return next(createError('Utilisateur introuvable.', 404));
+    // Consommation atomique : même garde anti double-spend que openChest.
+    const consumed = await consumeItemAtomic(req.user.id, itemType);
 
-    const consumed = consumeFromInventory(user.inventory, itemType);
     if (!consumed) {
+      const exists = await User.exists({ _id: req.user.id });
+      if (!exists) return next(createError('Utilisateur introuvable.', 404));
       return next(createError('Vous ne possédez pas cet objet.', 400));
     }
 
-    ITEM_EFFECTS[itemType](user);
+    // Effet 100% atomique côté DB (xp/level/rank/streakGels) — voir ITEM_EFFECTS.
+    const user = await ITEM_EFFECTS[itemType](req.user.id);
+    if (!user) return next(createError('Utilisateur introuvable.', 404));
 
-    user.markModified('inventory');
-    await user.save();
+    const finalUser = await purgeEmptyEntries(req.user.id);
 
     return res.status(200).json({
       success: true,
@@ -172,7 +300,7 @@ exports.useItem = async (req, res, next) => {
         level:      user.level,
         rank:       user.rank,
         streakGels: user.streakGels,
-        inventory:  user.inventory,
+        inventory:  finalUser.inventory,
       },
     });
   } catch (err) {

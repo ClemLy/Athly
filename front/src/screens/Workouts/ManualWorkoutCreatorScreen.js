@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -22,6 +21,7 @@ import {
 } from '../../constants/exerciseFilters';
 import AddExerciseSheet from '../../components/workouts/AddExerciseSheet';
 import { useSavedWorkouts } from '../../context/SavedWorkoutsContext';
+import InfoModal from '../../components/common/InfoModal';
 
 // Construction manuelle d'une séance.
 // L'utilisateur :
@@ -46,7 +46,7 @@ function ExerciseRow({ exercise, index, onRemove, onSetsChange, onRepsChange }) 
     <View style={styles.exoCard}>
       <View style={styles.exoHeader}>
         <View style={styles.exoIcon}>
-          <Text style={styles.exoEmoji}>{icon}</Text>
+          <Ionicons name={icon} size={20} color={Colors.primary} />
         </View>
         <View style={styles.exoContent}>
           <Text style={styles.exoName} numberOfLines={1}>{exercise.name}</Text>
@@ -98,7 +98,7 @@ function ExerciseRow({ exercise, index, onRemove, onSetsChange, onRepsChange }) 
               onRepsChange(index, n);
             }}
             keyboardType="numeric"
-            placeholder="—"
+            placeholder="-"
             placeholderTextColor={Colors.textMuted}
             style={styles.repsInput}
             maxLength={2}
@@ -111,13 +111,18 @@ function ExerciseRow({ exercise, index, onRemove, onSetsChange, onRepsChange }) 
   );
 }
 
-export default function ManualWorkoutCreatorScreen({ navigation }) {
-  const { create: createSavedWorkout } = useSavedWorkouts();
+export default function ManualWorkoutCreatorScreen({ navigation, route }) {
+  const { create: createSavedWorkout, update: updateSavedWorkout } = useSavedWorkouts();
 
-  const [name, setName] = useState('');
-  const [exercises, setExercises] = useState([]);
+  // Édition d'une séance existante (venant de WorkoutListScreen → "Modifier",
+  // pour les séances manuelles ou celles sans critères de génération stockés).
+  const editWorkout = route?.params?.editWorkout ?? null;
+
+  const [name, setName] = useState(editWorkout?.name ?? '');
+  const [exercises, setExercises] = useState(editWorkout?.exercises ?? []);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [infoModal, setInfoModal] = useState(null); // { title, body, onCloseNav? }
 
   const buildSets = (count, reps) => {
     const c = Math.max(1, Math.min(20, count || 4));
@@ -167,34 +172,47 @@ export default function ManualWorkoutCreatorScreen({ navigation }) {
   const handleSave = useCallback(async () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      Alert.alert('Nom requis', 'Donne un nom à ta séance.');
+      setInfoModal({ title: 'Nom requis', body: 'Donne un nom à ta séance.' });
       return;
     }
     if (exercises.length === 0) {
-      Alert.alert('Au moins un exercice', 'Ajoute au moins un exercice avant de sauvegarder.');
+      setInfoModal({ title: 'Au moins un exercice', body: 'Ajoute au moins un exercice avant de sauvegarder.' });
       return;
     }
     setSaving(true);
     try {
-      await createSavedWorkout({
-        name: trimmed,
-        description: '',
-        exercises,
-        isManual: true,
-      });
-      Alert.alert(
-        'Séance créée',
-        `"${trimmed}" est dans tes séances. Tu peux la lancer depuis la page Séances.`,
-        [
-          { text: 'OK', onPress: () => navigation && navigation.goBack() },
-        ],
-      );
+      if (editWorkout?.id) {
+        await updateSavedWorkout(editWorkout.id, { name: trimmed, description: '', exercises });
+        setInfoModal({
+          title: 'Séance mise à jour',
+          body: `"${trimmed}" a été modifiée.`,
+          onCloseNav: true,
+        });
+      } else {
+        await createSavedWorkout({
+          name: trimmed,
+          description: '',
+          exercises,
+          isManual: true,
+        });
+        setInfoModal({
+          title: 'Séance créée',
+          body: `"${trimmed}" est dans tes séances. Tu peux la lancer depuis la page Séances.`,
+          onCloseNav: true,
+        });
+      }
     } catch (e) {
-      Alert.alert('Erreur', e && e.message ? e.message : 'Sauvegarde impossible');
+      setInfoModal({ title: 'Erreur', body: e && e.message ? e.message : 'Sauvegarde impossible' });
     } finally {
       setSaving(false);
     }
-  }, [name, exercises, createSavedWorkout, navigation]);
+  }, [name, exercises, editWorkout, createSavedWorkout, updateSavedWorkout, navigation]);
+
+  const closeInfoModal = useCallback(() => {
+    const shouldGoBack = infoModal?.onCloseNav;
+    setInfoModal(null);
+    if (shouldGoBack && navigation) navigation.goBack();
+  }, [infoModal, navigation]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -209,7 +227,7 @@ export default function ManualWorkoutCreatorScreen({ navigation }) {
           >
             <Ionicons name="chevron-back" size={26} color={Colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Créer une séance</Text>
+          <Text style={styles.headerTitle}>{editWorkout ? 'Modifier la séance' : 'Créer une séance'}</Text>
           <View style={styles.headerSide} />
         </View>
 
@@ -298,6 +316,15 @@ export default function ManualWorkoutCreatorScreen({ navigation }) {
           onSelect={handleAddExercise}
         />
       </KeyboardAvoidingView>
+
+      <InfoModal
+        visible={!!infoModal}
+        icon={infoModal?.title === 'Erreur' ? 'alert-circle-outline' : 'information-circle-outline'}
+        title={infoModal?.title}
+        body={infoModal?.body}
+        destructive={infoModal?.title === 'Erreur'}
+        onClose={closeInfoModal}
+      />
     </SafeAreaView>
   );
 }
@@ -313,7 +340,7 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1f1f27',
+    borderBottomColor: Colors.borderSubtle,
   },
   headerTitle: {
     color: Colors.textPrimary,
@@ -389,7 +416,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: '#0e0e12',
+    backgroundColor: Colors.cardInner,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -443,7 +470,7 @@ const styles = StyleSheet.create({
   stepper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0e0e12',
+    backgroundColor: Colors.cardInner,
     borderRadius: 10,
     paddingHorizontal: 4,
   },
@@ -461,7 +488,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   repsInput: {
-    backgroundColor: '#0e0e12',
+    backgroundColor: Colors.cardInner,
     color: Colors.textPrimary,
     fontSize: 14,
     fontWeight: '700',
@@ -501,7 +528,7 @@ const styles = StyleSheet.create({
     paddingBottom: 26,
     backgroundColor: Colors.background,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#1f1f27',
+    borderTopColor: Colors.borderSubtle,
   },
   saveBtn: {
     flexDirection: 'row',

@@ -9,8 +9,9 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '../../constants/theme';
 import AuthInput from '../../components/inputs/AuthInput';
-import NotificationBanner from '../../components/common/NotificationBanner';
-import { register } from '../../services/auth.service';
+import { NotificationBanner } from '../../components/common';
+import { register } from '../../services';
+import { haptics } from '../../services';
 
 const EMAIL_RE  = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const HAS_UPPER = /[A-Z]/;
@@ -31,7 +32,7 @@ function getStrength(pwd) {
 function StrengthBar({ password }) {
   const score = getStrength(password);
   if (!password) return null;
-  const color = score === 3 ? '#44FF88' : score === 2 ? '#FFA500' : '#FF4D4D';
+  const color = score === 3 ? Colors.success : score === 2 ? '#FFA500' : Colors.error;
   const label = score === 3 ? 'Fort' : score === 2 ? 'Moyen' : 'Faible';
   return (
     <View style={sb.wrap}>
@@ -75,7 +76,7 @@ function WeakPasswordModal({ visible, onImprove, onCreate, loading }) {
 
           {/* Icône */}
           <View style={wm.iconWrap}>
-            <Ionicons name="warning-outline" size={28} color="#F59E0B" />
+            <Ionicons name="warning-outline" size={28} color={Colors.warningAmber} />
           </View>
 
           <Text style={wm.title}>Mot de passe simple</Text>
@@ -123,7 +124,7 @@ const wm = StyleSheet.create({
   },
   card: {
     width: '100%',
-    backgroundColor: '#13131C',
+    backgroundColor: Colors.bgDeep2,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: 'rgba(245,158,11,0.25)',
@@ -200,11 +201,91 @@ const wm = StyleSheet.create({
   },
 });
 
+// ─── Popup "Pseudo non autorisé" ──────────────────────────────────────────────
+// Ton volontairement plus ferme que WeakPasswordModal (qui reste un conseil) :
+// ici on avertit explicitement que le pseudo a été refusé par la modération
+// automatique et qu'une insistance répétée peut mener à des restrictions de
+// compte — dissuasif sans bloquer techniquement la nouvelle tentative.
+
+function PseudoRejectedModal({ visible, onClose }) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <View style={pm.backdrop}>
+        <View style={pm.card}>
+          <View style={pm.iconWrap}>
+            <Ionicons name="alert-circle" size={30} color={Colors.destructive} />
+          </View>
+
+          <Text style={pm.title}>Pseudo non autorisé</Text>
+          <Text style={pm.body}>
+            Ce pseudo a été refusé car il contient un terme injurieux ou inapproprié.
+            Athly est une communauté respectueuse - merci d'en choisir un autre.
+          </Text>
+          <Text style={pm.warning}>
+            Toute tentative répétée avec un pseudo de ce type pourra entraîner des
+            restrictions sur ton compte.
+          </Text>
+
+          <TouchableOpacity style={pm.closeBtn} onPress={onClose} activeOpacity={0.85}>
+            <Text style={pm.closeTxt}>Choisir un autre pseudo</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const pm = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  card: {
+    width: '100%',
+    backgroundColor: Colors.bgDeep2,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.35)',
+    padding: 28,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.6,
+    shadowRadius: 32,
+    elevation: 20,
+  },
+  iconWrap: {
+    width: 60, height: 60, borderRadius: 18,
+    backgroundColor: 'rgba(239,68,68,0.12)',
+    borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)',
+    justifyContent: 'center', alignItems: 'center', marginBottom: 18,
+  },
+  title: { color: Colors.textPrimary, fontSize: 19, fontWeight: '800', letterSpacing: -0.3, marginBottom: 12, textAlign: 'center' },
+  body: { color: Colors.textSecondary, fontSize: 14, lineHeight: 21, textAlign: 'center', marginBottom: 14 },
+  warning: { color: Colors.destructive, fontSize: 12.5, fontWeight: '700', lineHeight: 18, textAlign: 'center', marginBottom: 24 },
+  closeBtn: {
+    width: '100%', height: 50, borderRadius: 13,
+    backgroundColor: Colors.destructive, justifyContent: 'center', alignItems: 'center',
+    shadowColor: Colors.destructive, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
+  },
+  closeTxt: { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
+});
+
 // ─── Écran principal ──────────────────────────────────────────────────────────
 export default function RegisterScreen({ navigation }) {
   const [pseudo,   setPseudo]   = useState('');
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [confirm,  setConfirm]  = useState('');
   const [loading,  setLoading]  = useState(false);
 
@@ -219,6 +300,7 @@ export default function RegisterScreen({ navigation }) {
   const [errType,    setErrType]    = useState('error');
 
   const [weakModalVisible, setWeakModalVisible] = useState(false);
+  const [pseudoRejectedVisible, setPseudoRejectedVisible] = useState(false);
 
   // ── Règles allégées : seul le minimum absolu bloque le bouton ────────────────
   const isPwdMinimal = password.length >= MIN_PWD;
@@ -259,7 +341,7 @@ export default function RegisterScreen({ navigation }) {
     try {
       setLoading(true);
       setGlobalErr('');
-      await register({ pseudo, email, password });
+      await register({ pseudo, email, password, referralCode: referralCode.trim() });
       navigation.navigate('EmailVerification', { email });
     } catch (error) {
       const status = error?.status;
@@ -270,9 +352,16 @@ export default function RegisterScreen({ navigation }) {
       } else if (status >= 500) {
         setErrType('info');
         setGlobalErr('Une erreur est survenue, notre équipe est sur le coup.');
+      } else if (msg.toLowerCase().includes('parrainage')) {
+        setErrType('error');
+        setGlobalErr('Code de parrainage invalide. Vérifie-le ou laisse le champ vide.');
       } else if (msg.toLowerCase().includes('email')) {
         setErrType('error');
         setGlobalErr('Cet email est déjà utilisé.');
+      } else if (msg.toLowerCase().includes('pseudo')) {
+        haptics.error();
+        setPseudoErr('Pseudo non autorisé');
+        setPseudoRejectedVisible(true);
       } else {
         setErrType('error');
         setGlobalErr("Erreur lors de l'inscription. Réessayez.");
@@ -280,7 +369,7 @@ export default function RegisterScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [pseudo, email, password, navigation]);
+  }, [pseudo, email, password, referralCode, navigation]);
 
   // ── Soumission : validation + vérification de force ───────────────────────
   const handleSubmit = useCallback(() => {
@@ -380,6 +469,16 @@ export default function RegisterScreen({ navigation }) {
             error={confirmErr}
           />
 
+          <AuthInput
+            label="Code de parrainage (optionnel)"
+            icon="gift-outline"
+            placeholder="ATH-XXXXX"
+            value={referralCode}
+            onChangeText={(v) => setReferralCode(v.toUpperCase())}
+            autoCapitalize="characters"
+            autoCorrect={false}
+          />
+
           {globalErr ? <NotificationBanner message={globalErr} type={errType} /> : null}
 
           <TouchableOpacity
@@ -409,6 +508,11 @@ export default function RegisterScreen({ navigation }) {
         onImprove={() => setWeakModalVisible(false)}
         onCreate={doRegister}
         loading={loading}
+      />
+
+      <PseudoRejectedModal
+        visible={pseudoRejectedVisible}
+        onClose={() => { setPseudoRejectedVisible(false); setPseudo(''); }}
       />
     </SafeAreaView>
   );

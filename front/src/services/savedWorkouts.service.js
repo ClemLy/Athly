@@ -2,7 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // CRUD des séances sauvegardées (favorites / réutilisables).
 // Schéma :
-//   { id, name, description, exercises[], createdAt, updatedAt }
+//   { id, name, description, exercises[], criteria, createdAt, updatedAt }
+// criteria (optionnel) : { subMuscles, equipment, level, durationMin } — critères
+// de génération d'origine (WorkoutBuilderScreen), utilisés pour ré-ouvrir
+// l'écran de création pré-rempli lors d'une modification. Absent pour les
+// séances manuelles (isManual) ou créées avant cette fonctionnalité.
 
 const STORAGE_KEY = 'athly:savedWorkouts:v1';
 
@@ -59,6 +63,7 @@ export async function saveWorkout(input) {
     description: String(input.description || '').trim(),
     exercises: sanitizeExercises(input.exercises),
     isManual: !!input.isManual,
+    criteria: input.criteria || null,
     createdAt: now,
     updatedAt: now,
   };

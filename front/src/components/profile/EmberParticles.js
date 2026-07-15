@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { View, StyleSheet, Animated } from 'react-native';
+import { Colors } from '../../constants/theme';
 
 // ─── EmberParticles ───────────────────────────────────────────────────────────
 // Braises ascendantes pour les rangs Légende (171+) et ATHLY GOD (200).
@@ -16,7 +17,7 @@ function randomBetween(min, max) {
   return min + Math.random() * (max - min);
 }
 
-export default function EmberParticles({ visible = false, color = '#C084FC' }) {
+export default function EmberParticles({ visible = false, color = Colors.legendAccent }) {
   const particles = useRef(
     Array.from({ length: PARTICLE_COUNT }, (_, i) => ({
       y:       new Animated.Value(0),

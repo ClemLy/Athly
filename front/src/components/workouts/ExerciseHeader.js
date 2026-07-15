@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   Linking,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
+import InfoModal from '../common/InfoModal';
 
 const LOGO = require('../../../assets/minimalist-logo-orange.png');
 
@@ -29,15 +29,17 @@ function ChronoPill({ timer }) {
 }
 
 export default function ExerciseHeader({ timer = '0:00', videoUrl }) {
+  const [infoModal, setInfoModal] = useState(null); // { title, body }
+
   const onPlayPress = async () => {
     if (!videoUrl) {
-      Alert.alert('Vidéo indisponible', "Aucun lien vidéo n'est associé à cet exercice.");
+      setInfoModal({ title: 'Vidéo indisponible', body: "Aucun lien vidéo n'est associé à cet exercice." });
       return;
     }
     try {
       await Linking.openURL(videoUrl);
     } catch (e) {
-      Alert.alert('Erreur', "Impossible d'ouvrir la vidéo.");
+      setInfoModal({ title: 'Erreur', body: "Impossible d'ouvrir la vidéo." });
     }
   };
 
@@ -63,6 +65,14 @@ export default function ExerciseHeader({ timer = '0:00', videoUrl }) {
           <Ionicons name="play" size={28} color={Colors.primary} style={styles.playIcon} />
         </TouchableOpacity>
       </View>
+
+      <InfoModal
+        visible={!!infoModal}
+        icon="videocam-off-outline"
+        title={infoModal?.title}
+        body={infoModal?.body}
+        onClose={() => setInfoModal(null)}
+      />
     </View>
   );
 }
@@ -73,7 +83,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 22,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1f1f27',
+    borderBottomColor: Colors.borderSubtle,
   },
   topRow: {
     flexDirection: 'row',

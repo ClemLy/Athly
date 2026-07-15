@@ -1,20 +1,26 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '../../constants/theme';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
-import { aggregateGlobal } from '../../services/stats.service';
+import { useUser } from '../../context/UserContext';
+import { aggregateGlobal } from '../../services';
+import { getWeightHistory } from '../../services';
 import PeriodSegmentedControl from '../../components/stats/PeriodSegmentedControl';
 import VolumeBarChart from '../../components/stats/VolumeBarChart';
 import MuscleDistributionPieChart from '../../components/stats/MuscleDistributionPieChart';
+import WeightProgressChart from '../../components/stats/WeightProgressChart';
 import WorkoutCalendar from '../../components/stats/WorkoutCalendar';
 import XPProgressBar from '../../components/stats/XPProgressBar';
 import WorkoutHistoryList from '../../components/stats/WorkoutHistoryList';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
+import { WeightEntryModal } from '../../components/common';
+import { ConfirmModal } from '../../components/common';
+import { InfoModal } from '../../components/common';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 import { MOCK_TUTORIAL_LOGS } from '../../data/mockTutorialStats';
 
@@ -25,12 +31,32 @@ const TABS = [
 
 export default function StatsScreen({ navigation }) {
   const { sessionLogs: realLogs, totalXP, remove } = useWorkoutLogs();
+  const { user } = useUser();
+
+  const [errorInfo, setErrorInfo] = useState(null);
+  const [dayDetail, setDayDetail] = useState(null); // { log, body, deletable }
+  const [noSessionInfo, setNoSessionInfo] = useState(null); // dateKey
 
   const handleDelete = useCallback(async (id) => {
     try { await remove(id); } catch (e) {
-      Alert.alert('Erreur', e?.message || 'Suppression impossible');
+      setErrorInfo(e?.message || 'Suppression impossible');
     }
   }, [remove]);
+
+  // ─── Suivi de poids (Section VI) ─────────────────────────────────────────
+  const [weightHistory, setWeightHistory] = useState([]);
+  const [weightEntryVisible, setWeightEntryVisible] = useState(false);
+
+  const loadWeightHistory = useCallback(async () => {
+    try {
+      const res = await getWeightHistory();
+      setWeightHistory(Array.isArray(res.history) ? res.history : []);
+    } catch (_) {
+      // Best-effort — un historique de poids manquant ne doit jamais bloquer l'écran.
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { loadWeightHistory(); }, [loadWeightHistory]));
   const [tab,    setTab]    = useState('performance');
   const [period, setPeriod] = useState('month');
 
@@ -41,7 +67,12 @@ export default function StatsScreen({ navigation }) {
   } = useTutorial();
 
   const scrollRef = useRef(null);
+  // Offset de scroll courant, suivi en direct pour un défilement piloté par la
+  // position RÉELLE des cibles (robuste aux changements de mise en page comme
+  // l'ajout du graphique de poids, qui décalait les anciens scrollY fixes).
+  const scrollOffsetRef = useRef(0);
   const { ref: kpisRef,       onLayout: onKpisLayout,       remeasure: rKpis   } = useTutorialTarget('stats_kpis');
+  const { ref: weightRef,     onLayout: onWeightLayout,     remeasure: rWeight } = useTutorialTarget('stats_weight_chart');
   const { ref: volumeRef,     onLayout: onVolumeLayout,     remeasure: rVolume } = useTutorialTarget('stats_volume_chart');
   const { ref: muscleRef,     onLayout: onMuscleLayout,     remeasure: rMuscle } = useTutorialTarget('stats_muscle_chart');
   const { ref: tabHistoryRef, onLayout: onTabHistoryLayout }                     = useTutorialTarget('stats_tab_history');
@@ -50,9 +81,24 @@ export default function StatsScreen({ navigation }) {
   useEffect(() => {
     registerScrollRef('stats', scrollRef);
     registerRemeasure('stats', () => {
-      setTimeout(() => { rKpis(); rVolume(); rMuscle(); }, 50);
+      setTimeout(() => { rKpis(); rWeight(); rVolume(); rMuscle(); }, 50);
     });
-  }, [registerScrollRef, registerRemeasure, rKpis, rVolume, rMuscle]);
+  }, [registerScrollRef, registerRemeasure, rKpis, rWeight, rVolume, rMuscle]);
+
+  // Fait défiler pour amener une cible mesurée à une position confortable :
+  // haut de cible vers ~160 px (tooltip en-dessous) ou ~300 px (tooltip
+  // au-dessus). On mesure en absolu (pageY) et on combine avec l'offset courant,
+  // donc aucun nombre magique ne dépend de la hauteur des sections au-dessus.
+  const scrollTargetIntoView = useCallback((targetRef, prefersAbove, remeasureAll) => {
+    if (!targetRef?.current || !scrollRef.current) return;
+    const desiredTop = prefersAbove ? 300 : 160;
+    targetRef.current.measure((_x, _y, _w, _h, _pageX, pageY) => {
+      if (pageY == null) return;
+      const newY = Math.max(0, scrollOffsetRef.current + (pageY - desiredTop));
+      scrollRef.current.scrollTo({ y: newY, animated: true });
+      if (remeasureAll) setTimeout(remeasureAll, 350);
+    });
+  }, []);
 
   // Démarrage du chapitre quand l'écran gagne le focus.
   // On force d'abord l'onglet Performance pour éviter que l'utilisateur,
@@ -67,13 +113,33 @@ export default function StatsScreen({ navigation }) {
     }, [pendingChapterId, startChapter]),
   );
 
-  // Auto-scroll + autoActions quand l'étape change
+  // Auto-scroll + autoActions quand l'étape change.
+  // Défilement piloté par la cible (robuste) pour les sections défilables ;
+  // pour la cible d'onglet Historique (barre de nav haute) on remonte en tête.
   useEffect(() => {
     if (activeChapterId !== 'stats' || !activeStep) return;
-    const y = activeStep.scrollY;
-    if (y != null && scrollRef.current) {
-      scrollRef.current.scrollTo({ y, animated: true });
-      setTimeout(() => { rKpis(); rVolume(); rMuscle(); }, 350);
+
+    const remeasureAll = () => { rKpis(); rWeight(); rVolume(); rMuscle(); };
+    const REF_BY_KEY = {
+      stats_kpis:          kpisRef,
+      stats_weight_chart:  weightRef,
+      stats_volume_chart:  volumeRef,
+      stats_muscle_chart:  muscleRef,
+    };
+    const targetRef = activeStep.targetKey ? REF_BY_KEY[activeStep.targetKey] : null;
+
+    if (targetRef) {
+      // Laisse le rendu se stabiliser puis amène la cible à bonne hauteur.
+      const t = setTimeout(
+        () => scrollTargetIntoView(targetRef, activeStep.position === 'top', remeasureAll),
+        80,
+      );
+      return () => clearTimeout(t);
+    }
+    // Cibles hors flux défilable (onglet) ou cartes centrées : scroll fixe.
+    if (activeStep.scrollY != null && scrollRef.current) {
+      scrollRef.current.scrollTo({ y: activeStep.scrollY, animated: true });
+      setTimeout(remeasureAll, 350);
     }
     if (activeStep.autoAction === 'switchToHistory') {
       const t = setTimeout(() => setTab('history'), 300);
@@ -98,34 +164,33 @@ export default function StatsScreen({ navigation }) {
   const onSelectDate = useCallback((dateKey) => {
     const matching = activeLogs.filter((l) => l.date && l.date.slice(0, 10) === dateKey);
     if (matching.length === 0) {
-      Alert.alert('Aucune séance', `Pas de séance le ${dateKey}.`);
+      setNoSessionInfo(dateKey);
       return;
     }
     const log = matching[0];
-    Alert.alert(
-      log.name,
-      [`Volume: ${Math.round(log.totalVolume)} kg`, `Sets: ${log.setsCompleted}`, `XP: ${log.xpEarned}`].join('\n'),
-      [
-        { text: 'Fermer', style: 'cancel' },
-        ...(activeChapterId !== 'stats' ? [{
-          text: 'Supprimer', style: 'destructive',
-          onPress: async () => {
-            try { await remove(log.id); } catch (e) {
-              Alert.alert('Erreur', e?.message || 'Suppression impossible');
-            }
-          },
-        }] : []),
-      ],
-    );
-  }, [activeLogs, remove, activeChapterId]);
+    setDayDetail({
+      log,
+      body: [`Volume: ${Math.round(log.totalVolume)} kg`, `Sets: ${log.setsCompleted}`, `XP: ${log.xpEarned}`].join('\n'),
+      deletable: activeChapterId !== 'stats',
+    });
+  }, [activeLogs, activeChapterId]);
+
+  const confirmDeleteDayDetail = useCallback(async () => {
+    const log = dayDetail?.log;
+    setDayDetail(null);
+    if (!log) return;
+    try { await remove(log.id); } catch (e) {
+      setErrorInfo(e?.message || 'Suppression impossible');
+    }
+  }, [dayDetail, remove]);
 
   return (
     <SafeAreaView style={styles.safe}>
       {/* Bandeau mock data */}
       {activeChapterId === 'stats' && (
         <View style={styles.mockBanner}>
-          <Ionicons name="flask-outline" size={12} color="#FFD700" />
-          <Text style={styles.mockBannerText}>Données de démonstration — disparaîtront à la fin du chapitre</Text>
+          <Ionicons name="flask-outline" size={12} color={Colors.gold} />
+          <Text style={styles.mockBannerText}>Données de démonstration - disparaîtront à la fin du chapitre</Text>
         </View>
       )}
 
@@ -134,6 +199,8 @@ export default function StatsScreen({ navigation }) {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
       >
         <View style={styles.header}>
           <Text style={styles.title}>Statistiques</Text>
@@ -167,6 +234,20 @@ export default function StatsScreen({ navigation }) {
               <Kpi label="Séances" value={stats.totalSessions} icon="bookmark" />
               <Kpi label="Sets"    value={stats.totalSets}     icon="checkmark-done" />
               <Kpi label="Volume"  value={`${Math.round(stats.totalVolume).toLocaleString('fr-FR')} kg`} icon="barbell" wide />
+            </View>
+
+            <View ref={weightRef} onLayout={onWeightLayout} collapsable={false}>
+              <Card title="Suivi de poids">
+                <WeightProgressChart history={weightHistory} goal={user?.poidsCible} />
+                <TouchableOpacity
+                  style={styles.addWeightBtn}
+                  onPress={() => setWeightEntryVisible(true)}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="add-circle-outline" size={16} color={Colors.primary} style={{ marginRight: 6 }} />
+                  <Text style={styles.addWeightBtnTxt}>Ajouter une pesée</Text>
+                </TouchableOpacity>
+              </Card>
             </View>
 
             <View ref={volumeRef} onLayout={onVolumeLayout} collapsable={false}>
@@ -207,6 +288,52 @@ export default function StatsScreen({ navigation }) {
       {activeChapterId === 'stats' && (
         <TutorialOverlay navigation={navigation} />
       )}
+
+      <WeightEntryModal
+        visible={weightEntryVisible}
+        onClose={() => setWeightEntryVisible(false)}
+        onSaved={loadWeightHistory}
+      />
+
+      {dayDetail?.deletable ? (
+        <ConfirmModal
+          visible={!!dayDetail}
+          icon="calendar-outline"
+          title={dayDetail?.log?.name}
+          body={dayDetail?.body}
+          confirmLabel="Supprimer"
+          cancelLabel="Fermer"
+          destructive
+          onConfirm={confirmDeleteDayDetail}
+          onCancel={() => setDayDetail(null)}
+        />
+      ) : (
+        <InfoModal
+          visible={!!dayDetail}
+          icon="calendar-outline"
+          title={dayDetail?.log?.name}
+          body={dayDetail?.body}
+          closeLabel="Fermer"
+          onClose={() => setDayDetail(null)}
+        />
+      )}
+
+      <InfoModal
+        visible={!!noSessionInfo}
+        icon="calendar-outline"
+        title="Aucune séance"
+        body={noSessionInfo ? `Pas de séance le ${noSessionInfo}.` : ''}
+        onClose={() => setNoSessionInfo(null)}
+      />
+
+      <InfoModal
+        visible={!!errorInfo}
+        icon="alert-circle-outline"
+        title="Erreur"
+        body={errorInfo}
+        destructive
+        onClose={() => setErrorInfo(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -241,7 +368,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,215,0,0.25)',
     paddingHorizontal: 16, paddingVertical: 8,
   },
-  mockBannerText: { color: '#FFD700', fontSize: 11, fontWeight: '600', flex: 1 },
+  mockBannerText: { color: Colors.gold, fontSize: 11, fontWeight: '600', flex: 1 },
 
   header:   { marginBottom: 16 },
   title:    { color: Colors.textPrimary, fontSize: 26, fontWeight: '900', letterSpacing: -0.5 },
@@ -273,6 +400,13 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)',
   },
   cardTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: '800', marginBottom: 12 },
+  addWeightBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    marginTop: 12, height: 40, borderRadius: 11,
+    backgroundColor: `${Colors.primary}14`,
+    borderWidth: 1, borderColor: `${Colors.primary}40`,
+  },
+  addWeightBtnTxt: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
 
   emptyText: { color: Colors.textMuted, fontSize: 13, textAlign: 'center', lineHeight: 20, paddingVertical: 12 },
 

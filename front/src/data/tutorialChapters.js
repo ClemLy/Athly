@@ -1,4 +1,4 @@
-// Définition des 6 chapitres du tutoriel interactif Athly.
+// Définition des 8 chapitres du tutoriel interactif Athly.
 //
 // Propriétés d'une step :
 //  targetKey      – clé d'une cible enregistrée via useTutorialTarget (null = pas de spotlight)
@@ -23,7 +23,7 @@ export const TUTORIAL_CHAPTERS = [
       {
         key: 'welcome',
         title: 'Bienvenue sur Athly !',
-        body: "Athly transforme chaque séance en progression réelle. Ce guide de 6 chapitres te montrera tout ce que tu peux accomplir.",
+        body: "Athly transforme chaque séance en progression réelle. Ce guide de 8 chapitres te montrera tout ce que tu peux accomplir.",
         targetKey: null, position: 'center', scrollY: 0,
       },
       {
@@ -94,7 +94,7 @@ export const TUTORIAL_CHAPTERS = [
       {
         key: 'workout_anticheat',
         title: 'Séances Sérieuses Uniquement',
-        body: "Athly récompense l'effort réel : une séance de moins de 5 minutes ne rapporte aucun XP. Tu peux quand même l'enregistrer — mais seules les séances complètes comptent pour ta streak.",
+        body: "Athly récompense l'effort réel : une séance de moins de 5 minutes ne rapporte aucun XP. Tu peux quand même l'enregistrer - mais seules les séances complètes comptent pour ta streak.",
         targetKey: null, position: 'center', scrollY: null,
       },
       {
@@ -139,6 +139,12 @@ export const TUTORIAL_CHAPTERS = [
         body: "Ces 3 slots affichent tes trophées préférés. Appuie sur un slot vide pour choisir dans la Salle des Trophées.",
         targetKey: 'profile_vitrine', position: 'top', scrollY: 260,
       },
+      {
+        key: 'profile_titles',
+        title: 'Tes Titres RPG',
+        body: "Via le bouton 'Titres', équipe un titre affiché sous ton pseudo. 17 titres se débloquent en accomplissant des défis (records, séances Multi, entraide…).",
+        targetKey: null, position: 'center', scrollY: 0,
+      },
     ],
   },
 
@@ -154,19 +160,19 @@ export const TUTORIAL_CHAPTERS = [
       {
         key: 'trophies_intro',
         title: 'La Salle des Trophées',
-        body: "40 trophées à débloquer, répartis en 8 catégories : Héritage, Force, Exploration, Secret, Corps, Régularité, Social et Spécial.",
+        body: "60 trophées à débloquer, répartis en 9 catégories : Héritage, Force, Exploration, Secret, Corps, Régularité, Social, Spécial et Collection.",
         targetKey: null, position: 'center', scrollY: 0,
       },
       {
         key: 'trophies_filters',
         title: 'Filtrer par Catégorie',
-        body: "Les onglets 'Force', 'Endurance' et 'Spécial' filtrent les trophées. Les trophées verrouillés montrent leur condition.",
+        body: "Fais défiler les onglets 'Force', 'Endurance', 'Social & Multi', 'Coffres & Raretés' et 'Spécial' pour filtrer les trophées. Les trophées verrouillés montrent leur condition.",
         targetKey: 'trophies_filters', position: 'bottom', scrollY: 0,
       },
       {
         key: 'trophies_ultimate',
         title: 'Le Trophée Ultime',
-        body: "Le 'Souverain Absolu' se débloque automatiquement quand les 40 autres trophées sont obtenus. Un accomplissement absolu.",
+        body: "Le 'Souverain Absolu' se débloque automatiquement quand les 60 autres trophées sont obtenus. Un accomplissement absolu.",
         targetKey: 'trophies_ultimate', position: 'bottom', scrollY: 0,
       },
       {
@@ -178,11 +184,101 @@ export const TUTORIAL_CHAPTERS = [
     ],
   },
 
-  // ─── CHAPITRE 5 : Les Statistiques ─────────────────────────────────────────
+  // ─── CHAPITRE 5 : Inventaire, Coffres & Raretés ────────────────────────────
+  {
+    id: 'inventory',
+    title: 'Coffres & Raretés',
+    subtitle: 'Chapitre 5',
+    icon: 'cube-outline',
+    tabName: 'ProfileTab',
+    stackScreen: 'Inventory',
+    steps: [
+      {
+        key: 'inventory_intro',
+        title: "L'Inventaire",
+        body: "Chaque effort te récompense : boissons d'XP, gels de streak, boosts et coupons s'accumulent ici, prêts à être utilisés au bon moment.",
+        targetKey: null, position: 'center', scrollY: 0,
+      },
+      {
+        key: 'inventory_chest',
+        title: 'Coffres à l\'Effort',
+        body: "Tu gagnes un coffre toutes les 2 h de séance cumulées (débloqué au rang Initié, niveau 11). Ouvre-le pour tirer un objet au hasard.",
+        targetKey: 'inventory_chest', position: 'bottom', scrollY: 0,
+      },
+      {
+        key: 'inventory_rarities',
+        title: '5 Raretés',
+        body: "Du Commun (gris) au Légendaire (orange), en passant par Rare (bleu) et Épique (violet) : plus c'est rare, plus l'objet est puissant.",
+        targetKey: null, position: 'center', scrollY: null,
+      },
+      {
+        key: 'inventory_unique',
+        title: 'Le Rouge Sang Unique',
+        body: "La rareté ultime : les cosmétiques Uniques Rouge Sang (cadre, couleur, thème) se méritent par des exploits rares et se réclament ici. Le prestige absolu.",
+        targetKey: null, position: 'center', scrollY: null,
+      },
+    ],
+  },
+
+  // ─── CHAPITRE 6 : Social, Groupes & Multi ──────────────────────────────────
+  {
+    id: 'social',
+    title: 'Amis, Groupes & Multi',
+    subtitle: 'Chapitre 6',
+    icon: 'people-outline',
+    tabName: 'SocialTab',
+    stackScreen: 'SocialHub',
+    steps: [
+      {
+        key: 'social_intro',
+        title: 'Progresse en Meute',
+        body: "Athly est bien plus fort à plusieurs. Ajoute tes amis, compare-toi, et entraîne-toi en équipe.",
+        targetKey: null, position: 'center', scrollY: 0,
+      },
+      {
+        key: 'social_segments',
+        title: 'Amis, Classement, Groupe',
+        body: "Ces trois onglets réunissent ton réseau : tes amis, les classements (XP et records par exercice), et ton Groupe de Streak.",
+        targetKey: 'social_segments', position: 'bottom', scrollY: 0,
+      },
+      {
+        key: 'social_add',
+        title: 'Ajouter un Ami',
+        body: "Chaque joueur a un tag unique façon Discord (ex: Player#1234). Saisis-le pour envoyer une demande, après un aperçu de son profil.",
+        targetKey: null, position: 'center', scrollY: null,
+      },
+      {
+        key: 'social_group',
+        title: 'Groupes de Streak & Météo',
+        body: "Formez un groupe (5 max) : si TOUS validez votre journée, la streak collective grimpe. La Météo des séances montre en direct qui est Prêt, Actif ou a Validé.",
+        targetKey: null, position: 'center', scrollY: null,
+      },
+      {
+        key: 'social_shame',
+        title: 'Hall of Shame & Secouer',
+        body: "Si la streak de groupe casse, le dernier Briseur s'affiche dans le Hall of Shame. Le bouton 'Secouer' envoie une notif troll aux retardataires pour les motiver.",
+        targetKey: null, position: 'center', scrollY: null,
+      },
+      {
+        key: 'social_friendship_titles',
+        title: "Titres d'Amitié",
+        body: "Chaque jour de streak de groupe validé à plusieurs renforce ton lien avec chaque coéquipier. De 'Nouveaux Partenaires' à 'Âmes Sœurs de Muscle' au niveau 5 maximum, un Titre d'Amitié affiche l'histoire que vous avez construite ensemble.",
+        targetKey: null, position: 'center', scrollY: null,
+      },
+      {
+        key: 'social_multi',
+        title: 'Le Mode Multi',
+        body: "Invite des amis dans un Lobby Multi : vous démarrez la séance ensemble, chacun sur son écran. Terminer à plusieurs débloque un bonus d'XP de groupe (+15% à 2, jusqu'à +50% à 5).",
+        targetKey: null, position: 'center', scrollY: null,
+      },
+    ],
+  },
+
+  // ─── CHAPITRE 7 : Les Statistiques ─────────────────────────────────────────
   {
     id: 'stats',
     title: 'Les Statistiques',
-    subtitle: 'Chapitre 5',
+    subtitle: 'Chapitre 7',
     icon: 'stats-chart-outline',
     tabName: 'Stats',
     // useMockData = true → StatsScreen injecte les fausses données durant ce chapitre
@@ -199,6 +295,12 @@ export const TUTORIAL_CHAPTERS = [
         title: 'KPIs Clés',
         body: "Séances, sets validés et volume total pour la période sélectionnée. Change la période avec les boutons Semaine / Mois / Tout.",
         targetKey: 'stats_kpis', position: 'bottom', scrollY: 60,
+      },
+      {
+        key: 'stats_weight',
+        title: 'Suivi de Poids',
+        body: "Le graphique double courbe suit ton poids réel vers ton objectif. Appuie sur 'Ajouter une pesée' pour l'actualiser et garder un suivi au top.",
+        targetKey: 'stats_weight_chart', position: 'bottom', scrollY: 60,
       },
       {
         key: 'stats_volume',
@@ -222,11 +324,11 @@ export const TUTORIAL_CHAPTERS = [
     ],
   },
 
-  // ─── CHAPITRE 6 : Réglages ──────────────────────────────────────────────────
+  // ─── CHAPITRE 8 : Réglages ──────────────────────────────────────────────────
   {
     id: 'settings',
     title: 'Réglages & Compte',
-    subtitle: 'Chapitre 6',
+    subtitle: 'Chapitre 8',
     icon: 'settings-outline',
     tabName: 'ProfileTab',
     stackScreen: 'Settings',
@@ -252,7 +354,7 @@ export const TUTORIAL_CHAPTERS = [
       {
         key: 'settings_done',
         title: 'Tu es prêt, Athlète !',
-        body: "Tu maîtrises désormais Athly. Lance-toi — chaque set te rapproche du sommet. Bonne chance !",
+        body: "Tu maîtrises désormais Athly. Lance-toi - chaque set te rapproche du sommet. Bonne chance !",
         targetKey: null, position: 'center', scrollY: null,
         isLast: true,
       },

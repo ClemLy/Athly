@@ -28,6 +28,13 @@ export const COLOR_DEFS = [
   { id: 'grandmaster', name: 'Grand Maître', unlockLevel: 141, colors: ['#5B21B6','#9333EA','#C084FC','#F0ABFC','#FFFFFF','#F0ABFC','#C084FC','#9333EA'], animated: true,  glowColor: 'rgba(240,171,252,0.85)', borderWidth: 5   },
   { id: 'legend',      name: 'Légende',      unlockLevel: 171, colors: ['#4C1D95','#7C3AED','#A855F7','#C084FC','#F5D0FE','#FFFFFF','#F5D0FE','#C084FC'], animated: true,  glowColor: 'rgba(245,208,254,0.90)', borderWidth: 5.5 },
   { id: 'god',         name: 'ATHLY GOD',    unlockLevel: 200, colors: ['#78350F','#B45309','#D97706','#F59E0B','#FDE68A','#FFD700','#FDE68A','#F59E0B','#D97706'], animated: true, glowColor: 'rgba(255,215,0,0.95)', borderWidth: 6 },
+  // Cosmétique Unique — débloquée en réclamant l'item FRAME_COLOR_BLOOD_SANG
+  // (streak de groupe 30j à 5 membres), jamais par le niveau : unlockLevel
+  // n'est là que pour l'affichage, `special` court-circuite le calcul de
+  // verrouillage (voir isColorLocked dans BorderPicker.js).
+  { id: 'bloodsang',   name: 'Rouge Sang', unlockLevel: Infinity, special: true, specialFlag: 'FRAME_COLOR_BLOODSANG',
+    colors: ['#3D0000','#7A0000','#A30000','#FF2E4D','#A30000','#7A0000','#3D0000'],
+    animated: true, glowColor: 'rgba(163,0,0,0.80)', borderWidth: 5 },
 ];
 
 export const SHAPE_DEFS = [
@@ -40,6 +47,9 @@ export const SHAPE_DEFS = [
   { id: 'crown',  name: 'Couronne', unlockLevel: 141, extraPad: 6,  extraTop: 30 },
   { id: 'wings',  name: 'Ailes',    unlockLevel: 171, extraPad: 28, extraTop: 0  },
   { id: 'divine', name: 'Divin',    unlockLevel: 200, extraPad: 16, extraTop: 16 },
+  // Cosmétique Unique — débloquée en réclamant l'item PROFILE_FRAME_BLOOD_BOND
+  // (niveau d'amitié 5), jamais par le niveau (voir isShapeLocked).
+  { id: 'dragonfang', name: 'Croc de Dragon', unlockLevel: Infinity, special: true, specialFlag: 'FRAME_SHAPE_DRAGONFANG', extraPad: 34, extraTop: 0 },
 ];
 
 export const FRAME_DEFS = COLOR_DEFS.map((c) => ({
@@ -51,6 +61,21 @@ export const FRAME_DEFS = COLOR_DEFS.map((c) => ({
 export function getColorDef(id) { return COLOR_DEFS.find((c) => c.id === id) || COLOR_DEFS[0]; }
 export function getShapeDef(id) { return SHAPE_DEFS.find((s) => s.id === id) || SHAPE_DEFS[0]; }
 export function getFrameDef(id) { return FRAME_DEFS.find((f) => f.id === id) || FRAME_DEFS[0]; }
+
+// Empreinte visuelle réelle (largeur/hauteur) d'un cadre à une taille donnée —
+// même formule que le calcul interne d'AvatarFrame. Permet aux écrans qui
+// affichent le cadre dans un espace réservé fixe (carte de joueur…) de le
+// réduire proportionnellement (transform: scale) plutôt que de le laisser
+// déborder pour les formes les plus ornées (Ailes, Divin, Croc de Dragon…).
+export function getFrameFootprint(shapeId, colorId, size) {
+  const color = getColorDef(colorId);
+  const shape = getShapeDef(shapeId);
+  if (!color.colors) return { totalW: size, totalH: size };
+  const bw = color.borderWidth;
+  const totalW = size + bw * 2 + shape.extraPad * 2;
+  const totalH = totalW + shape.extraTop;
+  return { totalW, totalH };
+}
 
 // ─── SVG path helpers ─────────────────────────────────────────────────────────
 
@@ -85,6 +110,63 @@ function spikePath(cx, cy, hexR, spikeR) {
     pts.push(`${(cx + spikeR * Math.cos(aM)).toFixed(1)},${(cy + spikeR * Math.sin(aM)).toFixed(1)}`);
   }
   return 'M' + pts.join(' L') + ' Z';
+}
+
+function cubicPoint(p0, p1, p2, p3, t) {
+  const mt = 1 - t;
+  return {
+    x: mt * mt * mt * p0.x + 3 * mt * mt * t * p1.x + 3 * mt * t * t * p2.x + t * t * t * p3.x,
+    y: mt * mt * mt * p0.y + 3 * mt * mt * t * p1.y + 3 * mt * t * t * p2.y + t * t * t * p3.y,
+  };
+}
+
+// Corne draconique/démoniaque : base épaisse (cachée derrière le bouclier),
+// balayage large vers l'extérieur puis crochet de pointe qui se recourbe —
+// silhouette de corne de bélier/démon, pas une simple dague fine. La largeur
+// décroît le long de la courbe (base épaisse → pointe acérée) et l'épaisseur
+// est asymétrique (bord extérieur convexe, bord intérieur plus plat) pour un
+// vrai volume de corne plutôt qu'une lame plate.
+function hornPath(base, ctrl1, ctrl2, tip, baseWidth, steps = 16) {
+  const pts = Array.from({ length: steps + 1 }, (_, i) => {
+    const t = i / steps;
+    return { ...cubicPoint(base, ctrl1, ctrl2, tip, t), t };
+  });
+
+  const outer = [];
+  const inner = [];
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    const prev = pts[Math.max(0, i - 1)];
+    const next = pts[Math.min(pts.length - 1, i + 1)];
+    const dx = next.x - prev.x, dy = next.y - prev.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    // Effilement non-linéaire (racine carrée) : la corne reste large plus
+    // longtemps avant de s'affiner brutalement vers une pointe acérée.
+    const w = baseWidth * Math.pow(1 - p.t, 0.55) + baseWidth * 0.045;
+    outer.push({ x: p.x + nx * w,        y: p.y + ny * w });
+    inner.push({ x: p.x - nx * w * 0.5,  y: p.y - ny * w * 0.5 });
+  }
+
+  let d = `M${outer[0].x.toFixed(1)},${outer[0].y.toFixed(1)} `;
+  for (let i = 1; i < outer.length; i++) d += `L${outer[i].x.toFixed(1)},${outer[i].y.toFixed(1)} `;
+  for (let i = inner.length - 1; i >= 0; i--) d += `L${inner[i].x.toFixed(1)},${inner[i].y.toFixed(1)} `;
+  d += 'Z';
+  return d;
+}
+
+// Anneaux de striation le long d'une corne (détail façon corne de bélier) —
+// petits traits perpendiculaires à la courbe à intervalles réguliers.
+function hornRidges(base, ctrl1, ctrl2, tip, baseWidth, positions = [0.28, 0.48, 0.66]) {
+  return positions.map((t) => {
+    const p = cubicPoint(base, ctrl1, ctrl2, tip, t);
+    const p2 = cubicPoint(base, ctrl1, ctrl2, tip, Math.min(1, t + 0.02));
+    const dx = p2.x - p.x, dy = p2.y - p.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    const w = (baseWidth * Math.pow(1 - t, 0.55) + baseWidth * 0.045) * 0.92;
+    return `M${(p.x + nx * w).toFixed(1)},${(p.y + ny * w).toFixed(1)} L${(p.x - nx * w * 0.5).toFixed(1)},${(p.y - ny * w * 0.5).toFixed(1)}`;
+  }).join(' ');
 }
 
 function chamfPath(cx, cy, hw, hh, cut) {
@@ -529,6 +611,41 @@ export default function AvatarFrame({ shapeId = 'circle', colorId = 'none', size
       break;
     }
 
+    // ── Croc de Dragon — bouclier + cornes démoniaques recourbées derrière ───
+    case 'dragonfang': {
+      outerD = shieldPath(cx, cy, outerR);
+      innerD = shieldPath(cx, cy, innerR);
+
+      const hw = outerR * 0.30; // base large et agressive
+
+      const leftBase  = { x: cx + outerR * 0.16, y: cy + outerR * 0.34 };
+      const leftCtrl1 = { x: cx - outerR * 0.55, y: cy - outerR * 0.15 };
+      const leftCtrl2 = { x: cx - outerR * 1.55, y: cy - outerR * 0.65 };
+      const leftTip   = { x: cx - outerR * 1.05, y: cy - outerR * 1.55 };
+
+      const rightBase  = { x: cx - outerR * 0.16, y: cy + outerR * 0.34 };
+      const rightCtrl1 = { x: cx + outerR * 0.55, y: cy - outerR * 0.15 };
+      const rightCtrl2 = { x: cx + outerR * 1.55, y: cy - outerR * 0.65 };
+      const rightTip   = { x: cx + outerR * 1.05, y: cy - outerR * 1.55 };
+
+      // Deux cornes en crochet, croisées en X : bases cachées derrière le
+      // bouclier, pointes recourbées dépassant des épaules haut-gauche/droite.
+      const hornLeft  = hornPath(leftBase,  leftCtrl1,  leftCtrl2,  leftTip,  hw);
+      const hornRight = hornPath(rightBase, rightCtrl1, rightCtrl2, rightTip, hw);
+      extra1D = hornLeft + ' ' + hornRight;
+      extra1Fill = midColor; extra1Op = 0.97;
+      extra1Stroke = topColor; extra1StrokeW = 0.9;
+
+      // Striations façon corne de bélier + œil de dragon (gemme centrale).
+      const ridgesLeft  = hornRidges(leftBase,  leftCtrl1,  leftCtrl2,  leftTip,  hw);
+      const ridgesRight = hornRidges(rightBase, rightCtrl1, rightCtrl2, rightTip, hw);
+      const gem = diamondAt(cx, cy + innerR * 0.42, Math.max(2.4, outerR * 0.07));
+      extra2D = gem + ' ' + ridgesLeft + ' ' + ridgesRight;
+      extra2Fill = topColor; extra2Op = 0.9;
+      extra2Stroke = topColor; extra2StrokeW = 0.8;
+      break;
+    }
+
     default:
       outerD = polyPath(cx, cy, outerR, 6, 0);
       innerD = polyPath(cx, cy, innerR, 6, 0);
@@ -741,6 +858,23 @@ export function ShapePreview({ shapeId, colorId = 'bronze', size = 38, locked = 
       outerD = circlePath(cx, cy, outerR);
       innerD = circlePath(cx, cy, innerR);
       break;
+    case 'dragonfang': {
+      outerD = shieldPath(cx, cy, outerR);
+      innerD = shieldPath(cx, cy, innerR);
+      const hw = outerR * 0.30;
+      const lB = { x: cx + outerR * 0.16, y: cy + outerR * 0.34 };
+      const lC1 = { x: cx - outerR * 0.55, y: cy - outerR * 0.15 };
+      const lC2 = { x: cx - outerR * 1.55, y: cy - outerR * 0.65 };
+      const lT = { x: cx - outerR * 1.05, y: cy - outerR * 1.55 };
+      const rB = { x: cx - outerR * 0.16, y: cy + outerR * 0.34 };
+      const rC1 = { x: cx + outerR * 0.55, y: cy - outerR * 0.15 };
+      const rC2 = { x: cx + outerR * 1.55, y: cy - outerR * 0.65 };
+      const rT = { x: cx + outerR * 1.05, y: cy - outerR * 1.55 };
+      extra1D = hornPath(lB, lC1, lC2, lT, hw) + ' ' + hornPath(rB, rC1, rC2, rT, hw);
+      extra1Fill = midColor; extra1Op = 0.97;
+      extra1Stroke = topColor; extra1StrokeW = 0.7;
+      break;
+    }
     default:
       outerD = polyPath(cx, cy, outerR, 6, 0);
       innerD = polyPath(cx, cy, innerR, 6, 0);

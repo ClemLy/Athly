@@ -13,12 +13,13 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Colors, MUSCLE_GROUP_COLORS } from '../../constants/theme';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
+import { useUser } from '../../context/UserContext';
 import {
   computeStreak,
   recommendNextMuscleGroup,
   aggregateGlobal,
   xpToLevel,
-} from '../../services/stats.service';
+} from '../../services';
 import { findMuscleGroup } from '../../constants/exerciseFilters';
 import {
   TEMPLATES,
@@ -34,7 +35,7 @@ import DailyQuestsCard from '../../components/home/DailyQuestsCard';
 import RecoveryRitualsCard from '../../components/home/RecoveryRitualsCard';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
-import { useDevSettings } from '../../hooks/useDevSettings';
+import { useDevSettings } from '../../hooks';
 import { MOCK_TUTORIAL_LOGS } from '../../data/mockTutorialStats';
 
 // Écran d'accueil. Bascule entre EmptyHomeState (compte vierge) et état actif
@@ -49,8 +50,15 @@ export default function HomeScreen({ navigation }) {
   const {
     hasCompleted, bootstrapped, pendingChapterId, startChapter,
     activeChapterId, activeStep, stepIndex,
-    registerScrollRef, registerRemeasure,
+    registerScrollRef, registerRemeasure, reconcileWithServer,
   } = useTutorial();
+
+  // Réconciliation du flag "tutoriel terminé" avec le backend (cohérence
+  // inter-appareils) : si le serveur dit "déjà fait", on ne re-déclenche pas.
+  const { user } = useUser();
+  useEffect(() => {
+    if (user) reconcileWithServer(!!user.hasCompletedOnboarding);
+  }, [user, reconcileWithServer]);
 
   // Injection de données fantômes pendant le Chapitre 1 pour que le spotlight
   // puisse pointer les éléments actifs (level chip, hero, stats, quêtes, rituel).
@@ -98,6 +106,9 @@ export default function HomeScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       if (!bootstrapped) return;
+      // Garde inter-appareils : ne pas auto-lancer si le backend confirme que
+      // le tutoriel a déjà été fait (même si le flag local n'est pas encore là).
+      if (user && user.hasCompletedOnboarding) return;
       if (!hasCompleted && activeChapterId === null) {
         const timer = setTimeout(() => startChapter('dashboard'), 600);
         return () => clearTimeout(timer);
@@ -106,7 +117,7 @@ export default function HomeScreen({ navigation }) {
         const timer = setTimeout(() => startChapter('dashboard'), 400);
         return () => clearTimeout(timer);
       }
-    }, [bootstrapped, hasCompleted, pendingChapterId, activeChapterId, startChapter]),
+    }, [bootstrapped, hasCompleted, pendingChapterId, activeChapterId, startChapter, user]),
   );
 
   // ─── Anim d'entrée pour éviter le flash content au 1er chargement ────
@@ -178,8 +189,8 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={styles.safe}>
       {isTutorialDashboard && (
         <View style={styles.mockBanner}>
-          <Ionicons name="flask-outline" size={12} color="#FFD700" />
-          <Text style={styles.mockBannerText}>Données de démonstration — disparaîtront à la fin du chapitre</Text>
+          <Ionicons name="flask-outline" size={12} color={Colors.gold} />
+          <Text style={styles.mockBannerText}>Données de démonstration - disparaîtront à la fin du chapitre</Text>
         </View>
       )}
       <ScrollView
@@ -329,7 +340,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,215,0,0.20)',
     paddingHorizontal: 16, paddingVertical: 8,
   },
-  mockBannerText: { color: '#FFD700', fontSize: 11, fontWeight: '600', flex: 1 },
+  mockBannerText: { color: Colors.gold, fontSize: 11, fontWeight: '600', flex: 1 },
   scroll: { flex: 1 },
   scrollContent: {
     paddingHorizontal: 20,

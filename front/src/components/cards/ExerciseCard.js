@@ -1,11 +1,10 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   Linking,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -17,6 +16,8 @@ import {
   primaryEquipmentLabel,
 } from '../../constants/exerciseFilters';
 import EquipmentTag from '../workouts/EquipmentTag';
+import InfoModal from '../common/InfoModal';
+import ActionSheetModal from '../common/ActionSheetModal';
 
 // ExerciseCard pixel-perfect (maquette 1).
 //
@@ -35,6 +36,8 @@ function ExerciseCard({
   inSuperset = false,
 }) {
   const name = item && (item.name || item.title);
+  const [infoModal, setInfoModal] = useState(null); // { title, body }
+  const [actionSheetVisible, setActionSheetVisible] = useState(false);
   if (!name) return null;
 
   const icon = pickExerciseIcon(item);
@@ -45,35 +48,32 @@ function ExerciseCard({
 
   const openVideo = useCallback(async () => {
     if (!videoUrl) {
-      Alert.alert('Vidéo indisponible', "Aucun lien vidéo n'est associé à cet exercice.");
+      setInfoModal({ title: 'Vidéo indisponible', body: "Aucun lien vidéo n'est associé à cet exercice." });
       return;
     }
     try {
       const can = await Linking.canOpenURL(videoUrl);
       if (can) await Linking.openURL(videoUrl);
-      else Alert.alert('Lien invalide', "Impossible d'ouvrir cette vidéo.");
+      else setInfoModal({ title: 'Lien invalide', body: "Impossible d'ouvrir cette vidéo." });
     } catch (e) {
-      Alert.alert('Erreur', "Impossible d'ouvrir la vidéo.");
+      setInfoModal({ title: 'Erreur', body: "Impossible d'ouvrir la vidéo." });
     }
   }, [videoUrl]);
 
   const showActions = useCallback(() => {
     try { Haptics.selectionAsync(); } catch (e) {}
-    const actions = [];
-    if (videoUrl) actions.push({ text: 'Voir la vidéo', onPress: openVideo });
-    if (onReplace) actions.push({ text: 'Remplacer', onPress: () => onReplace(item) });
-    if (onToggleSuperset) {
-      actions.push({
-        text: inSuperset ? 'Sortir du superset' : 'Superset avec le suivant',
-        onPress: () => onToggleSuperset(item),
-      });
-    }
-    if (onRemove) {
-      actions.push({ text: 'Supprimer', style: 'destructive', onPress: () => onRemove(item) });
-    }
-    actions.push({ text: 'Annuler', style: 'cancel' });
-    Alert.alert(name, null, actions);
-  }, [name, videoUrl, onReplace, onRemove, onToggleSuperset, inSuperset, item, openVideo]);
+    setActionSheetVisible(true);
+  }, []);
+
+  const actionOptions = [
+    ...(videoUrl ? [{ label: 'Voir la vidéo', onPress: openVideo }] : []),
+    ...(onReplace ? [{ label: 'Remplacer', onPress: () => onReplace(item) }] : []),
+    ...(onToggleSuperset ? [{
+      label: inSuperset ? 'Sortir du superset' : 'Superset avec le suivant',
+      onPress: () => onToggleSuperset(item),
+    }] : []),
+    ...(onRemove ? [{ label: 'Supprimer', destructive: true, onPress: () => onRemove(item) }] : []),
+  ];
 
   return (
     <TouchableOpacity
@@ -85,7 +85,7 @@ function ExerciseCard({
     >
       <View style={styles.row}>
         <View style={styles.iconBox}>
-          <Text style={styles.icon}>{icon}</Text>
+          <Ionicons name={icon} size={22} color={Colors.primary} />
         </View>
 
         <View style={styles.content}>
@@ -117,6 +117,20 @@ function ExerciseCard({
           <Ionicons name="chevron-forward" size={20} color={Colors.chevron} style={styles.chevron} />
         </View>
       </View>
+
+      <ActionSheetModal
+        visible={actionSheetVisible}
+        title={name}
+        options={actionOptions}
+        onClose={() => setActionSheetVisible(false)}
+      />
+      <InfoModal
+        visible={!!infoModal}
+        icon="videocam-off-outline"
+        title={infoModal?.title}
+        body={infoModal?.body}
+        onClose={() => setInfoModal(null)}
+      />
     </TouchableOpacity>
   );
 }
@@ -133,7 +147,7 @@ const styles = StyleSheet.create({
   cardInSuperset: {
     marginHorizontal: 10,
     marginBottom: 8,
-    backgroundColor: '#1f1f27',
+    backgroundColor: Colors.borderSubtle,
   },
   row: {
     flexDirection: 'row',
@@ -143,7 +157,7 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 12,
-    backgroundColor: '#0e0e12',
+    backgroundColor: Colors.cardInner,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,

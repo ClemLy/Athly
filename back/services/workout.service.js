@@ -1,6 +1,46 @@
 const Workout = require("../models/Workout");
 const User = require("../models/User");
 const { levelFromXP } = require("../utils/levelHelpers");
+const { addItemAtomic } = require("./inventory.service");
+const { checkAndUnlockTitles } = require("../controllers/title.controller");
+
+// ── Coffres à l'effort (Brique II) ───────────────────────────────────────────
+// 1 coffre (CHEST_KEY) tous les CHEST_MINUTES_THRESHOLD minutes de séance
+// légitime cumulées — soit 1 coffre toutes les ~2 séances pour une séance
+// moyenne d'1h. Le drop est verrouillé sous le niveau 11 (Rang Initié),
+// comme l'ouverture des coffres.
+const CHEST_MINUTES_THRESHOLD = 120;
+const MIN_LEVEL_FOR_CHEST_DROP = 11;
+
+/**
+ * Accumule atomiquement les minutes de séance et attribue les CHEST_KEY
+ * de chaque palier de CHEST_MINUTES_THRESHOLD franchi.
+ * Le $inc atomique garantit qu'aucun palier n'est compté deux fois même si
+ * deux finalisations arrivent en même temps.
+ */
+async function accrueMinutesAndAwardChests(userId, minutes) {
+  if (!minutes || minutes <= 0) return { chestsAwarded: 0, totalWorkoutMinutes: null };
+
+  const updated = await User.findOneAndUpdate(
+    { _id: userId },
+    { $inc: { totalWorkoutMinutes: minutes } },
+    { returnDocument: "after" },
+  );
+  if (!updated) return { chestsAwarded: 0, totalWorkoutMinutes: null };
+
+  const total  = updated.totalWorkoutMinutes;
+  const before = total - minutes;
+  const crossed =
+    Math.floor(total / CHEST_MINUTES_THRESHOLD) -
+    Math.floor(before / CHEST_MINUTES_THRESHOLD);
+
+  if (crossed <= 0 || updated.level < MIN_LEVEL_FOR_CHEST_DROP) {
+    return { chestsAwarded: 0, totalWorkoutMinutes: total };
+  }
+
+  await addItemAtomic(userId, "CHEST_KEY", "common", crossed);
+  return { chestsAwarded: crossed, totalWorkoutMinutes: total };
+}
 
 /**
  * Service gérant la création et la gestion des programmes/séances.
@@ -106,6 +146,19 @@ class WorkoutService {
       await user.save();
     }
 
+    // Titres (Section X) : cumul de séries + conditions événementielles
+    // (night owl, loup solitaire...). Best-effort, ne bloque jamais la
+    // clôture déjà actée ci-dessus.
+    let newlyUnlockedTitles = [];
+    if (user && workout.setsCompleted > 0) {
+      try {
+        await User.updateOne({ _id: userId }, { $inc: { totalSetsCompleted: workout.setsCompleted } });
+        newlyUnlockedTitles = await checkAndUnlockTitles(userId, { finishedWorkout: workout });
+      } catch (_) {
+        // ignore
+      }
+    }
+
     return {
       workout,
       stats: {
@@ -116,6 +169,7 @@ class WorkoutService {
         durationSeconds: workout.durationSeconds,
         userXP: user ? user.xp : null,
         userLevel: user ? user.level : null,
+        newlyUnlockedTitles,
       },
     };
   }
@@ -156,6 +210,25 @@ class WorkoutService {
       await user.save();
     }
 
+    // ── Coffres à l'effort ───────────────────────────────────────────────────
+    // Seules les séances légitimes (non short-session, durée >= 300 s)
+    // alimentent le compteur de minutes.
+    let chestInfo = { chestsAwarded: 0, totalWorkoutMinutes: null };
+    if (user && options.shortSession !== true && duration >= 300) {
+      chestInfo = await accrueMinutesAndAwardChests(userId, Math.floor(duration / 60));
+    }
+
+    // Titres (Section X) — mêmes conditions que completeWorkout ci-dessus.
+    let newlyUnlockedTitles = [];
+    if (user && workout.setsCompleted > 0) {
+      try {
+        await User.updateOne({ _id: userId }, { $inc: { totalSetsCompleted: workout.setsCompleted } });
+        newlyUnlockedTitles = await checkAndUnlockTitles(userId, { finishedWorkout: workout });
+      } catch (_) {
+        // ignore
+      }
+    }
+
     return {
       workout,
       stats: {
@@ -163,6 +236,9 @@ class WorkoutService {
         xp,
         userXP:   user ? user.xp    : null,
         userLevel: user ? user.level : null,
+        chestsAwarded:       chestInfo.chestsAwarded,
+        totalWorkoutMinutes: chestInfo.totalWorkoutMinutes,
+        newlyUnlockedTitles,
       },
     };
   }

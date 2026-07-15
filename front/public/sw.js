@@ -1,5 +1,11 @@
-// Service Worker Athly — stratégie stale-while-revalidate
-const CACHE_NAME = 'athly-shell-v1';
+// Service Worker Athly
+// Stratégies :
+//  - Navigations (HTML)  → network-first : contenu frais en ligne,
+//    fallback sur le shell en cache hors-ligne (l'app charge toujours).
+//  - Assets statiques    → stale-while-revalidate : chargement instantané
+//    depuis le cache, rafraîchi en arrière-plan.
+//  - /api/               → jamais caché ici (cache dégradé géré côté app).
+const CACHE_NAME = 'athly-shell-v2';
 const SHELL_ASSETS = ['/', '/index.html'];
 
 // Installation : mise en cache du shell applicatif
@@ -20,15 +26,35 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch : stale-while-revalidate pour les assets statiques
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // On ne cache pas : non-GET, cross-origin, ou appels API backend
+  // On ne gère pas : non-GET, cross-origin, ou appels API backend
   if (event.request.method !== 'GET') return;
   if (url.origin !== location.origin) return;
   if (url.pathname.startsWith('/api/')) return;
 
+  // ── Navigations : network-first, fallback shell en cache ───────────────────
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put('/', clone));
+          }
+          return response;
+        })
+        .catch(() =>
+          caches.match('/').then(
+            (cached) => cached || new Response('Hors ligne', { status: 503 })
+          )
+        )
+    );
+    return;
+  }
+
+  // ── Assets statiques : stale-while-revalidate ───────────────────────────────
   event.respondWith(
     caches.open(CACHE_NAME).then((cache) =>
       cache.match(event.request).then((cached) => {

@@ -8,10 +8,13 @@ import {
   TextInput,
   StatusBar,
 } from 'react-native';
+
 import { Colors } from '../../constants/theme';
-import API from '../../api/api';
+import { updateMyProfile } from '../../services';
 import { useUser } from '../../context/UserContext';
 import { useToast } from '../../context/ToastContext';
+import { setBirthdate } from '../../services';
+import BirthdatePicker from '../../components/profile/BirthdatePicker';
 
 // ─── EditProfileScreen ────────────────────────────────────────────────────────
 // Pas de header custom : on configure navigation.setOptions via useLayoutEffect.
@@ -23,10 +26,16 @@ const SELECTIONS = {
   objectif: ['Prise de masse', 'Perte de poids', 'Entretien', 'Force'],
 };
 
+// L'API stocke objectif en minuscules ("prise de masse"), les chips utilisent des majuscules.
+// Cette fonction trouve la valeur affichable correspondante.
+function normalizeObjectif(val) {
+  if (!val) return '';
+  return SELECTIONS.objectif.find((o) => o.toLowerCase() === val.toLowerCase()) || val;
+}
+
 export default function EditProfileScreen({ navigation }) {
   const { user, refetch: refetchUser } = useUser();
   const { showToast } = useToast();
-
   const [formData, setFormData] = useState({
     name:          user?.name          || '',
     bio:           user?.bio           || '',
@@ -34,7 +43,7 @@ export default function EditProfileScreen({ navigation }) {
     taille:        user?.taille?.toString()     || '',
     poidsCible:    user?.poidsCible?.toString() || '',
     sexe:          user?.sexe          || '',
-    objectif:      user?.objectif      || '',
+    objectif:      normalizeObjectif(user?.objectif),
     niveauSportif: user?.niveauSportif || 'Débutant',
     rythme:        user?.rythme?.toString() || '',
   });
@@ -49,7 +58,7 @@ export default function EditProfileScreen({ navigation }) {
       taille:        user.taille?.toString()     || '',
       poidsCible:    user.poidsCible?.toString() || '',
       sexe:          user.sexe          || 'H',
-      objectif:      user.objectif      || 'Entretien',
+      objectif:      normalizeObjectif(user.objectif) || 'Entretien',
       niveauSportif: user.niveauSportif || 'Débutant',
       rythme:        user.rythme?.toString() || '',
     });
@@ -78,19 +87,28 @@ export default function EditProfileScreen({ navigation }) {
     setErrors({});
     setLoading(true);
 
-    // bio excluded from payload — backend schema doesn't allow it
-    const { bio: _bio, ...restFormData } = formData;
+    // On ne transmet que les champs renseignés : poids/taille/rythme n'ont pas
+    // .allow(null) dans le schema Joi → les envoyer à null déclenche une 400.
+    // objectif : le backend attend les minuscules ("prise de masse"), le front
+    // affiche des majuscules → on normalise avant envoi.
+    const parsedPoids      = parseFloat(formData.poids?.replace(',', '.'))      || null;
+    const parsedTaille     = parseInt(formData.taille, 10)                       || null;
+    const parsedPoidsCible = parseFloat(formData.poidsCible?.replace(',', '.')) || null;
+    const parsedRythme     = parseInt(formData.rythme, 10)                       || null;
+
     const payload = {
-      ...restFormData,
-      name:       nameVal,
-      poids:      parseFloat(formData.poids?.replace(',', '.'))      || null,
-      taille:     parseInt(formData.taille)                          || null,
-      poidsCible: parseFloat(formData.poidsCible?.replace(',', '.')) || null,
-      rythme:     parseInt(formData.rythme)                          || null,
+      name: nameVal,
+      ...(formData.sexe          && { sexe:          formData.sexe }),
+      ...(formData.niveauSportif && { niveauSportif: formData.niveauSportif }),
+      ...(formData.objectif      && { objectif:      formData.objectif.toLowerCase() }),
+      ...(parsedPoids      !== null && { poids:      parsedPoids }),
+      ...(parsedTaille     !== null && { taille:     parsedTaille }),
+      ...(parsedPoidsCible !== null && { poidsCible: parsedPoidsCible }),
+      ...(parsedRythme     !== null && { rythme:     parsedRythme }),
     };
     try {
-      const res = await API.put('/users/me', payload);
-      if (res.data.success) {
+      const res = await updateMyProfile(payload);
+      if (res.success) {
         refetchUser(); // met à jour le UserContext → ProfileScreen + SettingsScreen sync instantané
         showToast('Profil mis à jour avec succès !', 'success');
         navigation.goBack();
@@ -121,6 +139,22 @@ export default function EditProfileScreen({ navigation }) {
   }, [formData, navigation]);
 
   handleUpdateRef.current = handleUpdate;
+
+  // Anti-triche : setBirthdate est un endpoint dédié (pas /users/me), verrouillé
+  // côté backend dès la première saisie. On re-throw en cas d'échec pour que
+  // BirthdatePicker garde sa modale ouverte et permette un nouvel essai.
+  const handleBirthdateConfirm = useCallback(async (dateObj) => {
+    try {
+      await setBirthdate(dateObj.toISOString());
+      await refetchUser();
+      showToast('Date de naissance enregistrée. Ton coffre est dans ton inventaire !', 'success');
+    } catch (error) {
+      if (error.isSessionExpired) throw error;
+      const msg = error.data?.message || error.message || 'Erreur réseau. Réessaie dans un instant.';
+      showToast(msg, 'error');
+      throw error;
+    }
+  }, [refetchUser, showToast]);
 
   // Configure native header with "Sauver" button — re-runs when loading changes
   useLayoutEffect(() => {
@@ -194,7 +228,7 @@ export default function EditProfileScreen({ navigation }) {
               style={styles.inlineInput}
               value={formData.poids}
               onChangeText={(v) => set('poids', v)}
-              placeholder="—"
+              placeholder="-"
               placeholderTextColor={Colors.textMuted}
               selectionColor={Colors.primary}
               keyboardType="decimal-pad"
@@ -205,21 +239,27 @@ export default function EditProfileScreen({ navigation }) {
               style={styles.inlineInput}
               value={formData.poidsCible}
               onChangeText={(v) => set('poidsCible', v)}
-              placeholder="—"
+              placeholder="-"
               placeholderTextColor={Colors.textMuted}
               selectionColor={Colors.primary}
               keyboardType="decimal-pad"
             />
           </SettingsRow>
-          <SettingsRow label="Taille (cm)" last>
+          <SettingsRow label="Taille (cm)" last={false}>
             <TextInput
               style={styles.inlineInput}
               value={formData.taille}
               onChangeText={(v) => set('taille', v)}
-              placeholder="—"
+              placeholder="-"
               placeholderTextColor={Colors.textMuted}
               selectionColor={Colors.primary}
               keyboardType="number-pad"
+            />
+          </SettingsRow>
+          <SettingsRow label="Date de naissance" last>
+            <BirthdatePicker
+              value={user?.isBirthdateSet && user?.birthdate ? new Date(user.birthdate) : null}
+              onConfirm={handleBirthdateConfirm}
             />
           </SettingsRow>
         </SettingsGroup>
@@ -311,7 +351,7 @@ const GRP_BORDER = 'rgba(255,255,255,0.09)';
 const SEP        = 'rgba(255,255,255,0.07)';
 
 const styles = StyleSheet.create({
-  root:   { flex: 1, backgroundColor: '#080910' },
+  root:   { flex: 1, backgroundColor: Colors.bgAbyss },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 8 },
 

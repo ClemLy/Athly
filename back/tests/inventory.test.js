@@ -120,6 +120,33 @@ describe("Système Inventaire & Coffres Athly — V2", () => {
       const res = await request(app).post('/api/inventory/chest/open');
       expect(res.statusCode).toBe(401);
     });
+
+    it('🔒 Anti double-spend : 5 ouvertures simultanées avec 1 seule clé → 1 seul succès', async () => {
+      await User.updateOne(
+        { _id: user.userId },
+        { level: 11, inventory: [{ itemType: 'CHEST_KEY', rarity: 'common', quantity: 1 }] },
+      );
+
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          request(app)
+            .post('/api/inventory/chest/open')
+            .set('Authorization', `Bearer ${user.token}`),
+        ),
+      );
+
+      const successes = results.filter((r) => r.statusCode === 200);
+      const rejected  = results.filter((r) => r.statusCode === 400);
+      expect(successes).toHaveLength(1);
+      expect(rejected).toHaveLength(4);
+
+      // La clé est bien consommée une seule fois, un seul item a été crédité
+      const updatedUser = await User.findById(user.userId);
+      const chestKey = updatedUser.inventory.find((i) => i.itemType === 'CHEST_KEY');
+      expect(chestKey).toBeUndefined();
+      const totalItems = updatedUser.inventory.reduce((sum, i) => sum + i.quantity, 0);
+      expect(totalItems).toBe(1);
+    });
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -147,6 +174,54 @@ describe("Système Inventaire & Coffres Athly — V2", () => {
       const updatedUser = await User.findById(user.userId);
       const drink = updatedUser.inventory.find((i) => i.itemType === 'ENERGY_DRINK');
       expect(drink).toBeUndefined();
+    });
+
+    it('🎯 ENERGY_DRINK : franchir un palier d\'XP recalcule level ET rank', async () => {
+      const { xpForLevel } = require('../utils/levelHelpers');
+      // XP juste sous le seuil du niveau 11 (Rang Initié)
+      const justBelowLevel11 = xpForLevel(11) - 50;
+      await User.updateOne(
+        { _id: user.userId },
+        { xp: justBelowLevel11, level: 10, rank: 'Novice', inventory: [{ itemType: 'ENERGY_DRINK', rarity: 'common', quantity: 1 }] },
+      );
+
+      const res = await request(app)
+        .post('/api/inventory/item/use')
+        .set('Authorization', `Bearer ${user.token}`)
+        .send({ itemType: 'ENERGY_DRINK' });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.user.xp).toBe(justBelowLevel11 + 150);
+      expect(res.body.user.level).toBe(11);
+      expect(res.body.user.rank).toBe('Initié');
+
+      const updatedUser = await User.findById(user.userId);
+      expect(updatedUser.level).toBe(11);
+      expect(updatedUser.rank).toBe('Initié');
+    });
+
+    it('🔒 Anti race-condition : 5 utilisations simultanées d\'ENERGY_DRINK ne perdent aucun XP', async () => {
+      await User.updateOne(
+        { _id: user.userId },
+        { xp: 0, inventory: [{ itemType: 'ENERGY_DRINK', rarity: 'common', quantity: 5 }] },
+      );
+
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          request(app)
+            .post('/api/inventory/item/use')
+            .set('Authorization', `Bearer ${user.token}`)
+            .send({ itemType: 'ENERGY_DRINK' }),
+        ),
+      );
+
+      expect(results.every((r) => r.statusCode === 200)).toBe(true);
+
+      // $inc atomique : les 5 gains de +150 XP doivent TOUS être comptabilisés,
+      // aucun perdu par un read-modify-write concurrent.
+      const updatedUser = await User.findById(user.userId);
+      expect(updatedUser.xp).toBe(750);
+      expect(updatedUser.inventory.find((i) => i.itemType === 'ENERGY_DRINK')).toBeUndefined();
     });
 
     it('✅ ENERGY_DRINK (qty 3) : 1 unité consommée, 2 restantes', async () => {

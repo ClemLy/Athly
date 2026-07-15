@@ -1,28 +1,34 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  StatusBar, Switch, Alert, TextInput, ActivityIndicator, Modal,
+  StatusBar, Switch, TextInput, ActivityIndicator, Modal, Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../../constants/theme';
+import { ConfirmModal } from '../../components/common';
+import { InfoModal } from '../../components/common';
 import { useAuth } from '../../context/AuthContext';
 import { useUser } from '../../context/UserContext';
 import { useToast } from '../../context/ToastContext';
 import { useSavedWorkouts } from '../../context/SavedWorkoutsContext';
 import { useQuests } from '../../context/QuestContext';
 import { useCustomExercises } from '../../context/CustomExercisesContext';
-import { deleteAccount } from '../../services/auth.service';
+import { deleteAccount } from '../../services';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import {
   xpToLevel, xpForLevel, computeStreak,
   debugAddXP, debugSetLevel, debugAddSessions,
   debugSimulateReps, debugSetStreak, debugClearDebugLogs,
   debugResetDailyXP,
-} from '../../services/stats.service';
+} from '../../services';
 import { PROFILE_THEMES, isThemeLocked } from '../../data/profileThemes';
 import { TROPHY_CATALOG, TROPHY_CATEGORIES, ULTIMATE_TROPHY, evaluateTrophies } from '../../data/trophyCatalog';
-import { useDevSettings } from '../../hooks/useDevSettings';
+import { COLLECTION_CATEGORY, BACKEND_CATEGORY_MAP } from '../../data/backendTrophyCategories';
+import { getAchievements } from '../../services';
+import { normalizeAchievement } from '../../components/profile/AchievementShowcase';
+import { TrophyIcon } from '../../components/profile/TrophySlot';
+import { useDevSettings } from '../../hooks';
 import { useFocusEffect } from '@react-navigation/native';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
@@ -32,7 +38,13 @@ import {
   fireTestNotification,
   scheduleDailyReminder,
   cancelDailyReminder,
-} from '../../services/notificationService';
+} from '../../services';
+import {
+  syncBackendLevel, giveChests, generateMockSocial, giveAllItems,
+  simulateChestsOpened, simulateReferral, simulateBirthday,
+  simulateGroup, simulateActivityEvent, simulateStreakBreak, simulateShakeSelf,
+  simulateSearchableFriend, simulateLobbyInvite, giveAllTitles,
+} from '../../services';
 
 const UNIT_WEIGHT_KEY   = 'athly:unit:weight:v1';
 const UNIT_DIST_KEY     = 'athly:unit:distance:v1';
@@ -44,12 +56,12 @@ const SEP      = 'rgba(255,255,255,0.07)';
 const GOLD_BG  = 'rgba(255,215,0,0.06)';
 const GOLD_BDR = 'rgba(255,215,0,0.22)';
 
-// ─── Tap trigger to reveal dev section : 10 taps ─────────────────────────────
-const DEV_TAP_TARGET = 10;
+// ─── Tap trigger to reveal dev section : 20 taps ─────────────────────────────
+const DEV_TAP_TARGET = 20;
 
 export default function SettingsScreen({ navigation }) {
   const { signOut }                       = useAuth();
-  const { setUser }                       = useUser();
+  const { user, setUser, refetch: refetchUser } = useUser();
   const { showToast }                     = useToast();
   const { totalXP, sessionLogs, activityLogs, refresh, clearAll: clearWorkoutLogs } = useWorkoutLogs();
   const { clearAll: clearSavedWorkouts }  = useSavedWorkouts();
@@ -145,9 +157,12 @@ export default function SettingsScreen({ navigation }) {
   const [targetLevel,     setTargetLevel]     = useState('');
   const [targetStreak,    setTargetStreak]    = useState('');
   const [targetXP,        setTargetXP]        = useState('');
+  const [targetChests,    setTargetChests]    = useState('1');
   const [simLoading,      setSimLoading]      = useState(false);
   const [simFeedback,     setSimFeedback]     = useState('');
   const [trophyExpanded,  setTrophyExpanded]  = useState(false);
+  const [testFriendTag,   setTestFriendTag]   = useState(null);
+  const [infoModal, setInfoModal] = useState(null); // { title, body, destructive? }
 
   const [deleteModal1,  setDeleteModal1]  = useState(false);
   const [deleteModal2,  setDeleteModal2]  = useState(false);
@@ -191,17 +206,32 @@ export default function SettingsScreen({ navigation }) {
     }
   }, [tapCount, devVisible]);
 
+  // Récupère le profil backend au montage : garantit que referralCode est
+  // présent (généré paresseusement par getMe pour les comptes existants).
+  useEffect(() => { refetchUser(); }, [refetchUser]);
+
+  const handleShareReferral = useCallback(async () => {
+    if (!user?.referralCode) return;
+    try {
+      await Share.share({
+        message: `Rejoins-moi sur Athly ! Utilise mon code de parrainage ${user.referralCode} à l'inscription : on gagne chacun un Gel de Streak et un Coupon de Niveau.`,
+      });
+    } catch (_) {
+      // Partage annulé ou indisponible : rien à faire
+    }
+  }, [user?.referralCode]);
+
   const handleNotifToggle = useCallback(async (val) => {
     if (val) {
       const granted = await requestNotificationPermissions();
       if (!granted) {
-        Alert.alert('Notifications désactivées', 'Activez les notifications Athly dans les réglages de votre appareil.');
+        setInfoModal({ title: 'Notifications désactivées', body: 'Activez les notifications Athly dans les réglages de votre appareil.' });
         return;
       }
       try {
         await scheduleDailyReminder();
       } catch (e) {
-        Alert.alert('Erreur', 'Impossible de planifier la notification.');
+        setInfoModal({ title: 'Erreur', body: 'Impossible de planifier la notification.', destructive: true });
         return;
       }
       setNotifEnabled(true);
@@ -224,7 +254,7 @@ export default function SettingsScreen({ navigation }) {
     try {
       setSimLoading(true);
       await fireTestNotification(type);
-      showFeedback(type === 'orange' ? 'Notif orange dans 3 s... 🔥' : 'Notif violette dans 3 s... 👀');
+      showFeedback(type === 'orange' ? 'Notif orange dans 3 s...' : 'Notif violette dans 3 s...');
     } catch (e) {
       showFeedback('Erreur : ' + (e?.message || 'inconnue'));
     } finally {
@@ -234,15 +264,11 @@ export default function SettingsScreen({ navigation }) {
 
   const handleGodMode = useCallback(async (val) => {
     await setGodMode(val);
-    if (val) Alert.alert('God Mode activé 🔥', 'Utilisez la console ci-dessous pour simuler votre progression.');
+    if (val) setInfoModal({ title: 'God Mode activé', body: 'Utilisez la console ci-dessous pour simuler votre progression.' });
   }, [setGodMode]);
 
-  const handleLogout = () => {
-    Alert.alert('Déconnexion', 'Tu vas être déconnecté.', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Déconnexion', style: 'destructive', onPress: signOut },
-    ]);
-  };
+  const [logoutConfirmVisible, setLogoutConfirmVisible] = useState(false);
+  const handleLogout = () => setLogoutConfirmVisible(true);
 
   const runSim = useCallback(async (fn, successMsg) => {
     try {
@@ -257,10 +283,24 @@ export default function SettingsScreen({ navigation }) {
     }
   }, [refresh, showFeedback]);
 
+  // debugSetLevel (AsyncStorage local) + syncBackendLevel (user.level backend)
+  // dans la foulée : sans ça, le niveau simulé par God Mode divergeait
+  // silencieusement du niveau réellement stocké côté serveur — visible par
+  // exemple dans le sélecteur de titres, qui vérifie le niveau backend (comme
+  // le gating des coffres). syncBackendLevel échoue silencieusement en
+  // production (404, endpoint dev-only) : ne bloque jamais la simulation locale.
+  const setLevelEverywhere = async (n) => {
+    await debugSetLevel(n);
+    try {
+      await syncBackendLevel(n);
+      await refetchUser();
+    } catch (_) { /* prod : endpoint indisponible, ignoré */ }
+  };
+
   const handleSetLevel    = () => {
     const n = parseInt(targetLevel, 10);
     if (!targetLevel || isNaN(n) || n < 0 || n > 200) { showFeedback('Niveau invalide (0–200)'); return; }
-    runSim(() => debugSetLevel(n), `Niveau ${n} appliqué ✓`);
+    runSim(() => setLevelEverywhere(n), `Niveau ${n} appliqué ✓`);
   };
   const handleAddXP       = () => runSim(() => debugAddXP(1000), '+1000 XP injectés ✓');
   const handleAddCustomXP = () => {
@@ -269,10 +309,10 @@ export default function SettingsScreen({ navigation }) {
     runSim(() => debugAddXP(n), `+${n.toLocaleString('fr-FR')} XP injectés ✓`);
     setTargetXP('');
   };
-  const handlePlusLevel   = () => runSim(() => debugSetLevel(level + 1), `Passage au niveau ${level + 1} ✓`);
+  const handlePlusLevel   = () => runSim(() => setLevelEverywhere(level + 1), `Passage au niveau ${level + 1} ✓`);
   const handleMinusLevel  = () => {
     if (level <= 0) { showFeedback('Déjà au niveau 0'); return; }
-    runSim(() => debugSetLevel(level - 1), `Retour au niveau ${level - 1} ✓`);
+    runSim(() => setLevelEverywhere(level - 1), `Retour au niveau ${level - 1} ✓`);
   };
   const handleGenSessions = () => runSim(() => debugAddSessions(50), '50 séances injectées ✓');
   const handleSimReps     = () => runSim(() => debugSimulateReps(3000), '~3000 répétitions simulées ✓');
@@ -282,16 +322,270 @@ export default function SettingsScreen({ navigation }) {
     runSim(() => debugSetStreak(n), `Streak ${n} jours appliqué ✓`);
   };
   const handleResetDailyXP = () => runSim(debugResetDailyXP, 'Quota XP quotidien réinitialisé ✓');
-  const handleClearDebug  = () => {
-    Alert.alert('Effacer les logs DEBUG', 'Les vraies séances restent intactes.', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Effacer', style: 'destructive', onPress: () => runSim(debugClearDebugLogs, 'Logs DEBUG effacés ✓') },
-    ]);
+  const [clearDebugConfirmVisible, setClearDebugConfirmVisible] = useState(false);
+  const handleClearDebug = () => setClearDebugConfirmVisible(true);
+  const confirmClearDebug = () => {
+    setClearDebugConfirmVisible(false);
+    runSim(debugClearDebugLogs, 'Logs DEBUG effacés ✓');
   };
   const handleClearOverrides = () => {
     clearTrophyOverrides();
     showFeedback('Overrides trophées réinitialisés ✓');
   };
+
+  // Le niveau simulé ci-dessus (debugSetLevel…) reste 100% local (AsyncStorage) —
+  // il ne débloque pas les fonctionnalités gated côté serveur (coffres, niveau 11+).
+  // Ce bouton pousse le niveau affiché vers le user.level backend pour tester
+  // ces features sans dizaines de vraies séances. Bloqué en production (404).
+  const handleSyncBackendLevel = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await syncBackendLevel(level);
+      await refetchUser();
+      showFeedback(`Backend synchronisé : niveau ${res.level} (${res.rank}) ✓`);
+    } catch (e) {
+      const msg = e?.status === 404
+        ? 'Indisponible en production.'
+        : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [level, refetchUser, showFeedback]);
+
+  // Crédite des CHEST_KEY backend pour tester l'ouverture de coffre sans
+  // attendre les paliers de 5h de séance. Bloqué en production (404).
+  const handleGiveChests = useCallback(async () => {
+    const n = parseInt(targetChests, 10);
+    if (!targetChests || isNaN(n) || n < 1 || n > 50) { showFeedback('Quantité invalide (1–50)'); return; }
+    try {
+      setSimLoading(true);
+      const res = await giveChests(n);
+      showFeedback(`+${n} coffre(s) ✓ (total : ${res.chestCount})`);
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [targetChests, showFeedback]);
+
+  // Génère 2 amis acceptés + 1 demande en attente pour tester l'écran Social
+  // (Classement, création de Groupe, Accepter/Refuser) sans dépendre de vrais
+  // comptes tiers. Idempotent côté backend. Bloqué en production (404).
+  const handleMockSocial = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await generateMockSocial();
+      showFeedback(res.message || 'Réseau social de test généré ✓');
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback]);
+
+  // Crée un compte de test PAS déjà ami — seul moyen de tester en solo le
+  // parcours complet "Ajouter un ami" (recherche par tag, preview, envoi).
+  // Bloqué en production (404).
+  const handleSimulateSearchableFriend = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await simulateSearchableFriend();
+      // Le tag doit rester lisible le temps de changer d'écran (Réglages →
+      // Social) pour le saisir dans "Ajouter un ami" — le feedback normal
+      // s'efface après 2,5s, largement trop court pour ça. Affiché à part,
+      // de façon persistante, tant que ce compte de test reste valide.
+      if (res.tag) {
+        setTestFriendTag(res.tag);
+        showFeedback('Compte de test créé - tag affiché ci-dessous ↓');
+      } else {
+        showFeedback(res.message || 'Compte de test créé');
+      }
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback]);
+
+  // Crée un lobby Multi avec un coéquipier factice (isTestBot) et envoie une
+  // vraie notification push d'invitation à soi-même — seul moyen de tester en
+  // solo le parcours complet Lobby Multi (invitation, rejoindre, prêt, séance,
+  // bonus de groupe). Bloqué en production (404).
+  const handleSimulateLobbyInvite = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await simulateLobbyInvite();
+      showFeedback(res.message || 'Invitation de test créée');
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback]);
+
+  // Débloque tous les titres du catalogue (Section X) sans passer par leurs
+  // conditions réelles — teste le sélecteur en un clic. Bloqué en production (404).
+  const handleGiveAllTitles = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await giveAllTitles();
+      await refetchUser();
+      showFeedback(res.message || 'Tous les titres débloqués ✓');
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback, refetchUser]);
+
+  // Injecte 1 exemplaire de CHAQUE objet existant (consommables + cosmétiques
+  // Uniques réclamables) pour tout tester en un clic. Bloqué en production (404).
+  const handleGiveAllItems = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await giveAllItems();
+      await refetchUser();
+      showFeedback(res.message || 'Tous les objets ajoutés ✓');
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback, refetchUser]);
+
+  // Formatte un retour "+N trophée(s) débloqué(s)" à partir de newlyUnlocked,
+  // partagé par les 3 simulateurs de trophées backend ci-dessous.
+  const feedbackWithUnlocks = useCallback((baseMessage, newlyUnlocked) => {
+    if (newlyUnlocked && newlyUnlocked.length > 0) {
+      return `${baseMessage} · ${newlyUnlocked.length} trophée(s) débloqué(s) ✓`;
+    }
+    return `${baseMessage} (déjà débloqué)`;
+  }, []);
+
+  // Incrémente totalChestsOpened sans vraies ouvertures de coffre — permet de
+  // tester les trophées CHEST_1…CHEST_200 et le thème Rouge Sang (100 coffres)
+  // sans enchaîner des dizaines d'ouvertures manuelles. Bloqué en prod (404).
+  const handleSimulateChests = useCallback(async () => {
+    const n = parseInt(targetChests, 10);
+    if (!targetChests || isNaN(n) || n < 1 || n > 250) { showFeedback('Quantité invalide (1–250)'); return; }
+    try {
+      setSimLoading(true);
+      const res = await simulateChestsOpened(n);
+      await refetchUser();
+      showFeedback(feedbackWithUnlocks(`+${n} coffre(s) simulé(s) (total : ${res.totalChestsOpened})`, res.newlyUnlocked));
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [targetChests, showFeedback, refetchUser, feedbackWithUnlocks]);
+
+  // Crée un filleul factice pour débloquer FIRST_REFERRAL (parrainage) sans
+  // avoir à créer un vrai second compte. Bloqué en production (404).
+  const handleSimulateReferral = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await simulateReferral();
+      await refetchUser();
+      showFeedback(feedbackWithUnlocks('Parrainage simulé', res.newlyUnlocked));
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback, refetchUser, feedbackWithUnlocks]);
+
+  // Force la date de naissance à aujourd'hui pour débloquer BIRTHDAY_SET et
+  // BIRTHDAY_CELEBRATED sans attendre le vrai jour J. Bloqué en prod (404).
+  const handleSimulateBirthday = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await simulateBirthday();
+      await refetchUser();
+      showFeedback(feedbackWithUnlocks('Anniversaire simulé', res.newlyUnlocked));
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback, refetchUser, feedbackWithUnlocks]);
+
+  // ── Vague 1 : groupe, météo, activité, Hall of Shame, secouer ────────────
+  // Ces 4 outils sont le SEUL moyen de tester ces fonctionnalités en solo :
+  // elles dépendent toutes d'un groupe à plusieurs membres et/ou d'un second
+  // appareil, ce qu'un testeur seul ne peut pas reproduire manuellement.
+
+  // Crée un groupe de test avec 3 coéquipiers factices (Prêt/Actif/Validé) —
+  // teste la Météo des séances, le multiplicateur de groupe et sert de base
+  // aux 3 autres outils ci-dessous. Bloqué en production (404).
+  const handleSimulateGroup = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await simulateGroup();
+      showFeedback(res.message || 'Groupe de test créé');
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback]);
+
+  // Publie un événement factice au nom d'un coéquipier — teste l'ActivityFeedModal
+  // et les réactions. Nécessite d'avoir d'abord lancé "Simuler un groupe".
+  const handleSimulateActivityEvent = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await simulateActivityEvent();
+      showFeedback(res.message || 'Événement simulé');
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback]);
+
+  // Recule lastValidatedDate du groupe pour déclencher le Hall of Shame au
+  // prochain chargement de l'onglet Groupe.
+  const handleSimulateStreakBreak = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await simulateStreakBreak();
+      showFeedback(res.message || 'Rupture de streak simulée');
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback]);
+
+  // Envoie une vraie notification push au propre appareil du testeur — seul
+  // moyen de vérifier de bout en bout que l'infra push fonctionne sans
+  // second compte/appareil pour recevoir la notification.
+  const handleSimulateShakeSelf = useCallback(async () => {
+    try {
+      setSimLoading(true);
+      const res = await simulateShakeSelf();
+      showFeedback(res.message || (res.pushed ? 'Notification envoyée' : 'Échec d\'envoi'));
+    } catch (e) {
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      showFeedback('Erreur : ' + msg);
+    } finally {
+      setSimLoading(false);
+    }
+  }, [showFeedback]);
 
   const handleLockDevSection = useCallback(async () => {
     setDevVisible(false);
@@ -332,9 +626,45 @@ export default function SettingsScreen({ navigation }) {
     () => evaluateTrophies(level, sessionLogs.length, sessionLogs, totalXP, trophyOverrides),
     [level, sessionLogs, totalXP, trophyOverrides],
   );
-  const ultimateUnlocked = evaluatedTrophies.every((t) => t.unlocked);
 
-  const unlockedThemes = PROFILE_THEMES.filter((t) => !isThemeLocked(t, level));
+  // Trophées backend V2 (anniversaire, collection d'objets, coffres, social) —
+  // sans eux, le panneau God Mode n'affichait que les 40 trophées locaux.
+  // Lecture seule ici : pas d'override dev possible sur des données serveur.
+  const [backendAchievements, setBackendAchievements] = useState([]);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      getAchievements()
+        .then((res) => { if (!cancelled) setBackendAchievements(res.achievements ?? []); })
+        .catch(() => {});
+      return () => { cancelled = true; };
+    }, []),
+  );
+
+  const normalizedBackendTrophies = useMemo(
+    () => backendAchievements.map((a) => ({
+      ...normalizeAchievement(a),
+      category: BACKEND_CATEGORY_MAP[a.category] || 'collection',
+      isBackend: true,
+    })),
+    [backendAchievements],
+  );
+
+  const allTrophyCategories = useMemo(() => [...TROPHY_CATEGORIES, COLLECTION_CATEGORY], []);
+  const fullTrophyList = useMemo(
+    () => [...evaluatedTrophies, ...normalizedBackendTrophies],
+    [evaluatedTrophies, normalizedBackendTrophies],
+  );
+
+  // Le Trophée Ultime exige la collection complète (local + backend) — voir
+  // la même règle dans TrophyRoomScreen.js.
+  const ultimateUnlocked = backendAchievements.length > 0 && fullTrophyList.every((t) => t.unlocked);
+
+  const unlockedCosmetics = user?.unlockedCosmetics ?? [];
+  const totalChestsOpened = user?.totalChestsOpened ?? 0;
+  const unlockedThemes = PROFILE_THEMES.filter((t) => !isThemeLocked(t, level, unlockedCosmetics));
+  const bloodSangTheme  = PROFILE_THEMES.find((t) => t.id === 'blood_sang');
+  const bloodSangLocked = bloodSangTheme ? isThemeLocked(bloodSangTheme, level, unlockedCosmetics) : false;
 
   return (
     <View style={styles.root}>
@@ -354,6 +684,29 @@ export default function SettingsScreen({ navigation }) {
             <Ionicons name="create-outline" size={16} color={Colors.textMuted} />
           </SettingsRow>
         </SettingsGroup>
+
+        {/* ═══ PARRAINAGE ═══════════════════════════════════════════════════════ */}
+        <SectionLabel label="Parrainage" />
+        <SettingsGroup>
+          <SettingsRow label="Mon code" last>
+            <View style={styles.referralRow}>
+              <Text style={styles.referralCode}>{user?.referralCode || '…'}</Text>
+              <TouchableOpacity
+                style={styles.referralShareBtn}
+                onPress={handleShareReferral}
+                disabled={!user?.referralCode}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="share-social-outline" size={16} color={Colors.primary} />
+              </TouchableOpacity>
+            </View>
+          </SettingsRow>
+        </SettingsGroup>
+        <Text style={styles.referralHint}>
+          Partage ton code : ton filleul et toi recevez chacun un Gel de Streak et un Coupon
+          de Niveau, et vous devenez amis automatiquement.
+        </Text>
 
         {/* ═══ UNITÉS ═══════════════════════════════════════════════════════════ */}
         <SectionLabel label="Unités" />
@@ -386,7 +739,7 @@ export default function SettingsScreen({ navigation }) {
           </View>
           <View style={styles.themeGrid} ref={themesRef} onLayout={onThemesLayout} collapsable={false}>
             {PROFILE_THEMES.map((theme) => {
-              const locked   = isThemeLocked(theme, level);
+              const locked   = isThemeLocked(theme, level, unlockedCosmetics);
               const selected = profileThemeId === theme.id;
               return (
                 <TouchableOpacity
@@ -403,6 +756,14 @@ export default function SettingsScreen({ navigation }) {
               );
             })}
           </View>
+          {bloodSangLocked && (
+            <View style={styles.themeSpecialHint}>
+              <Ionicons name="lock-closed" size={11} color={Colors.textMuted} />
+              <Text style={styles.themeSpecialHintTxt}>
+                Rouge Sang : déblocable après avoir ouvert 100 coffres (Actuel : {Math.min(totalChestsOpened, 100)}/100)
+              </Text>
+            </View>
+          )}
         </SettingsGroup>
 
         {/* ═══ NOTIFICATIONS ════════════════════════════════════════════════════ */}
@@ -468,143 +829,314 @@ export default function SettingsScreen({ navigation }) {
                   <DevStat label="Séances" value={sessionLogs.length} />
                 </View>
 
-                {/* ── NIVEAU & XP ── */}
-                <DevSectionTitle title="NIVEAU & XP" />
-                <View style={styles.devInputRow}>
-                  <TextInput style={styles.devInput} value={targetLevel} onChangeText={setTargetLevel}
-                    keyboardType="number-pad" placeholder={`${level}`}
-                    placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
-                  <DevBtn label="Set niveau" onPress={handleSetLevel} disabled={simLoading} />
-                </View>
-                <View style={styles.devBtnRow}>
-                  <DevBtn label="+1000 XP" onPress={handleAddXP} disabled={simLoading} flex />
-                  <DevBtn label="+1 Niv"   onPress={handlePlusLevel}  disabled={simLoading || level >= 200} flex />
-                  <DevBtn label="-1 Niv"   onPress={handleMinusLevel} disabled={simLoading || level <= 0} flex variant="dim" />
-                </View>
-                <View style={styles.devInputRow}>
-                  <TextInput style={styles.devInput} value={targetXP} onChangeText={setTargetXP}
-                    keyboardType="number-pad" placeholder="XP à ajouter"
-                    placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
-                  <DevBtn label="+ XP" onPress={handleAddCustomXP} disabled={simLoading} />
-                </View>
-                <Text style={styles.devHint}>XP requis Niv.{level + 1} : {xpForLevel(level + 1).toLocaleString('fr-FR')}</Text>
+                {/* ── PROGRESSION (Niveau, XP, sync backend) ── */}
+                <DevSection title="Progression" icon="trending-up" defaultOpen>
+                  <View style={styles.devInputRow}>
+                    <TextInput style={styles.devInput} value={targetLevel} onChangeText={setTargetLevel}
+                      keyboardType="number-pad" placeholder={`${level}`}
+                      placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
+                    <DevBtn label="Set niveau" onPress={handleSetLevel} disabled={simLoading} />
+                  </View>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="+1000 XP" onPress={handleAddXP} disabled={simLoading} flex />
+                    <DevBtn label="+1 Niv"   onPress={handlePlusLevel}  disabled={simLoading || level >= 200} flex />
+                    <DevBtn label="-1 Niv"   onPress={handleMinusLevel} disabled={simLoading || level <= 0} flex variant="dim" />
+                  </View>
+                  <View style={styles.devInputRow}>
+                    <TextInput style={styles.devInput} value={targetXP} onChangeText={setTargetXP}
+                      keyboardType="number-pad" placeholder="XP à ajouter"
+                      placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
+                    <DevBtn label="+ XP" onPress={handleAddCustomXP} disabled={simLoading} />
+                  </View>
+                  <Text style={styles.devHint}>XP requis Niv.{level + 1} : {xpForLevel(level + 1).toLocaleString('fr-FR')}</Text>
 
-                {/* ── SIMULATION ── */}
-                <DevSectionTitle title="SIMULATION" />
-                <View style={styles.devBtnRow}>
-                  <DevBtn label="50 séances" onPress={handleGenSessions} disabled={simLoading} flex />
-                  <DevBtn label="3000 reps"  onPress={handleSimReps}     disabled={simLoading} flex />
-                </View>
-                <Text style={styles.devHint}>Injecte des logs réalistes sur les N derniers jours.</Text>
+                  <View style={styles.devSubDivider} />
+                  <Text style={styles.devHint}>
+                    Le niveau ci-dessus est local uniquement. Les coffres et fonctionnalités
+                    serveur (niveau 11+) lisent le niveau backend, synchronise pour les tester.
+                  </Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn
+                      label={`Pousser niveau ${level} vers le backend`}
+                      onPress={handleSyncBackendLevel}
+                      disabled={simLoading}
+                      flex
+                    />
+                  </View>
+                </DevSection>
 
-                {/* ── STREAK ── */}
-                <DevSectionTitle title="STREAK" />
-                <View style={styles.devInputRow}>
-                  <TextInput style={styles.devInput} value={targetStreak} onChangeText={setTargetStreak}
-                    keyboardType="number-pad" placeholder={`${streak}`}
-                    placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
-                  <DevBtn label="Set streak" onPress={handleSetStreak} disabled={simLoading} />
-                </View>
+                {/* ── INVENTAIRE & COFFRES ── */}
+                <DevSection title="Inventaire & coffres" icon="cube">
+                  <Text style={styles.devHint}>
+                    Coffres injectés directement en base, pour tester l'Inventaire
+                    sans dizaines de vraies actions.
+                  </Text>
+                  <View style={styles.devInputRow}>
+                    <TextInput style={styles.devInput} value={targetChests} onChangeText={setTargetChests}
+                      keyboardType="number-pad" placeholder="1"
+                      placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
+                    <DevBtn label="+ Coffre(s)" onPress={handleGiveChests} disabled={simLoading} />
+                    <DevBtn label="Simuler ouverts" onPress={handleSimulateChests} disabled={simLoading} />
+                  </View>
+                  <Text style={styles.devHint}>
+                    « + Coffre(s) » ajoute des CHEST_KEY à ouvrir manuellement. « Simuler ouverts »
+                    incrémente directement le compteur de coffres ouverts (trophées CHEST_1…CHEST_200,
+                    thème Rouge Sang à 100).
+                  </Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn
+                      label="Tout obtenir (All Items)"
+                      onPress={handleGiveAllItems}
+                      disabled={simLoading}
+                      variant="violet"
+                      flex
+                    />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Ajoute 1 exemplaire de chaque objet (consommables + cosmétiques Uniques
+                    réclamables) dans l'inventaire, pour tout tester d'un coup.
+                  </Text>
+                </DevSection>
+
+                {/* ── RÉSEAU SOCIAL ── */}
+                <DevSection title="Réseau social" icon="people">
+                  <Text style={styles.devHint}>
+                    Faux amis générés directement en base, pour tester l'écran Social
+                    sans dépendre de vrais comptes tiers.
+                  </Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn
+                      label="Générer un réseau social de test"
+                      onPress={handleMockSocial}
+                      disabled={simLoading}
+                      flex
+                    />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Crée FauxAmi_1 et FauxAmi_2 (amis acceptés, pour Classement et Groupe)
+                    et FauxAmi_3 (demande en attente, pour Accepter/Refuser). Rejouable sans doublons.
+                  </Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Simuler un parrainage" onPress={handleSimulateReferral} disabled={simLoading} flex />
+                    <DevBtn label="Simuler un anniversaire" onPress={handleSimulateBirthday} disabled={simLoading} flex />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Débloquent respectivement le trophée « Recruteur Athly » (parrainage) et les
+                    trophées anniversaire, sans attendre un vrai filleul ou le vrai jour J.
+                  </Text>
+
+                  <View style={styles.devSubDivider} />
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Créer un ami cherchable (test)" onPress={handleSimulateSearchableFriend} disabled={simLoading} flex />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Crée un compte "TestAmi" PAS déjà ami avec un # généré aléatoirement.
+                    Le tag exact reste affiché juste en dessous (pas le message temporaire,
+                    trop court pour changer d'écran) - saisis-le tel quel dans "Ajouter un
+                    ami" côté Social. Ne tape jamais "0000", ce n'est qu'un exemple de format.
+                  </Text>
+                  {testFriendTag && (
+                    <View style={styles.testTagBox}>
+                      <Text style={styles.testTagLabel}>TAG DU COMPTE DE TEST</Text>
+                      <Text style={styles.testTagValue}>{testFriendTag}</Text>
+                    </View>
+                  )}
+                </DevSection>
+
+                {/* ── GROUPE DE STREAK (V2) ── */}
+                <DevSection title="Groupe de streak" icon="flame" badge="V2">
+                  <Text style={styles.devHint}>
+                    Ces outils sont le seul moyen de tester la Météo des séances, le flux
+                    d'activité, le Hall of Shame et le bouton Secouer sans un second
+                    compte/appareil.
+                  </Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Simuler un groupe" onPress={handleSimulateGroup} disabled={simLoading} flex />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Crée un groupe avec 3 coéquipiers factices, un par statut de Météo des
+                    séances testable (Prêt / Actif / Validé - le 4e, En sommeil,
+                    s'obtient en ne touchant à aucun des trois). Rejouable sans doublons.
+                  </Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Simuler un événement d'activité" onPress={handleSimulateActivityEvent} disabled={simLoading} flex />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Publie un PR battu ou un coffre Légendaire au nom d'un coéquipier -
+                    déclenche l'ActivityFeedModal au prochain lancement. Nécessite d'avoir
+                    d'abord simulé un groupe.
+                  </Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Simuler une rupture de streak" onPress={handleSimulateStreakBreak} disabled={simLoading} flex />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Recule la dernière validation du groupe pour déclencher le Hall of Shame
+                    dès le prochain chargement de l'onglet Groupe.
+                  </Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Me secouer (push réel)" onPress={handleSimulateShakeSelf} disabled={simLoading} flex variant="orange" />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Envoie une vraie notification push à ton propre appareil, avec le texte
+                    troll du bouton Secouer - vérifie l'infra push de bout en bout.
+                  </Text>
+                </DevSection>
+
+                {/* ── LOBBY MULTI (V2) ── */}
+                <DevSection title="Lobby Multi" icon="people" badge="V2">
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Simuler une invitation Multi" onPress={handleSimulateLobbyInvite} disabled={simLoading} flex variant="orange" />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Crée un lobby avec un coéquipier factice et t'envoie une vraie
+                    notification push d'invitation - teste tout le parcours en solo :
+                    popup "X t'invite", rejoindre, se déclarer prêt, faire sa séance,
+                    et voir le bonus XP de groupe à la fin (le coéquipier factice suit
+                    automatiquement chacun de tes statuts).
+                  </Text>
+                </DevSection>
+
+                {/* ── TITRES (Section X) ── */}
+                <DevSection title="Titres" icon="ribbon">
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Débloquer tous les titres" onPress={handleGiveAllTitles} disabled={simLoading} flex />
+                  </View>
+                  <Text style={styles.devHint}>
+                    Débloque directement les 17 titres du catalogue, sans passer par leurs
+                    conditions réelles - teste le sélecteur de titres en un clic.
+                  </Text>
+                </DevSection>
+
+                {/* ── SIMULATION DE SÉANCES ── */}
+                <DevSection title="Simulation de séances" icon="barbell">
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="50 séances" onPress={handleGenSessions} disabled={simLoading} flex />
+                    <DevBtn label="3000 reps"  onPress={handleSimReps}     disabled={simLoading} flex />
+                  </View>
+                  <Text style={styles.devHint}>Injecte des logs réalistes sur les N derniers jours.</Text>
+
+                  <View style={styles.devSubDivider} />
+                  <View style={styles.devInputRow}>
+                    <TextInput style={styles.devInput} value={targetStreak} onChangeText={setTargetStreak}
+                      keyboardType="number-pad" placeholder={`${streak}`}
+                      placeholderTextColor="rgba(255,215,0,0.3)" returnKeyType="done" />
+                    <DevBtn label="Set streak perso" onPress={handleSetStreak} disabled={simLoading} />
+                  </View>
+                </DevSection>
 
                 {/* ── TROPHÉES ── */}
-                <DevSectionTitle title="TROPHÉES" />
+                <DevSection title="Trophées" icon="trophy">
+                  {/* Statut Trophée Ultime */}
+                  <View style={styles.trophyUltimateRow}>
+                    <Ionicons name="infinite" size={14} color={ultimateUnlocked ? Colors.gold : Colors.textMuted} />
+                    <Text style={[styles.trophyUltimateLabel, { color: ultimateUnlocked ? Colors.gold : Colors.textMuted }]}>
+                      {ULTIMATE_TROPHY.label}
+                    </Text>
+                    <Text style={[styles.trophyUltimateSub, { color: ultimateUnlocked ? Colors.success : Colors.textMuted }]}>
+                      {ultimateUnlocked ? '✓ Débloqué !' : `${fullTrophyList.filter(t => t.unlocked).length}/${fullTrophyList.length}`}
+                    </Text>
+                  </View>
 
-                {/* Statut Trophée Ultime */}
-                <View style={styles.trophyUltimateRow}>
-                  <Ionicons name="infinite" size={14} color={ultimateUnlocked ? Colors.gold : Colors.textMuted} />
-                  <Text style={[styles.trophyUltimateLabel, { color: ultimateUnlocked ? Colors.gold : Colors.textMuted }]}>
-                    {ULTIMATE_TROPHY.label}
-                  </Text>
-                  <Text style={[styles.trophyUltimateSub, { color: ultimateUnlocked ? Colors.success : Colors.textMuted }]}>
-                    {ultimateUnlocked ? '✓ Débloqué !' : `${evaluatedTrophies.filter(t => t.unlocked).length}/${TROPHY_CATALOG.length}`}
-                  </Text>
-                </View>
+                  {/* Actions de masse */}
+                  <View style={styles.devBtnRow}>
+                    <DevBtn
+                      label="Tout débloquer"
+                      onPress={() => {
+                        TROPHY_CATALOG.forEach(t => setTrophyOverride(t.id, true));
+                        showFeedback('Tous les trophées débloqués ✓');
+                      }}
+                      disabled={simLoading}
+                      flex
+                    />
+                    <DevBtn
+                      label="Tout réinitialiser"
+                      onPress={() => { clearTrophyOverrides(); showFeedback('Overrides réinitialisés ✓'); }}
+                      disabled={simLoading}
+                      flex
+                      variant="dim"
+                    />
+                  </View>
 
-                {/* Actions de masse */}
-                <View style={styles.devBtnRow}>
-                  <DevBtn
-                    label="Tout débloquer"
-                    onPress={() => {
-                      TROPHY_CATALOG.forEach(t => setTrophyOverride(t.id, true));
-                      showFeedback('Tous les trophées débloqués ✓');
-                    }}
-                    disabled={simLoading}
-                    flex
-                  />
-                  <DevBtn
-                    label="Tout réinitialiser"
-                    onPress={() => { clearTrophyOverrides(); showFeedback('Overrides réinitialisés ✓'); }}
-                    disabled={simLoading}
-                    flex
-                    variant="dim"
-                  />
-                </View>
+                  {/* Accordéon — liste individuelle */}
+                  <TouchableOpacity
+                    style={styles.trophyAccordionHeader}
+                    onPress={() => setTrophyExpanded(v => !v)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={styles.trophyAccordionLabel}>
+                      Gestion individuelle des trophées
+                    </Text>
+                    <Ionicons
+                      name={trophyExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={14}
+                      color="rgba(255,215,0,0.5)"
+                    />
+                  </TouchableOpacity>
 
-                {/* Accordéon — liste individuelle */}
-                <TouchableOpacity
-                  style={styles.trophyAccordionHeader}
-                  onPress={() => setTrophyExpanded(v => !v)}
-                  activeOpacity={0.75}
-                >
-                  <Text style={styles.trophyAccordionLabel}>
-                    Gestion individuelle des trophées
-                  </Text>
-                  <Ionicons
-                    name={trophyExpanded ? 'chevron-up' : 'chevron-down'}
-                    size={14}
-                    color="rgba(255,215,0,0.5)"
-                  />
-                </TouchableOpacity>
-
-                {trophyExpanded && TROPHY_CATEGORIES.map((cat) => {
-                  const catTrophies = evaluatedTrophies.filter((t) => t.category === cat.id);
-                  if (catTrophies.length === 0) return null;
-                  return (
-                    <View key={cat.id}>
-                      <Text style={[styles.trophyCatLabel, { color: cat.color }]}>{cat.label}</Text>
-                      {catTrophies.map((t) => (
-                        <View key={t.id} style={styles.trophyRow}>
-                          <View style={[styles.trophyIconDot, { backgroundColor: t.color + '30', borderColor: t.color + '60' }]}>
-                            <Ionicons name={t.icon} size={10} color={t.unlocked ? t.color : Colors.textMuted} />
-                          </View>
-                          <View style={styles.trophyTextCol}>
-                            <Text style={[styles.trophyName, { color: t.unlocked ? Colors.textPrimary : Colors.textMuted }]} numberOfLines={1}>
-                              {t.label}
-                            </Text>
-                            <Text style={styles.trophyCond} numberOfLines={1}>{t.condition}</Text>
-                          </View>
-                          <View style={styles.trophySwitchWrap}>
-                            {!t.naturalUnlocked && trophyOverrides[t.id] === true && (
-                              <Text style={styles.trophyOverrideTag}>DEV</Text>
+                  {trophyExpanded && allTrophyCategories.map((cat) => {
+                    const catTrophies = fullTrophyList.filter((t) => t.category === cat.id);
+                    if (catTrophies.length === 0) return null;
+                    return (
+                      <View key={cat.id}>
+                        <Text style={[styles.trophyCatLabel, { color: cat.color }]}>{cat.label}</Text>
+                        {catTrophies.map((t) => (
+                          <View key={t.id} style={styles.trophyRow}>
+                            <View style={[styles.trophyIconDot, { backgroundColor: t.color + '30', borderColor: t.color + '60' }]}>
+                              <TrophyIcon name={t.icon} size={10} color={t.unlocked ? t.color : Colors.textMuted} />
+                            </View>
+                            <View style={styles.trophyTextCol}>
+                              <Text style={[styles.trophyName, { color: t.unlocked ? Colors.textPrimary : Colors.textMuted }]} numberOfLines={1}>
+                                {t.label}
+                              </Text>
+                              <Text style={styles.trophyCond} numberOfLines={1}>{t.condition}</Text>
+                            </View>
+                            {t.isBackend ? (
+                              // Trophée de compte (serveur) : pas d'override dev possible,
+                              // affiche uniquement le statut réel.
+                              <View style={styles.trophySwitchWrap}>
+                                <Ionicons
+                                  name={t.unlocked ? 'checkmark-circle' : 'lock-closed'}
+                                  size={16}
+                                  color={t.unlocked ? t.color : Colors.textMuted}
+                                />
+                              </View>
+                            ) : (
+                              <View style={styles.trophySwitchWrap}>
+                                {!t.naturalUnlocked && trophyOverrides[t.id] === true && (
+                                  <Text style={styles.trophyOverrideTag}>DEV</Text>
+                                )}
+                                <Switch
+                                  value={t.unlocked}
+                                  onValueChange={(val) => setTrophyOverride(t.id, val === t.naturalUnlocked ? null : val)}
+                                  trackColor={{ false: 'rgba(255,255,255,0.10)', true: t.color + 'AA' }}
+                                  thumbColor={t.unlocked ? t.color : '#888'}
+                                  style={styles.trophySwitch}
+                                />
+                              </View>
                             )}
-                            <Switch
-                              value={t.unlocked}
-                              onValueChange={(val) => setTrophyOverride(t.id, val === t.naturalUnlocked ? null : val)}
-                              trackColor={{ false: 'rgba(255,255,255,0.10)', true: t.color + 'AA' }}
-                              thumbColor={t.unlocked ? t.color : '#888'}
-                              style={styles.trophySwitch}
-                            />
                           </View>
-                        </View>
-                      ))}
-                    </View>
-                  );
-                })}
+                        ))}
+                      </View>
+                    );
+                  })}
+                </DevSection>
 
                 {/* ── NOTIFICATIONS ── */}
-                <DevSectionTitle title="NOTIFICATIONS" />
-                <Text style={styles.devHint}>Déclenche une notification de test dans 3 secondes. Passe l'app en arrière-plan.</Text>
-                <View style={styles.devBtnRow}>
-                  <DevBtn label="🔥 Notif Orange" onPress={() => runNotifTest('orange')} disabled={simLoading} flex variant="orange" />
-                  <DevBtn label="👀 Notif Violette" onPress={() => runNotifTest('violet')} disabled={simLoading} flex variant="violet" />
-                </View>
+                <DevSection title="Notifications" icon="notifications">
+                  <Text style={styles.devHint}>Déclenche une notification de test dans 3 secondes. Passe l'app en arrière-plan.</Text>
+                  <View style={styles.devBtnRow}>
+                    <DevBtn label="Notif Orange" onPress={() => runNotifTest('orange')} disabled={simLoading} flex variant="orange" />
+                    <DevBtn label="Notif Violette" onPress={() => runNotifTest('violet')} disabled={simLoading} flex variant="violet" />
+                  </View>
+                </DevSection>
 
-                {/* ── RESET ── */}
-                <DevSectionTitle title="RESET" />
-                <DevBtn label="Reset quota XP quotidien" onPress={handleResetDailyXP} disabled={simLoading} fullWidth />
-                <Text style={styles.devHint}>Décale les séances d'aujourd'hui à hier — relance le gain d'XP.</Text>
-                <DevBtn label="Effacer les logs DEBUG" onPress={handleClearDebug} disabled={simLoading} variant="destructive" fullWidth />
-                <Text style={styles.devHint}>Supprime uniquement les logs [DEBUG] — les vraies séances sont conservées.</Text>
+                {/* ── RESET / DANGER ZONE ── */}
+                <DevSection title="Reset" icon="refresh">
+                  <DevBtn label="Reset quota XP quotidien" onPress={handleResetDailyXP} disabled={simLoading} fullWidth />
+                  <Text style={styles.devHint}>Décale les séances d'aujourd'hui à hier, relance le gain d'XP.</Text>
+                  <DevBtn label="Effacer les logs DEBUG" onPress={handleClearDebug} disabled={simLoading} variant="destructive" fullWidth />
+                  <Text style={styles.devHint}>Supprime uniquement les logs [DEBUG], les vraies séances sont conservées.</Text>
+                </DevSection>
 
                 {simLoading && (
                   <View style={styles.devLoader}>
@@ -641,7 +1173,7 @@ export default function SettingsScreen({ navigation }) {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.tutReplayTitle}>Rejouer l'intégralité du tutoriel</Text>
-            <Text style={styles.tutReplaySub}>5 chapitres · du Dashboard aux Réglages</Text>
+            <Text style={styles.tutReplaySub}>8 chapitres · du Dashboard aux Réglages</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={Colors.chevron} />
         </TouchableOpacity>
@@ -660,7 +1192,7 @@ export default function SettingsScreen({ navigation }) {
                 </View>
                 <View style={styles.rowLabelWrap}>
                   <Text style={styles.rowLabel}>{chapter.title}</Text>
-                  <Text style={styles.rowSub}>{chapter.subtitle} · {chapter.steps.length} étapes</Text>
+                  <Text style={styles.rowSub}>Chapitre {idx + 1} · {chapter.steps.length} étapes</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={14} color={Colors.chevron} />
               </View>
@@ -676,7 +1208,7 @@ export default function SettingsScreen({ navigation }) {
 
         {/* ─── Suppression définitive du compte ────────────────────────────── */}
         <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => setDeleteModal1(true)} activeOpacity={0.7}>
-          <Ionicons name="trash-outline" size={15} color="#FF4D4D" style={{ marginRight: 8 }} />
+          <Ionicons name="trash-outline" size={15} color={Colors.error} style={{ marginRight: 8 }} />
           <Text style={styles.deleteAccountText}>Supprimer le compte</Text>
         </TouchableOpacity>
 
@@ -692,7 +1224,7 @@ export default function SettingsScreen({ navigation }) {
         <View style={styles.dmBackdrop}>
           <View style={[styles.dmCard, styles.welcomeCard]}>
             <View style={styles.welcomeIconWrap}>
-              <Ionicons name="rocket-outline" size={30} color="#6E6AF0" />
+              <Ionicons name="rocket-outline" size={30} color={Colors.secondaryAccent} />
             </View>
             <Text style={styles.dmTitle}>Bienvenue à bord !</Text>
             <Text style={styles.dmBody}>
@@ -722,7 +1254,7 @@ export default function SettingsScreen({ navigation }) {
         <View style={styles.dmBackdrop}>
           <View style={styles.dmCard}>
             <View style={styles.dmIconWrap}>
-              <Ionicons name="warning-outline" size={28} color="#EF4444" />
+              <Ionicons name="warning-outline" size={28} color={Colors.destructive} />
             </View>
             <Text style={styles.dmTitle}>Êtes-vous sûr ?</Text>
             <Text style={styles.dmBody}>
@@ -748,7 +1280,7 @@ export default function SettingsScreen({ navigation }) {
         <View style={styles.dmBackdrop}>
           <View style={[styles.dmCard, styles.dmCardFinal]}>
             <View style={styles.dmIconFinalWrap}>
-              <Ionicons name="skull-outline" size={28} color="#EF4444" />
+              <Ionicons name="skull-outline" size={28} color={Colors.destructive} />
             </View>
             <Text style={styles.dmTitle}>Confirmation finale</Text>
             <Text style={styles.dmBody}>
@@ -781,6 +1313,37 @@ export default function SettingsScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      <InfoModal
+        visible={!!infoModal}
+        icon={infoModal?.destructive ? 'alert-circle-outline' : 'information-circle-outline'}
+        title={infoModal?.title}
+        body={infoModal?.body}
+        destructive={infoModal?.destructive}
+        onClose={() => setInfoModal(null)}
+      />
+
+      <ConfirmModal
+        visible={logoutConfirmVisible}
+        icon="log-out-outline"
+        title="Déconnexion"
+        body="Tu vas être déconnecté."
+        confirmLabel="Déconnexion"
+        destructive
+        onConfirm={() => { setLogoutConfirmVisible(false); signOut(); }}
+        onCancel={() => setLogoutConfirmVisible(false)}
+      />
+
+      <ConfirmModal
+        visible={clearDebugConfirmVisible}
+        icon="trash-outline"
+        title="Effacer les logs DEBUG"
+        body="Les vraies séances restent intactes."
+        confirmLabel="Effacer"
+        destructive
+        onConfirm={confirmClearDebug}
+        onCancel={() => setClearDebugConfirmVisible(false)}
+      />
     </View>
   );
 }
@@ -819,11 +1382,27 @@ function SegBtn({ label, active, onPress }) {
   );
 }
 
-function DevSectionTitle({ title }) {
+// Section repliable de la console God Mode — chaque nouvel outil se range
+// dans une section existante ou en ouvre une nouvelle, sans jamais allonger
+// un mur de boutons toujours visible. `defaultOpen` réservé aux sections les
+// plus consultées (Progression) ; toutes les autres démarrent repliées.
+function DevSection({ title, icon, badge, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <View style={styles.devSectionRow}>
-      <Text style={styles.devSectionTitle}>{title}</Text>
-      <View style={styles.devSectionLine} />
+    <View style={styles.devSectionWrap}>
+      <TouchableOpacity style={styles.devSectionHeader} onPress={() => setOpen((v) => !v)} activeOpacity={0.75}>
+        <View style={styles.devSectionHeaderLeft}>
+          <Ionicons name={icon} size={13} color="rgba(255,215,0,0.65)" />
+          <Text style={styles.devSectionTitle}>{title.toUpperCase()}</Text>
+          {badge && (
+            <View style={styles.devSectionBadge}>
+              <Text style={styles.devSectionBadgeTxt}>{badge}</Text>
+            </View>
+          )}
+        </View>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color="rgba(255,215,0,0.5)" />
+      </TouchableOpacity>
+      {open && <View style={styles.devSectionBody}>{children}</View>}
     </View>
   );
 }
@@ -861,7 +1440,7 @@ function DevBtn({ label, onPress, disabled, variant = 'default', flex, fullWidth
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root:          { flex: 1, backgroundColor: '#080910' },
+  root:          { flex: 1, backgroundColor: Colors.bgAbyss },
   scroll:        { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 8 },
 
@@ -877,6 +1456,22 @@ const styles = StyleSheet.create({
   valueText:    { color: Colors.textMuted, fontSize: 14, fontWeight: '500' },
 
   segRow:        { flexDirection: 'row', gap: 6 },
+
+  // ── Parrainage ──
+  referralRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  referralCode: {
+    color: Colors.gold, fontSize: 14, fontWeight: '800', letterSpacing: 1.2,
+  },
+  referralShareBtn: {
+    width: 32, height: 32, borderRadius: 10,
+    backgroundColor: 'rgba(254,116,57,0.12)',
+    borderWidth: 1, borderColor: 'rgba(254,116,57,0.30)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  referralHint: {
+    color: Colors.textMuted, fontSize: 11, lineHeight: 16,
+    marginTop: 8, marginHorizontal: 4,
+  },
   seg:           { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: GRP_BDR, backgroundColor: 'rgba(255,255,255,0.04)' },
   segActive:     { backgroundColor: Colors.primary, borderColor: Colors.primary },
   segText:       { color: Colors.textSecondary, fontSize: 12, fontWeight: '700' },
@@ -887,10 +1482,15 @@ const styles = StyleSheet.create({
   themeItemSel:    { backgroundColor: 'rgba(255,255,255,0.07)', borderColor: 'rgba(255,255,255,0.25)' },
   themeItemLocked: { opacity: 0.35 },
   themeSwatch:     { width: 32, height: 32, borderRadius: 16, marginBottom: 5 },
-  themeCheck:      { position: 'absolute', top: 6, right: 6, width: 14, height: 14, borderRadius: 7, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#13131C' },
+  themeCheck:      { position: 'absolute', top: 6, right: 6, width: 14, height: 14, borderRadius: 7, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: Colors.bgDeep2 },
   themeLockOverlay:{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   themeLabel:      { color: Colors.textMuted, fontSize: 8, fontWeight: '600', textAlign: 'center' },
   themeLabelLocked:{ color: Colors.textMuted },
+  themeSpecialHint: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 6,
+    paddingHorizontal: 12, paddingBottom: 12, paddingTop: 2,
+  },
+  themeSpecialHintTxt: { flex: 1, color: Colors.textMuted, fontSize: 10.5, lineHeight: 14 },
 
   // ── God Mode console ───────────────────────────────────────────────────────
   devConsole: { marginTop: 10, backgroundColor: GOLD_BG, borderRadius: 16, borderWidth: 1, borderColor: GOLD_BDR, padding: 16, gap: 12 },
@@ -906,9 +1506,30 @@ const styles = StyleSheet.create({
   devStatValue: { color: Colors.textPrimary, fontSize: 16, fontWeight: '800' },
   devStatLabel: { color: Colors.textMuted, fontSize: 9, fontWeight: '600', marginTop: 2, letterSpacing: 0.5 },
 
-  devSectionRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
-  devSectionTitle:{ color: 'rgba(255,215,0,0.6)', fontSize: 9, fontWeight: '800', letterSpacing: 1.4 },
-  devSectionLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: GOLD_BDR },
+  devSectionWrap: {
+    marginTop: 10, borderRadius: 12, borderWidth: 1, borderColor: GOLD_BDR,
+    backgroundColor: 'rgba(0,0,0,0.2)', overflow: 'hidden',
+  },
+  devSectionHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 12, paddingVertical: 11,
+  },
+  devSectionHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  devSectionTitle:{ color: 'rgba(255,215,0,0.75)', fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
+  devSectionBadge: {
+    backgroundColor: 'rgba(254,116,57,0.18)', borderWidth: 1, borderColor: 'rgba(254,116,57,0.4)',
+    borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1,
+  },
+  devSectionBadgeTxt: { color: Colors.primary, fontSize: 9, fontWeight: '800' },
+  devSectionBody: { paddingHorizontal: 12, paddingBottom: 14, gap: 10 },
+  devSubDivider: { height: StyleSheet.hairlineWidth, backgroundColor: GOLD_BDR, marginVertical: 2 },
+  testTagBox: {
+    backgroundColor: 'rgba(254,116,57,0.10)',
+    borderWidth: 1, borderColor: 'rgba(254,116,57,0.35)',
+    borderRadius: 10, paddingVertical: 10, alignItems: 'center',
+  },
+  testTagLabel: { color: 'rgba(255,215,0,0.6)', fontSize: 9.5, fontWeight: '800', letterSpacing: 1 },
+  testTagValue: { color: Colors.primary, fontSize: 17, fontWeight: '800', marginTop: 3 },
 
   devInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   devInput: { flex: 1, height: 40, borderRadius: 10, borderWidth: 1, borderColor: GOLD_BDR, backgroundColor: 'rgba(0,0,0,0.35)', color: Colors.gold, fontSize: 15, fontWeight: '700', paddingHorizontal: 12 },
@@ -925,7 +1546,7 @@ const styles = StyleSheet.create({
   devBtnTextDestructive: { color: Colors.error },
   devBtnTextDim:         { color: Colors.textMuted },
   devBtnTextOrange:      { color: '#FF6B00' },
-  devBtnTextViolet:      { color: '#8B5CF6' },
+  devBtnTextViolet:      { color: Colors.rankViolet },
   devBtnTextDisabled:    { color: Colors.textMuted },
 
   devHint: { color: 'rgba(255,215,0,0.40)', fontSize: 10, fontWeight: '500', lineHeight: 14, marginTop: -4 },
@@ -984,16 +1605,16 @@ const styles = StyleSheet.create({
   // ── Welcome modal (fin tutoriel) ─────────────────────────────────────────────
   welcomeCard:    { borderColor: 'rgba(110,106,240,0.30)' },
   welcomeIconWrap:{ width: 64, height: 64, borderRadius: 20, backgroundColor: 'rgba(110,106,240,0.12)', borderWidth: 1, borderColor: 'rgba(110,106,240,0.30)', justifyContent: 'center', alignItems: 'center', marginBottom: 18 },
-  welcomeBtn:     { flexDirection: 'row', alignItems: 'center', width: '100%', height: 50, borderRadius: 13, backgroundColor: '#6E6AF0', justifyContent: 'center', marginBottom: 10, shadowColor: '#6E6AF0', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.40, shadowRadius: 12, elevation: 6 },
+  welcomeBtn:     { flexDirection: 'row', alignItems: 'center', width: '100%', height: 50, borderRadius: 13, backgroundColor: Colors.secondaryAccent, justifyContent: 'center', marginBottom: 10, shadowColor: Colors.secondaryAccent, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.40, shadowRadius: 12, elevation: 6 },
   welcomeBtnTxt:  { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
 
   // ── Delete Account button ────────────────────────────────────────────────────
   deleteAccountBtn:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12, paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(239,68,68,0.15)', backgroundColor: 'transparent' },
-  deleteAccountText: { color: '#FF4D4D', fontSize: 13, fontWeight: '600', opacity: 0.75 },
+  deleteAccountText: { color: Colors.error, fontSize: 13, fontWeight: '600', opacity: 0.75 },
 
   // ── Delete Account Modals ────────────────────────────────────────────────────
   dmBackdrop:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
-  dmCard:         { width: '100%', backgroundColor: '#13131C', borderRadius: 22, borderWidth: 1, borderColor: 'rgba(239,68,68,0.22)', padding: 28, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.65, shadowRadius: 32, elevation: 20 },
+  dmCard:         { width: '100%', backgroundColor: Colors.bgDeep2, borderRadius: 22, borderWidth: 1, borderColor: 'rgba(239,68,68,0.22)', padding: 28, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.65, shadowRadius: 32, elevation: 20 },
   dmCardFinal:    { borderColor: 'rgba(220,38,38,0.35)' },
   dmIconWrap:     { width: 60, height: 60, borderRadius: 18, backgroundColor: 'rgba(239,68,68,0.10)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)', justifyContent: 'center', alignItems: 'center', marginBottom: 18 },
   dmIconFinalWrap:{ width: 60, height: 60, borderRadius: 18, backgroundColor: 'rgba(220,38,38,0.14)', borderWidth: 1, borderColor: 'rgba(220,38,38,0.35)', justifyContent: 'center', alignItems: 'center', marginBottom: 18 },
@@ -1002,7 +1623,7 @@ const styles = StyleSheet.create({
   dmKeepBtn:      { flexDirection: 'row', alignItems: 'center', width: '100%', height: 50, borderRadius: 13, backgroundColor: Colors.primary, justifyContent: 'center', marginBottom: 10, shadowColor: Colors.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 6 },
   dmKeepTxt:      { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
   dmContinueBtn:  { width: '100%', height: 44, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
-  dmContinueTxt:  { color: '#EF4444', fontSize: 14, fontWeight: '600' },
+  dmContinueTxt:  { color: Colors.destructive, fontSize: 14, fontWeight: '600' },
   dmDestroyBtn:   { flexDirection: 'row', alignItems: 'center', width: '100%', height: 50, borderRadius: 13, backgroundColor: '#DC2626', justifyContent: 'center', marginBottom: 10, shadowColor: '#DC2626', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.45, shadowRadius: 12, elevation: 6 },
   dmDestroyTxt:   { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
   dmBackBtn:      { width: '100%', height: 44, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },

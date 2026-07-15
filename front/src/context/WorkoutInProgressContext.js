@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useCallback, useMemo } from 'react';
-import useWorkoutState from '../hooks/useWorkoutState';
+import { useWorkoutState } from '../hooks';
 import { useWorkoutLogs } from './WorkoutLogsContext';
 import { useQuests } from './QuestContext';
-import { buildLogFromWorkout, findNewPRsInLog } from '../services/stats.service';
+import { buildLogFromWorkout, findNewPRsInLog } from '../services';
 
 // Context global pour la séance en cours.
 // Centralise useWorkoutState : tous les écrans consomment le même état + actions

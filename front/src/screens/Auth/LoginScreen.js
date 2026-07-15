@@ -9,9 +9,10 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '../../constants/theme';
 import AuthInput from '../../components/inputs/AuthInput';
-import NotificationBanner from '../../components/common/NotificationBanner';
-import { login } from '../../services/auth.service';
+import { NotificationBanner } from '../../components/common';
+import { login, googleLogin } from '../../services';
 import { useAuth } from '../../context/AuthContext';
+import { useGoogleAuth } from '../../hooks';
 
 const LOGO_ORANGE = require('../../../assets/logo-orange.png');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -30,15 +31,52 @@ function FadeLoader() {
 
 export default function LoginScreen({ navigation }) {
   const { signIn } = useAuth();
+  const { isConfigured: googleConfigured, request: googleRequest, idToken, promptAsync } = useGoogleAuth();
 
   const [email, setEmail]               = useState('');
   const [password, setPassword]         = useState('');
   const [loading, setLoading]           = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe]     = useState(true);
   const [emailErr, setEmailErr]         = useState('');
   const [globalErr, setGlobalErr]       = useState('');
   const [errType, setErrType]           = useState('error');
+
+  // Dès que promptAsync() résout avec succès, useGoogleAuth expose l'idToken —
+  // on le transmet immédiatement au backend pour vérification et connexion.
+  useEffect(() => {
+    if (!idToken) return;
+    (async () => {
+      try {
+        setGoogleLoading(true);
+        setGlobalErr('');
+        const res = await googleLogin(idToken);
+        if (res?.token) {
+          await signIn(res.token, rememberMe);
+        }
+      } catch (error) {
+        const status = error?.status;
+        if (status >= 500) {
+          setErrType('info');
+          setGlobalErr('Une erreur est survenue, notre équipe est sur le coup.');
+        } else {
+          setErrType('error');
+          setGlobalErr('Connexion Google impossible. Réessaie.');
+        }
+      } finally {
+        setGoogleLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idToken]);
+
+  const handleGoogleLogin = async () => {
+    try { await promptAsync(); } catch (_) {
+      setErrType('error');
+      setGlobalErr('Connexion Google impossible. Réessaie.');
+    }
+  };
 
   const validateEmail = (val = email) => {
     if (!val)                { setEmailErr('Email requis');   return false; }
@@ -163,6 +201,24 @@ export default function LoginScreen({ navigation }) {
             <View style={s.dividerLine} />
           </View>
 
+          {googleConfigured && (
+            <TouchableOpacity
+              style={s.googleBtn}
+              onPress={handleGoogleLogin}
+              disabled={googleLoading || !googleRequest}
+              activeOpacity={0.82}
+            >
+              {googleLoading
+                ? <ActivityIndicator color={Colors.textPrimary} />
+                : (
+                  <>
+                    <Ionicons name="logo-google" size={18} color={Colors.textPrimary} style={{ marginRight: 10 }} />
+                    <Text style={s.googleBtnText}>Continuer avec Google</Text>
+                  </>
+                )}
+            </TouchableOpacity>
+          )}
+
           <View style={s.switchRow}>
             <Text style={s.switchLabel}>Pas encore de compte ? </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Register')}>
@@ -224,6 +280,15 @@ const s = StyleSheet.create({
   },
   dividerLine: { flex: 1, height: 1, backgroundColor: Colors.separator },
   dividerText: { color: Colors.textMuted, marginHorizontal: 12, fontSize: 12 },
+
+  googleBtn: {
+    flexDirection: 'row', height: 56, borderRadius: 14,
+    justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
+    marginBottom: 20,
+  },
+  googleBtnText: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
 
   switchRow: { flexDirection: 'row', justifyContent: 'center' },
   switchLabel: { color: Colors.textMuted, fontSize: 14 },

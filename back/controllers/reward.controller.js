@@ -2,6 +2,7 @@
 
 const User       = require('../models/User');
 const Friendship = require('../models/Friendship');
+const { LOCAL_TROPHY_IDS } = require('../data/localTrophyCatalog');
 
 // ─── Catalogue des trophées ───────────────────────────────────────────────────
 // Source de vérité unique. Chaque entrée décrit un trophée du jeu.
@@ -15,6 +16,13 @@ const ACHIEVEMENT_CATALOG = {
     description: "Vous avez renseigné votre date de naissance.",
     category:    'profile',
     hidden:      true,
+  },
+  BIRTHDAY_CELEBRATED: {
+    id:          'BIRTHDAY_CELEBRATED',
+    name:        'Fêter son anniversaire',
+    description: "Vous avez réclamé votre cadeau d'anniversaire sur Athly.",
+    category:    'profile',
+    hidden:      false,
   },
 
   // ── Collection (inventaire) ───────────────────────────────────────────────
@@ -54,6 +62,43 @@ const ACHIEVEMENT_CATALOG = {
     hidden:      false,
   },
 
+  // ── Coffres (paliers gradués) ─────────────────────────────────────────────
+  CHEST_1: {
+    id:          'CHEST_1',
+    name:        'Premier Trésor',
+    description: 'Vous avez ouvert votre premier coffre.',
+    category:    'collection',
+    hidden:      false,
+  },
+  CHEST_10: {
+    id:          'CHEST_10',
+    name:        'Chasseur de Coffres',
+    description: 'Vous avez ouvert 10 coffres.',
+    category:    'collection',
+    hidden:      false,
+  },
+  CHEST_50: {
+    id:          'CHEST_50',
+    name:        'Pilleur Aguerri',
+    description: 'Vous avez ouvert 50 coffres.',
+    category:    'collection',
+    hidden:      false,
+  },
+  CHEST_100: {
+    id:          'CHEST_100',
+    name:        'Maître du Butin',
+    description: 'Vous avez ouvert 100 coffres.',
+    category:    'collection',
+    hidden:      false,
+  },
+  CHEST_200: {
+    id:          'CHEST_200',
+    name:        'Seigneur des Coffres',
+    description: 'Vous avez ouvert 200 coffres.',
+    category:    'collection',
+    hidden:      false,
+  },
+
   // ── Social ────────────────────────────────────────────────────────────────
   FIRST_REFERRAL: {
     id:          'FIRST_REFERRAL',
@@ -69,6 +114,52 @@ const ACHIEVEMENT_CATALOG = {
     category:    'social',
     hidden:      false,
   },
+
+  // ── Lobby Multi (Section VII) ─────────────────────────────────────────────
+  FIRST_MULTI_SESSION: {
+    id:          'FIRST_MULTI_SESSION',
+    name:        'Duo de Choc',
+    description: "Vous avez terminé votre première séance en Multi.",
+    category:    'social',
+    hidden:      false,
+  },
+  MULTI_SQUAD_FULL: {
+    id:          'MULTI_SQUAD_FULL',
+    name:        'Escouade Complète',
+    description: "Vous avez terminé une séance en Multi à 5 athlètes.",
+    category:    'social',
+    hidden:      false,
+  },
+  MULTI_SESSIONS_5: {
+    id:          'MULTI_SESSIONS_5',
+    name:        'Entraînement en Duo',
+    description: "Vous avez terminé 5 séances en mode Multi.",
+    category:    'social',
+    hidden:      false,
+  },
+  MULTI_SESSIONS_30: {
+    id:          'MULTI_SESSIONS_30',
+    name:        "Frères d'Armes",
+    description: "Vous avez terminé 30 séances en mode Multi.",
+    category:    'social',
+    hidden:      false,
+  },
+
+  // ── Titres (Section X) ──────────────────────────────────────────────────────
+  TITLE_FIRST: {
+    id:          'TITLE_FIRST',
+    name:        'Nouvelle Identité',
+    description: "Vous avez débloqué votre premier titre.",
+    category:    'social',
+    hidden:      false,
+  },
+  TITLE_COLLECTOR_5: {
+    id:          'TITLE_COLLECTOR_5',
+    name:        'Homme aux Mille Visages',
+    description: "Vous avez débloqué 5 titres différents.",
+    category:    'social',
+    hidden:      false,
+  },
 };
 
 // Nombre total de trophées dans le catalogue (utile pour les stats)
@@ -80,6 +171,15 @@ function createError(message, statusCode = 400) {
   const err = new Error(message);
   err.statusCode = statusCode;
   return err;
+}
+
+// True si `date` tombe le même jour/mois que `birthdate`, quelle que soit l'année.
+// Comparaison en UTC pour rester déterministe indépendamment du fuseau du serveur.
+function isSameDayAndMonth(birthdate, date) {
+  return (
+    birthdate.getUTCDate()  === date.getUTCDate() &&
+    birthdate.getUTCMonth() === date.getUTCMonth()
+  );
 }
 
 // ─── checkAndUnlockAchievements ───────────────────────────────────────────────
@@ -110,8 +210,9 @@ async function checkAndUnlockAchievements(userId) {
     newlyUnlocked.push(achievementId);
   }
 
-  // ── Trophée anniversaire ───────────────────────────────────────────────────
+  // ── Trophées anniversaire ──────────────────────────────────────────────────
   if (user.isBirthdateSet) tryUnlock('BIRTHDAY_SET');
+  if (user.lastBirthdayRewardedYear != null) tryUnlock('BIRTHDAY_CELEBRATED');
 
   // ── Trophées de collection : 1 item par rareté dans l'inventaire ──────────
   const RARITY_ACHIEVEMENTS = {
@@ -126,6 +227,20 @@ async function checkAndUnlockAchievements(userId) {
     if (!unlockedIds.has(achievementId)) {
       const hasItem = user.inventory.some((i) => i.rarity === rarity && i.quantity > 0);
       if (hasItem) tryUnlock(achievementId);
+    }
+  }
+
+  // ── Trophées de coffres : paliers gradués sur totalChestsOpened ───────────
+  const CHEST_ACHIEVEMENTS = [
+    [1,   'CHEST_1'],
+    [10,  'CHEST_10'],
+    [50,  'CHEST_50'],
+    [100, 'CHEST_100'],
+    [200, 'CHEST_200'],
+  ];
+  for (const [threshold, achievementId] of CHEST_ACHIEVEMENTS) {
+    if (!unlockedIds.has(achievementId) && user.totalChestsOpened >= threshold) {
+      tryUnlock(achievementId);
     }
   }
 
@@ -145,6 +260,54 @@ async function checkAndUnlockAchievements(userId) {
       friendshipLevel: 5,
     });
     if (hasMaxFriend) tryUnlock('FRIENDSHIP_LEVEL_5');
+  }
+
+  // ── Lobby Multi (Section VII) ──────────────────────────────────────────────
+  if (!unlockedIds.has('FIRST_MULTI_SESSION') || !unlockedIds.has('MULTI_SQUAD_FULL')) {
+    // Require tardif : évite le cycle reward.controller ↔ workoutLobby.controller
+    // (celui-ci appelle déjà checkAndUnlockAchievements à la clôture du lobby).
+    const WorkoutLobby = require('../models/WorkoutLobby');
+
+    if (!unlockedIds.has('FIRST_MULTI_SESSION')) {
+      const hasCompletedMulti = await WorkoutLobby.exists({
+        status: 'completed',
+        'members.user': userId,
+      });
+      if (hasCompletedMulti) tryUnlock('FIRST_MULTI_SESSION');
+    }
+
+    if (!unlockedIds.has('MULTI_SQUAD_FULL')) {
+      const hasFullSquad = await WorkoutLobby.exists({
+        status: 'completed',
+        'members.user': userId,
+        memberCount: 5,
+      });
+      if (hasFullSquad) tryUnlock('MULTI_SQUAD_FULL');
+    }
+  }
+
+  // Trophées gradués sur le cumul de séances Multi terminées
+  // (totalMultiSessions, incrémenté dans workoutLobby.controller.js → finishLobby).
+  const MULTI_SESSION_ACHIEVEMENTS = [
+    [5,  'MULTI_SESSIONS_5'],
+    [30, 'MULTI_SESSIONS_30'],
+  ];
+  for (const [threshold, achievementId] of MULTI_SESSION_ACHIEVEMENTS) {
+    if (!unlockedIds.has(achievementId) && user.totalMultiSessions >= threshold) {
+      tryUnlock(achievementId);
+    }
+  }
+
+  // Trophées gradués sur le nombre de titres débloqués (Section X).
+  const TITLE_COUNT_ACHIEVEMENTS = [
+    [1, 'TITLE_FIRST'],
+    [5, 'TITLE_COLLECTOR_5'],
+  ];
+  const unlockedTitleCount = (user.unlockedTitles || []).length;
+  for (const [threshold, achievementId] of TITLE_COUNT_ACHIEVEMENTS) {
+    if (!unlockedIds.has(achievementId) && unlockedTitleCount >= threshold) {
+      tryUnlock(achievementId);
+    }
   }
 
   if (newlyUnlocked.length > 0) {
@@ -215,6 +378,76 @@ exports.setBirthdate = async (req, res, next) => {
       isBirthdateSet: true,
       chestKeyAdded:  true,
       newlyUnlocked,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// checkBirthday  POST /api/rewards/birthday/check
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * À appeler au login / au chargement de l'app.
+ *
+ * Si aujourd'hui est le jour de naissance de l'utilisateur et que le cadeau
+ * n'a pas encore été réclamé cette année civile :
+ *  - Octroie 1 CHEST_KEY (cadeau de bienvenue, prépare la Brique II).
+ *  - Débloque le trophée BIRTHDAY_CELEBRATED (prépare la Brique V).
+ *  - Marque `lastBirthdayRewardedYear` avec l'année en cours.
+ *
+ * Idempotent : rejouée plusieurs fois le même jour, la récompense n'est
+ * accordée qu'une seule fois (contrôle sur lastBirthdayRewardedYear).
+ */
+exports.checkBirthday = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return next(createError('Utilisateur introuvable.', 404));
+
+    if (!user.isBirthdateSet || !user.birthdate) {
+      return res.status(200).json({ success: true, isBirthday: false, rewarded: false });
+    }
+
+    const now = new Date();
+    const isBirthday = isSameDayAndMonth(user.birthdate, now);
+
+    if (!isBirthday) {
+      return res.status(200).json({ success: true, isBirthday: false, rewarded: false });
+    }
+
+    const currentYear = now.getUTCFullYear();
+    if (user.lastBirthdayRewardedYear === currentYear) {
+      return res.status(200).json({
+        success:   true,
+        isBirthday: true,
+        rewarded:  false,
+        pseudo:    user.pseudo || user.name || null,
+      });
+    }
+
+    // Cadeau de bienvenue : +1 CHEST_KEY
+    const existingKey = user.inventory.find((i) => i.itemType === 'CHEST_KEY');
+    if (existingKey) {
+      existingKey.quantity += 1;
+    } else {
+      user.inventory.push({ itemType: 'CHEST_KEY', rarity: 'common', quantity: 1 });
+    }
+    user.markModified('inventory');
+
+    user.lastBirthdayRewardedYear = currentYear;
+    await user.save();
+
+    // Déblocage des trophées (déclenche BIRTHDAY_CELEBRATED)
+    const newlyUnlocked = await checkAndUnlockAchievements(req.user.id);
+
+    return res.status(200).json({
+      success:       true,
+      isBirthday:    true,
+      rewarded:      true,
+      chestKeyAdded: true,
+      newlyUnlocked,
+      pseudo:        user.pseudo || user.name || null,
     });
   } catch (err) {
     next(err);
@@ -302,7 +535,56 @@ exports.checkAchievements = async (req, res, next) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// syncLocalAchievements  PUT /api/rewards/achievements/sync
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Synchronise les trophées du catalogue LOCAL (V1, évalués côté client depuis
+ * les logs de séances AsyncStorage) vers le compte backend, pour qu'ils
+ * apparaissent dans le profil public consulté par les amis.
+ *
+ * Body : { ids: string[] } — filtré contre l'allowlist LOCAL_TROPHY_IDS :
+ *  - Un id hors catalogue local (y compris un id du catalogue BACKEND, ex.
+ *    "FRIENDSHIP_LEVEL_5") est silencieusement ignoré — jamais auto-octroyé.
+ *  - Additif uniquement : ne retire jamais un trophée déjà synchronisé
+ *    (le client peut renvoyer un sous-ensemble sans effacer l'historique).
+ */
+exports.syncLocalAchievements = async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) {
+      return next(createError('ids doit être un tableau.', 400));
+    }
+
+    const user = await User.findById(req.user.id).select('achievements');
+    if (!user) return next(createError('Utilisateur introuvable.', 404));
+
+    const alreadyUnlocked = new Set(user.achievements.map((a) => a.achievementId));
+    const validIds  = ids.filter((id) => typeof id === 'string' && LOCAL_TROPHY_IDS.has(id));
+    const toAdd     = validIds.filter((id) => !alreadyUnlocked.has(id));
+    const ignored   = ids.filter((id) => !LOCAL_TROPHY_IDS.has(id));
+
+    if (toAdd.length > 0) {
+      await User.updateOne(
+        { _id: req.user.id },
+        { $push: { achievements: { $each: toAdd.map((achievementId) => ({ achievementId })) } } },
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      synced:  toAdd,
+      added:   toAdd.length,
+      ignored: ignored.length,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Exporté pour être importé depuis d'autres contrôleurs (openChest, acceptFriend…)
 exports.checkAndUnlockAchievements = checkAndUnlockAchievements;
 exports.ACHIEVEMENT_CATALOG        = ACHIEVEMENT_CATALOG;
 exports.CATALOG_SIZE               = CATALOG_SIZE;
+exports.isSameDayAndMonth          = isSameDayAndMonth;

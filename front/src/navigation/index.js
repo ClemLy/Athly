@@ -8,6 +8,7 @@ import { ActivityIndicator, View } from 'react-native';
 
 import AuthStack from './AuthStack';
 import BottomTabs from './BottomTabs';
+import { navigationRef } from './navigationRef';
 
 import { Colors } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
@@ -17,14 +18,43 @@ import { CustomExercisesProvider } from '../context/CustomExercisesContext';
 import { QuestProvider } from '../context/QuestContext';
 import { UserProvider } from '../context/UserContext';
 import { TutorialProvider } from '../context/TutorialContext';
-import { setupNotificationChannels } from '../services/notificationService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setupNotificationChannels, ensureDailyRemindersScheduled, getExpoPushToken } from '../services';
+import { registerPushToken } from '../services';
+import BirthdayCelebration from '../components/profile/BirthdayCelebration';
+import LevelUpCelebration from '../components/profile/LevelUpCelebration';
+import ActivityFeedModal from '../components/social/ActivityFeedModal';
+import WeightReminderCheck from '../components/stats/WeightReminderCheck';
+import LobbyInviteCheck from '../components/workouts/LobbyInviteCheck';
+
+const NOTIF_ENABLED_KEY = 'athly:notif:enabled:v1';
 
 export default function AppNavigator() {
   const { userToken, isLoading } = useAuth();
 
   useEffect(() => {
     setupNotificationChannels();
+    (async () => {
+      try {
+        const enabled = await AsyncStorage.getItem(NOTIF_ENABLED_KEY);
+        if (enabled === 'true') await ensureDailyRemindersScheduled();
+      } catch (_) {}
+    })();
   }, []);
+
+  // Enregistre le token Expo Push auprès du backend une fois connecté — c'est
+  // ce qui permet aux notifications d'un AUTRE appareil (Secouer, réactions
+  // du flux d'activité) d'atteindre réellement celui-ci. Best-effort : un
+  // échec (permission refusée, web, hors ligne) ne bloque jamais l'app.
+  useEffect(() => {
+    if (!userToken) return;
+    (async () => {
+      const token = await getExpoPushToken();
+      if (token) {
+        try { await registerPushToken(token); } catch (_) {}
+      }
+    })();
+  }, [userToken]);
 
   if (isLoading) {
     return (
@@ -40,14 +70,23 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <TutorialProvider>
         <UserProvider>
           <WorkoutLogsProvider>
             <SavedWorkoutsProvider>
               <CustomExercisesProvider>
                 <QuestProvider>
-                  {userToken === null ? <AuthStack /> : <BottomTabs />}
+                  {userToken === null ? <AuthStack /> : (
+                    <>
+                      <BirthdayCelebration />
+                      <LevelUpCelebration />
+                      <ActivityFeedModal />
+                      <WeightReminderCheck />
+                      <LobbyInviteCheck />
+                      <BottomTabs />
+                    </>
+                  )}
                 </QuestProvider>
               </CustomExercisesProvider>
             </SavedWorkoutsProvider>

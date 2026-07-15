@@ -25,6 +25,9 @@ const InventoryItemSchema = new mongoose.Schema(
         "QUINTUPLE_XP",        // Boost Quintuple XP
         "LEVEL_COUPON",        // Coupon de niveau     : +1 level
         "CHEST_KEY",           // Clé de coffre        : ouvre un coffre
+        "PROFILE_FRAME_BLOOD_BOND", // Cadre cosmétique Unique — niveau d'amitié 5, hors coffres
+        "FRAME_COLOR_BLOOD_SANG",   // Couleur cosmétique Unique — streak groupe 30j à 5 membres, hors coffres
+        "THEME_UNLOCK_BLOOD_SANG",  // Thème cosmétique Unique — 100 coffres ouverts, hors coffres
       ],
     },
     rarity: {
@@ -43,6 +46,30 @@ const UserSchema = new mongoose.Schema(
     // ── Identité ──────────────────────────────────────────────────────────────
     pseudo: { type: String, trim: true },
     name:   { type: String, trim: true }, // conservé pour rétrocompatibilité V1
+
+    // Tag numérique façon Discord (Section III) : "Pseudo#1234". Le pseudo
+    // seul reste libre/non-unique (affiché partout dans l'app) — c'est le
+    // COMBO { pseudo, discriminator } qui doit être unique, pour permettre
+    // l'ajout d'ami sans ambiguïté (voir uniqueDiscriminator dans
+    // auth.service.js et la recherche exacte dans friend.controller.js).
+    // Optionnel au niveau schéma (comptes antérieurs à cette fonctionnalité,
+    // backfillés lazily — voir user.service.js → getUserProfile) : l'index
+    // unique ci-dessous n'agit que sur les documents qui en ont déjà un.
+    discriminator: { type: String, match: /^\d{4}$/ },
+
+    // ── Google OAuth (Section VIII) ───────────────────────────────────────────
+    // `sub` (identifiant unique Google) du compte lié, si connecté via
+    // "Se connecter avec Google" — voir auth.service.js → googleLogin.
+    // null pour tous les comptes email/mot de passe classiques.
+    googleId: { type: String, unique: true, sparse: true },
+
+    // ── Compte de test God Mode (Section VII) ─────────────────────────────────
+    // true uniquement pour les coéquipiers factices créés par
+    // simulateLobbyInvite (debug.controller.js) — leur statut de Lobby Multi
+    // est auto-progressé en miroir du vôtre (voir workoutLobby.controller.js),
+    // pour tester le flux complet en solo sans second appareil.
+    isTestBot: { type: Boolean, default: false },
+
     email: {
       type:      String,
       required:  [true, "L'e-mail est obligatoire"],
@@ -65,6 +92,9 @@ const UserSchema = new mongoose.Schema(
     // ── Profil physique ───────────────────────────────────────────────────────
     birthdate:      { type: Date },
     isBirthdateSet: { type: Boolean, default: false }, // verrouille la modif après 1ère saisie
+    // Année (calendaire) où le cadeau d'anniversaire ("jour J") a été réclamé.
+    // Empêche de le réclamer plusieurs fois la même année. null = jamais fêté.
+    lastBirthdayRewardedYear: { type: Number, default: null },
     age:            { type: Number },
     sexe:           { type: String, enum: ["H", "F", "Autre"] },
     poids:          { type: Number },
@@ -114,6 +144,66 @@ const UserSchema = new mongoose.Schema(
     // Cumul des minutes de séance — débloque des coffres à certains paliers
     totalWorkoutMinutes: { type: Number, default: 0, min: 0 },
 
+    // Cumul du nombre de coffres ouverts (openChest) — indépendant des minutes
+    // de séance : sert de condition de déblocage (trophées gradués, thème
+    // cosmétique Rouge Sang Unique à 100 coffres).
+    totalChestsOpened: { type: Number, default: 0, min: 0 },
+
+    // Cumul du nombre de séances Multi terminées (lobby passé 'completed',
+    // voir workoutLobby.controller.js → finishLobby) — condition des trophées
+    // gradués MULTI_SESSIONS_5 / MULTI_SESSIONS_30 (reward.controller.js).
+    totalMultiSessions: { type: Number, default: 0, min: 0 },
+
+    // ── Titres déblocables (Section X) ────────────────────────────────────────
+    // IDs débloqués (voir data/titleCatalog.js pour le catalogue complet) et
+    // titre actuellement affiché sous le pseudo — équipable uniquement parmi
+    // les IDs présents dans unlockedTitles (voir title.controller.js).
+    unlockedTitles: { type: [String], default: [] },
+    equippedTitle:  { type: String, default: null },
+
+    // Compteurs dédiés aux conditions de titres qui ne se déduisent pas d'une
+    // requête ponctuelle (voir checkAndUnlockTitles dans title.controller.js) :
+    //  - totalShakesSent           : nombre total de fois où CET utilisateur a
+    //    secoué quelqu'un (bouton "Secouer", tous groupes confondus).
+    //  - totalSetsCompleted        : cumul des séries validées, toutes séances
+    //    confondues (incrémenté à la clôture backend d'une séance).
+    //  - consecutiveStreakGelSaves : nombre de fois D'AFFILÉE où un Gel de
+    //    Streak a sauvé sa streak personnelle sans rupture intercalée (remis à
+    //    0 dès qu'une rupture NON couverte par un gel survient — voir
+    //    detectAndApplyStreakBreak dans groupStreak.controller.js).
+    totalShakesSent:           { type: Number, default: 0, min: 0 },
+    totalSetsCompleted:        { type: Number, default: 0, min: 0 },
+    consecutiveStreakGelSaves: { type: Number, default: 0, min: 0 },
+
+    // Cosmétiques Uniques définitivement débloqués (réclamés depuis
+    // l'inventaire — voir inventory.controller.js → claimUniqueItem).
+    // Clés libres du catalogue front (BorderPicker.js / profileThemes.js) :
+    // ex. "FRAME_SHAPE_DRAGONFANG", "FRAME_COLOR_BLOODSANG", "THEME_BLOODSANG".
+    unlockedCosmetics: { type: [String], default: [] },
+
+    // ── Onboarding / Tutoriel interactif ──────────────────────────────────────
+    // Passe à true quand l'utilisateur termine (ou passe) le tutoriel interactif.
+    // Doublé côté client dans AsyncStorage (source immédiate du déclenchement),
+    // ce flag backend est la vérité inter-appareils : une réinstallation ou une
+    // connexion sur un nouvel appareil ne re-déclenche pas le tutoriel
+    // (voir TutorialContext.js → reconcileWithServer).
+    hasCompletedOnboarding: { type: Boolean, default: false },
+
+    // ── Présence & notifications push ─────────────────────────────────────────
+    // Token Expo Push (ExponentPushToken[...]) enregistré par le front après
+    // acceptation des permissions — voir push.service.js. null = aucun appareil
+    // enregistré (l'envoi est alors silencieusement ignoré, jamais une erreur).
+    pushToken: { type: String, default: null },
+
+    // Dernière activité connue (requête authentifiée quelconque) — alimente le
+    // statut "Prêt" de la Météo des séances (voir groupStreak.controller.js).
+    lastActiveAt: { type: Date, default: null },
+
+    // Dernière consultation du flux d'activité "Taquineries & High-Fives" —
+    // sert de curseur pour ne remonter que les événements nouveaux au
+    // lancement de l'app (voir activity.controller.js).
+    lastActivityFeedCheckAt: { type: Date, default: null },
+
     // ── Parrainage V2 ─────────────────────────────────────────────────────────
     // Code unique généré à la création du compte (ex: "ATH-X7K2P")
     referralCode: { type: String, unique: true, sparse: true },
@@ -124,6 +214,28 @@ const UserSchema = new mongoose.Schema(
     // ── Trophées / Succès V2 ─────────────────────────────────────────────────
     // Tableau des trophées débloqués. Le catalogue complet vit dans reward.controller.js.
     achievements: { type: [AchievementEntrySchema], default: [] },
+
+    // Trophées mis en avant sur le profil public (max 3, contrôlé par Joi côté
+    // validateur). Peut référencer un id du catalogue backend OU du miroir
+    // local (LOCAL_TROPHY_CATALOG) — voir user.service.js → updateShowcase.
+    showcasedAchievements: { type: [String], default: [] },
+
+    // ── Records d'exercices mis en avant (Section III) ────────────────────────
+    // Noms d'exercices (max 6, contrôlé par Joi côté validateur) choisis par
+    // l'utilisateur pour son profil — remplace l'ancien top-5 automatique par
+    // poids max, affiché identiquement sur son propre profil et son profil
+    // public vu par ses amis (voir getFriendProfile dans friend.controller.js).
+    showcasedRecords: { type: [String], default: [] },
+
+    // ── Cadre de profil équipé ─────────────────────────────────────────────────
+    // Synchronisé depuis le choix local (useAvatarFrame.js) pour que les amis
+    // voient le même cadre sur le profil public. shapeId/colorId sont des clés
+    // libres du catalogue front (BorderPicker.js) — pas d'enum ici pour ne pas
+    // dupliquer/figer ce catalogue côté backend.
+    equippedFrame: {
+      shapeId: { type: String, default: 'circle', maxlength: 40, trim: true },
+      colorId: { type: String, default: 'none',   maxlength: 40, trim: true },
+    },
   },
   { timestamps: true }
 );
@@ -132,5 +244,19 @@ const UserSchema = new mongoose.Schema(
 // email       : index unique déclaré inline (options du champ)
 // referralCode: index unique + sparse déclaré inline (options du champ)
 //               sparse = tolérance aux anciens documents V1 sans code
+
+// Combo { pseudo, discriminator } unique — insensible à la casse (collation).
+// partialFilterExpression : n'applique la contrainte qu'aux documents qui ONT
+// déjà un discriminator, pour ne jamais bloquer les comptes pré-migration
+// (potentiellement plusieurs pseudos identiques sans discriminator) tant
+// qu'ils n'ont pas été backfillés (voir getUserProfile / scripts/backfillDiscriminators.js).
+UserSchema.index(
+  { pseudo: 1, discriminator: 1 },
+  {
+    unique: true,
+    collation: { locale: "en", strength: 2 },
+    partialFilterExpression: { discriminator: { $type: "string" } },
+  }
+);
 
 module.exports = mongoose.model("User", UserSchema);

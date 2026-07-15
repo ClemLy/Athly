@@ -30,7 +30,7 @@ export const TEMPLATES = [
     name: 'Séance Push',
     description: 'Pectoraux, épaules, triceps',
     musclesSummary: 'Pectoraux • Triceps • Épaules',
-    icon: '💪',
+    icon: 'barbell-outline',
     estimatedDurationMin: 75,
     buildExercises: () => [
       buildExercise({
@@ -96,7 +96,7 @@ export const TEMPLATES = [
     name: 'Séance Pull',
     description: 'Dos, biceps, trapèzes',
     musclesSummary: 'Dos • Biceps • Trapèzes',
-    icon: '💪',
+    icon: 'fitness-outline',
     estimatedDurationMin: 70,
     buildExercises: () => [
       buildExercise({
@@ -155,7 +155,7 @@ export const TEMPLATES = [
     name: 'Séance Jambes',
     description: 'Quadriceps, ischios, fessiers',
     musclesSummary: 'Quadriceps • Ischios • Fessiers',
-    icon: '🦵',
+    icon: 'walk-outline',
     estimatedDurationMin: 80,
     buildExercises: () => [
       buildExercise({
@@ -173,7 +173,7 @@ export const TEMPLATES = [
         videoQuery: 'soulevé de terre roumain',
       }),
       buildExercise({
-        name: 'Presse à cuisses',
+        name: 'Leg Press',
         targetMuscle: 'Quadriceps',
         secondaryMuscles: ['Fessiers'],
         equipment: ['Machine'],
@@ -207,7 +207,7 @@ export const TEMPLATES = [
     name: 'Full body',
     description: 'Tout le corps en une séance',
     musclesSummary: 'Pectoraux • Dos • Jambes • Bras',
-    icon: '🔥',
+    icon: 'flame-outline',
     estimatedDurationMin: 60,
     buildExercises: () => [
       buildExercise({

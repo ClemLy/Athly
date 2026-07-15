@@ -18,7 +18,7 @@ const INTENSITY_COLOR = {
   1: '#4D2718',   // léger
   2: '#85391E',
   3: '#C44C24',
-  4: '#FE7439',   // plein
+  4: Colors.primary,   // plein
 };
 
 function monthLabelFor(dateKey) {

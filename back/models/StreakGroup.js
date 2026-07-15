@@ -31,6 +31,37 @@ const StreakGroupSchema = new mongoose.Schema(
     // Dernier jour où tous les membres ont validé une séance.
     // null = groupe créé mais aucune journée validée encore.
     lastValidatedDate: { type: Date, default: null },
+
+    // Garde d'octroi unique : passe à true la première fois que ce groupe
+    // atteint 30 jours de streak à 5 membres (récompense cosmétique "Rouge
+    // Sang Unique"). Ne redescend jamais, même si la streak est ensuite
+    // remise à 0 — évite un ré-octroi si le groupe rebâtit une streak.
+    bloodSangAwarded: { type: Boolean, default: false },
+
+    // Hall of Shame (Section IV) : membre(s) responsables de la dernière
+    // rupture de streak collective détectée (voir detectAndApplyStreakBreak
+    // dans groupStreak.controller.js). Vidé dès qu'une nouvelle streak est
+    // validée avec succès — reste affiché jusque-là.
+    shameBreakers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+
+    // Horodatage du dernier envoi au Hall of Shame — condition du titre
+    // SHAME_REPENTANCE ("sortir du Hall of Shame en validant sa séance moins
+    // de 2h après y avoir été affiché", voir title.controller.js). Un seul
+    // timestamp pour tout le batch de breakers : ils sont détectés au même
+    // instant par detectAndApplyStreakBreak.
+    shameBreakersShamedAt: { type: Date, default: null },
+
+    // Historique des secousses (bouton "Secouer") — limite chaque paire
+    // (from, to) à 1 secousse par jour civil, et permet au front de griser
+    // le bouton pour les membres déjà secoués aujourd'hui (voir shakeMember
+    // et getMyGroup dans groupStreak.controller.js).
+    shakes: [
+      {
+        from: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        to:   { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        date: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true }
 );

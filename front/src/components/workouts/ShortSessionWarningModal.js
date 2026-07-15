@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
-    backgroundColor: '#13131C',
+    backgroundColor: Colors.bgDeep2,
     borderRadius: 24,
     borderWidth: 1,
     borderColor: 'rgba(255,77,77,0.28)',
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     paddingTop: 32,
     paddingBottom: 28,
     alignItems: 'center',
-    shadowColor: '#FF4D4D',
+    shadowColor: Colors.error,
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.25,
     shadowRadius: 28,

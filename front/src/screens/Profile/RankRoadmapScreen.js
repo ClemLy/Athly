@@ -10,7 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../constants/theme';
-import { getRank, xpToLevel } from '../../services/stats.service';
+import { xpToLevel } from '../../services';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import { FRAME_DEFS } from '../../components/profile/AvatarFrame';
 
@@ -22,7 +22,7 @@ const RANKS = [
     levelRange: '0 – 10',
     minLevel: 0,
     maxLevel: 10,
-    color: '#FE7439',
+    color: Colors.primary,
     gradientColors: ['#431A08', '#7C2D12'],
     frameId: 'none',
     perks: [
@@ -44,6 +44,7 @@ const RANKS = [
     perks: [
       'Cadre Bronze débloqué (Niv. 11)',
       'Forme Hexagone débloquée (Niv. 11)',
+      'Inventaire débloqué : coffres à ouvrir en cumulant tes séances',
     ],
     icon: 'ribbon',
   },
@@ -52,7 +53,7 @@ const RANKS = [
     levelRange: '31 – 50',
     minLevel: 31,
     maxLevel: 50,
-    color: '#22C55E',
+    color: Colors.valid,
     gradientColors: ['#052E16', '#14532D'],
     frameId: 'silver',
     perks: [
@@ -81,7 +82,7 @@ const RANKS = [
     levelRange: '71 – 90',
     minLevel: 71,
     maxLevel: 90,
-    color: '#6E6AF0',
+    color: Colors.secondaryAccent,
     gradientColors: ['#1E1B4B', '#2E2A7A'],
     frameId: 'warrior',
     perks: [
@@ -95,7 +96,7 @@ const RANKS = [
     levelRange: '91 – 110',
     minLevel: 91,
     maxLevel: 110,
-    color: '#6E6AF0',
+    color: Colors.secondaryAccent,
     gradientColors: ['#0F0F1A', '#1C1C38'],
     frameId: 'elite',
     perks: [
@@ -110,7 +111,7 @@ const RANKS = [
     levelRange: '111 – 140',
     minLevel: 111,
     maxLevel: 140,
-    color: '#8B5CF6',
+    color: Colors.rankViolet,
     gradientColors: ['#2E1065', '#4C1D95'],
     frameId: 'master',
     perks: [
@@ -124,7 +125,7 @@ const RANKS = [
     levelRange: '141 – 170',
     minLevel: 141,
     maxLevel: 170,
-    color: '#A855F7',
+    color: Colors.rankPurple,
     gradientColors: ['#3B0764', '#581C87'],
     frameId: 'grandmaster',
     perks: [
@@ -138,7 +139,7 @@ const RANKS = [
     levelRange: '171 – 199',
     minLevel: 171,
     maxLevel: 199,
-    color: '#C084FC',
+    color: Colors.legendAccent,
     gradientColors: ['#4A044E', '#701A75'],
     frameId: 'legend',
     perks: [
@@ -155,7 +156,7 @@ const RANKS = [
     levelRange: 'Niv. 200',
     minLevel: 200,
     maxLevel: 200,
-    color: '#FFD700',
+    color: Colors.gold,
     gradientColors: ['#431407', '#78350F'],
     frameId: 'god',
     perks: [

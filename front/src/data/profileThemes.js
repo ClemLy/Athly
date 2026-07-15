@@ -2,6 +2,8 @@
 // Each theme overrides accentColor, glow, shimmer and background variant.
 // unlockLevel: minimum level required to pick this theme (God Mode bypasses).
 
+import { Colors } from '../constants/theme';
+
 export const PROFILE_THEMES = [
   {
     id: 'auto',
@@ -124,12 +126,31 @@ export const PROFILE_THEMES = [
     hasGlow: true,
     bgVariant: 'god',
   },
+  {
+    // Cosmétique Unique — débloqué en réclamant l'item THEME_UNLOCK_BLOOD_SANG
+    // (100 coffres ouverts), jamais par le niveau : unlockLevel n'est là que
+    // pour rester cohérent avec le tri, `requiresCosmetic` prime toujours
+    // (voir isThemeLocked et SettingsScreen.js).
+    id: 'blood_sang',
+    name: 'Rouge Sang',
+    description: 'Cramoisi + lueur sang · 100 coffres',
+    unlockLevel: 0,
+    requiresCosmetic: 'THEME_BLOODSANG',
+    requiresChests: 100, // pour le texte de progression avant réclamation
+    accentColor: Colors.uniqueBloodBright,
+    glowColor: Colors.uniqueBloodGlow,
+    shimmer: true,
+    hasGlow: true,
+    bgVariant: 'blood',
+  },
 ];
 
 export function getTheme(id) {
   return PROFILE_THEMES.find((t) => t.id === id) || PROFILE_THEMES[0];
 }
 
-export function isThemeLocked(theme, playerLevel) {
+// unlockedCosmetics : tableau des flags backend (user.unlockedCosmetics).
+export function isThemeLocked(theme, playerLevel, unlockedCosmetics = []) {
+  if (theme.requiresCosmetic) return !unlockedCosmetics.includes(theme.requiresCosmetic);
   return playerLevel < theme.unlockLevel;
 }

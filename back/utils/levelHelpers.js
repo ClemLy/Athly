@@ -30,4 +30,25 @@ function levelFromXP(totalXP) {
   return level;
 }
 
-module.exports = { xpForLevel, levelFromXP };
+// Correspondance niveau → rang (ordre décroissant : premier match gagné).
+// Source de vérité unique — utilisée partout où le rang doit être recalculé
+// après un changement de niveau (coffres, bonus de groupe, coupon, debug).
+const RANK_THRESHOLDS = [
+  { min: 200, rank: 'ATHLY GOD'    },
+  { min: 171, rank: 'Légende'      },
+  { min: 141, rank: 'Grand Maître' },
+  { min: 111, rank: 'Maître'       },
+  { min:  91, rank: 'Élite'        },
+  { min:  71, rank: 'Warrior'      },
+  { min:  51, rank: 'Compétiteur'  },
+  { min:  31, rank: 'Athlète'      },
+  { min:  11, rank: 'Initié'       },
+  { min:   1, rank: 'Novice'       },
+];
+
+function getRankForLevel(level) {
+  const match = RANK_THRESHOLDS.find((t) => level >= t.min);
+  return match ? match.rank : 'Novice';
+}
+
+module.exports = { xpForLevel, levelFromXP, getRankForLevel, MAX_LEVEL };

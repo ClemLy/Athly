@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   FlatList,
-  Alert,
   Modal,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,6 +18,10 @@ import { instantiateSavedWorkout } from '../../services/savedWorkouts.service';
 import { useFocusEffect } from '@react-navigation/native';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
+import MultiLobbyModal from '../../components/workouts/MultiLobbyModal';
+import ConfirmModal from '../../components/common/ConfirmModal';
+import InfoModal from '../../components/common/InfoModal';
+import ActionSheetModal from '../../components/common/ActionSheetModal';
 
 // Page d'entrée "Séances".
 // Header : titre + 2 icônes (Mes exercices, Créer un exercice).
@@ -32,7 +35,7 @@ function TemplateCard({ template, onPress }) {
       activeOpacity={0.85}
     >
       <View style={styles.iconBox}>
-        <Text style={styles.icon}>{template.icon}</Text>
+        <Ionicons name={template.icon} size={22} color={Colors.primary} />
       </View>
       <View style={styles.content}>
         <Text style={styles.title} numberOfLines={1}>{template.name}</Text>
@@ -88,12 +91,33 @@ function SavedWorkoutCard({ saved, onPress, onLongPress }) {
 
 const SKIP_CONFIRM_KEY = '@athly_skip_workout_confirm';
 
-export default function WorkoutListScreen({ navigation }) {
+export default function WorkoutListScreen({ navigation, route }) {
   const { loadWorkout } = useWorkoutInProgress();
   const { items: savedWorkouts, remove: removeSaved } = useSavedWorkouts();
 
   const [confirmItem, setConfirmItem] = useState(null); // { type: 'template'|'saved', data }
   const [dontAsk, setDontAsk] = useState(false);
+
+  // ─── Lancement en Multi (Section VII) ────────────────────────────────────
+  const [multiLobbyVisible, setMultiLobbyVisible] = useState(false);
+  // Non-null uniquement quand on arrive en rejoignant une invitation reçue
+  // (voir LobbyInviteCheck) — sinon MultiLobbyModal crée un lobby neuf.
+  const [existingLobbyId, setExistingLobbyId] = useState(null);
+
+  // Invitation acceptée depuis la notification (LobbyInviteCheck → navigate) :
+  // ouvre directement MultiLobbyModal en mode "rejoindre" au lieu du parcours
+  // normal (choisir une séance → Lancer en Multi).
+  useEffect(() => {
+    const pendingLobbyId = route?.params?.pendingLobbyId;
+    if (!pendingLobbyId) return;
+    setExistingLobbyId(pendingLobbyId);
+    setMultiLobbyVisible(true);
+    navigation?.setParams({ pendingLobbyId: undefined });
+  }, [route?.params?.pendingLobbyId, navigation]);
+
+  const [deleteSavedTarget, setDeleteSavedTarget] = useState(null);
+  const [actionSheetTarget, setActionSheetTarget] = useState(null);
+  const [errorInfo, setErrorInfo] = useState(null);
 
   // ─── Tutorial ─────────────────────────────────────────────────────────────
   const { pendingChapterId, activeChapterId, startChapter, registerScrollRef, registerRemeasure } = useTutorial();
@@ -158,24 +182,54 @@ export default function WorkoutListScreen({ navigation }) {
 
   const handleCancelConfirm = useCallback(() => setConfirmItem(null), []);
 
-  const onLongPressSaved = useCallback((saved) => {
-    Alert.alert(
-      saved.name,
-      'Que faire avec cette séance ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: async () => {
-            try { await removeSaved(saved.id); } catch (e) {
-              Alert.alert('Erreur', e && e.message ? e.message : 'Suppression impossible');
-            }
-          },
-        },
-      ],
-    );
-  }, [removeSaved]);
+  // "Lancer en Multi" — garde confirmItem pour savoir quelle séance
+  // instancier une fois le lobby actif (voir MultiLobbyModal → onReady).
+  const handleLaunchMulti = useCallback(() => {
+    setExistingLobbyId(null);
+    setMultiLobbyVisible(true);
+  }, []);
+
+  const handleMultiReady = useCallback((lobbyId) => {
+    setMultiLobbyVisible(false);
+    setExistingLobbyId(null);
+    if (!navigation) return;
+    // Cas normal : une séance a été choisie avant "Lancer en Multi". Cas
+    // invitation acceptée (pas de confirmItem, on a rejoint via notification) :
+    // on instancie un template par défaut — chacun gère ses propres
+    // séries/poids côté client, la séance en elle-même n'a pas besoin d'être
+    // identique entre les membres.
+    const workout = !confirmItem
+      ? instantiateWorkout(TEMPLATES[0])
+      : confirmItem.type === 'template'
+        ? instantiateWorkout(confirmItem.data)
+        : instantiateSavedWorkout(confirmItem.data);
+    if (!workout) return;
+    loadWorkout(workout);
+    navigation.navigate('Workout', { workout, lobbyId });
+    setConfirmItem(null);
+  }, [confirmItem, navigation, loadWorkout]);
+
+  const onLongPressSaved = useCallback((saved) => setActionSheetTarget(saved), []);
+
+  // "Modifier" route vers l'écran de création d'ORIGINE de la séance, pour que
+  // l'interface d'édition soit rigoureusement identique à celle de création :
+  // WorkoutBuilder pour toute séance sur-mesure (isManual: false), même une
+  // séance ancienne créée avant l'ajout du champ criteria (elle rouvrira alors
+  // l'écran sur-mesure avec des critères vierges plutôt qu'un éditeur différent) ;
+  // ManualWorkoutCreator uniquement pour les séances explicitement manuelles.
+  const onEditSaved = useCallback((saved) => {
+    if (!navigation) return;
+    const target = saved.isManual ? 'ManualWorkoutCreator' : 'WorkoutBuilder';
+    navigation.navigate(target, { editWorkout: saved });
+  }, [navigation]);
+
+  const confirmDeleteSaved = useCallback(async () => {
+    const saved = deleteSavedTarget;
+    setDeleteSavedTarget(null);
+    try { await removeSaved(saved.id); } catch (e) {
+      setErrorInfo(e && e.message ? e.message : 'Suppression impossible');
+    }
+  }, [deleteSavedTarget, removeSaved]);
 
   const onOpenBuilder = useCallback(() => {
     if (navigation) navigation.navigate('WorkoutBuilder');
@@ -333,9 +387,50 @@ export default function WorkoutListScreen({ navigation }) {
                 <Text style={styles.confirmBtnYesText}>Lancer !</Text>
               </TouchableOpacity>
             </View>
+
+            <TouchableOpacity style={styles.multiBtn} onPress={handleLaunchMulti} activeOpacity={0.8}>
+              <Ionicons name="people" size={15} color={Colors.primary} style={{ marginRight: 7 }} />
+              <Text style={styles.multiBtnTxt}>Lancer en Multi</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
+
+      <MultiLobbyModal
+        visible={multiLobbyVisible}
+        existingLobbyId={existingLobbyId}
+        onClose={() => { setMultiLobbyVisible(false); setExistingLobbyId(null); }}
+        onReady={handleMultiReady}
+      />
+
+      <ActionSheetModal
+        visible={!!actionSheetTarget}
+        title={actionSheetTarget?.name}
+        options={[
+          { label: 'Modifier', onPress: () => onEditSaved(actionSheetTarget) },
+          { label: 'Supprimer', destructive: true, onPress: () => setDeleteSavedTarget(actionSheetTarget) },
+        ]}
+        onClose={() => setActionSheetTarget(null)}
+      />
+
+      <ConfirmModal
+        visible={!!deleteSavedTarget}
+        icon="trash-outline"
+        title={deleteSavedTarget?.name ?? 'Supprimer'}
+        body="Que faire avec cette séance ? La supprimer est irréversible."
+        confirmLabel="Supprimer"
+        destructive
+        onConfirm={confirmDeleteSaved}
+        onCancel={() => setDeleteSavedTarget(null)}
+      />
+      <InfoModal
+        visible={!!errorInfo}
+        icon="alert-circle-outline"
+        title="Erreur"
+        body={errorInfo}
+        destructive
+        onClose={() => setErrorInfo(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -606,4 +701,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
   },
+  multiBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    height: 42, borderRadius: 12, marginTop: 10,
+    borderWidth: 1, borderColor: `${Colors.primary}40`,
+    backgroundColor: `${Colors.primary}12`,
+  },
+  multiBtnTxt: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
 });

@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useCallback, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TUTORIAL_CHAPTERS, CHAPTER_MAP, CHAPTER_IDS } from '../data/tutorialChapters';
+import { CHAPTER_MAP, CHAPTER_IDS } from '../data/tutorialChapters';
+import { completeOnboarding } from '../services';
 
 const DONE_KEY    = 'athly:tutorial:completed:v1';
 const PENDING_KEY = 'athly:tutorial:pendingChapter:v1';
@@ -110,6 +111,9 @@ export function TutorialProvider({ children }) {
         AsyncStorage.setItem(DONE_KEY, 'true'),
         AsyncStorage.removeItem(PENDING_KEY),
       ]);
+      // Persistance backend (best-effort, jamais bloquante) — cohérence
+      // inter-appareils du flag hasCompletedOnboarding.
+      completeOnboarding().catch(() => {});
       return;
     }
 
@@ -151,6 +155,18 @@ export function TutorialProvider({ children }) {
       AsyncStorage.setItem(DONE_KEY, 'true'),
       AsyncStorage.removeItem(PENDING_KEY),
     ]);
+    // "Passer le tutoriel" compte aussi comme terminé côté backend (best-effort).
+    completeOnboarding().catch(() => {});
+  }, []);
+
+  // Réconciliation avec le flag backend (hasCompletedOnboarding) une fois le
+  // profil chargé : si le serveur dit "déjà fait" alors que ce nouvel appareil
+  // n'a pas encore le flag local, on marque terminé pour ne pas re-déclencher
+  // le tutoriel. Ne fait jamais l'inverse (le serveur ne peut pas "ré-ouvrir").
+  const reconcileWithServer = useCallback(async (serverDone) => {
+    if (!serverDone) return;
+    setHasCompleted(true);
+    try { await AsyncStorage.setItem(DONE_KEY, 'true'); } catch (_) {}
   }, []);
 
   const clearJustCompleted = useCallback(() => setJustCompleted(false), []);
@@ -180,7 +196,7 @@ export function TutorialProvider({ children }) {
       registerTarget, clearTargets,
       registerScrollRef, registerRemeasure, scrollToStep,
       startChapter, nextStep, prevStep, completeActionStep,
-      dismiss, resetTutorial,
+      dismiss, resetTutorial, reconcileWithServer,
     }}>
       {children}
     </TutorialContext.Provider>
@@ -209,8 +225,17 @@ export function useTutorialTarget(key) {
     });
   }, [key, registerTarget]);
 
+  // Plusieurs mesures échelonnées sur ~1s : sur un écran atteint via une
+  // transition de stack (slide horizontal, @react-navigation/stack), la
+  // position mesurée juste après le premier layout peut encore refléter un
+  // état transitoire (mi-glissement, décalé vers la droite) plutôt que la
+  // position de repos finale — measure() renvoie la position réellement
+  // rendue à l'écran, transform en cours inclus. Chaque mesure écrase la
+  // précédente (registerTarget), donc la dernière — une fois la transition
+  // calmée — corrige automatiquement le spotlight, quel que soit le
+  // mécanisme ou la durée exacte de la transition.
   const onLayout = useCallback(() => {
-    setTimeout(measure, 80);
+    [80, 250, 450, 700, 1000].forEach((delay) => setTimeout(measure, delay));
   }, [measure]);
 
   return { ref, onLayout, remeasure: measure };

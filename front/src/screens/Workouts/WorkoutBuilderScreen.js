@@ -2,10 +2,10 @@ import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,7 +20,10 @@ import MuscleHierarchyPicker from '../../components/workouts/MuscleHierarchyPick
 import { useCustomExercises } from '../../context/CustomExercisesContext';
 import { useWorkoutInProgress } from '../../context/WorkoutInProgressContext';
 import { useSavedWorkouts } from '../../context/SavedWorkoutsContext';
+import { useToast } from '../../context/ToastContext';
 import { generateWorkout } from '../../data/exerciseCatalog';
+import InfoModal from '../../components/common/InfoModal';
+import SaveWorkoutPromptModal from '../../components/workouts/SaveWorkoutPromptModal';
 
 const DURATIONS = [
   { id: 30, label: '30 min' },
@@ -30,17 +33,41 @@ const DURATIONS = [
   { id: 90, label: '90 min' },
 ];
 
-export default function WorkoutBuilderScreen({ navigation }) {
+const DEFAULT_WORKOUT_NAME = 'Séance personnalisée';
+
+export default function WorkoutBuilderScreen({ navigation, route }) {
   const { items: customExercises } = useCustomExercises();
   const { loadWorkout } = useWorkoutInProgress();
-  const { create: createSavedWorkout } = useSavedWorkouts();
+  const { create: createSavedWorkout, update: updateSavedWorkout, remove: removeSavedWorkout } = useSavedWorkouts();
+  const { showToast } = useToast();
 
-  const [subMuscles, setSubMuscles] = useState([]);
-  const [equipment, setEquipment] = useState([]);
-  const [level, setLevel] = useState('');
-  const [duration, setDuration] = useState(60);
+  // Édition d'une séance existante (venant de WorkoutListScreen → "Modifier") :
+  // pré-remplit les critères et le libellé, et bascule le toggle Sauver sur
+  // "déjà sauvegardée" puisqu'on modifie une entrée qui existe déjà.
+  const editWorkout = route?.params?.editWorkout ?? null;
+  const editCriteria = editWorkout?.criteria ?? null;
+
+  const [subMuscles, setSubMuscles] = useState(editCriteria?.subMuscles ?? []);
+  const [equipment, setEquipment] = useState(editCriteria?.equipment ?? []);
+  const [level, setLevel] = useState(editCriteria?.level ?? '');
+  const [duration, setDuration] = useState(editCriteria?.durationMin ?? 60);
   const [regenKey, setRegenKey] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [infoModal, setInfoModal] = useState(null); // { title, body }
+  const [savePromptVisible, setSavePromptVisible] = useState(false);
+  const [workoutName, setWorkoutName] = useState(editWorkout?.name || DEFAULT_WORKOUT_NAME);
+  // Non-null ⇔ la séance actuellement en aperçu correspond exactement à une
+  // entrée déjà sauvegardée (icône "Sauver" pleine). Invalidé dès que les
+  // critères ou l'aperçu changent, puisque le contenu ne correspond plus.
+  const [savedWorkoutId, setSavedWorkoutId] = useState(editWorkout?.id ?? null);
+  // Id de l'entrée à METTRE À JOUR (plutôt que dupliquer) à la prochaine
+  // sauvegarde — distinct de savedWorkoutId : reste valide même après un
+  // changement de critères (l'entrée d'origine existe toujours en storage),
+  // et n'est effacé que si cette entrée est explicitement supprimée (toggle
+  // off), pour ne jamais tenter de mettre à jour un id déjà supprimé.
+  const [editingId, setEditingId] = useState(editWorkout?.id ?? null);
+
+  const invalidateSaved = useCallback(() => setSavedWorkoutId(null), []);
 
   const toggleArr = useCallback((arr, value) => (
     arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value]
@@ -61,34 +88,93 @@ export default function WorkoutBuilderScreen({ navigation }) {
 
   const onRegenerate = useCallback(() => {
     setRegenKey((k) => k + 1);
-  }, []);
+    invalidateSaved();
+  }, [invalidateSaved]);
 
-  const onLaunch = useCallback(() => {
+  // Lance réellement le chrono (navigation vers l'écran de séance active).
+  const launchWorkout = useCallback(() => {
     if (!preview || preview.exercises.length === 0) return;
     loadWorkout(preview);
     if (navigation) navigation.navigate('Workout', { workout: preview });
   }, [preview, loadWorkout, navigation]);
 
-  const onSave = useCallback(async () => {
+  // Bouton "Lancer la séance" : si l'aperçu courant est déjà sauvegardé (toggle
+  // actif), on lance directement — inutile de redemander. Sinon on intercepte
+  // pour proposer la sauvegarde avant d'ouvrir le chrono.
+  const onLaunch = useCallback(() => {
+    if (!preview || preview.exercises.length === 0) return;
+    if (savedWorkoutId) { launchWorkout(); return; }
+    setSavePromptVisible(true);
+  }, [preview, savedWorkoutId, launchWorkout]);
+
+  // Sauvegarde (création OU mise à jour si editingId pointe vers une entrée
+  // existante) l'aperçu courant sous workoutName, avec ses critères de
+  // génération pour permettre une future modification pré-remplie.
+  const persistCurrentPreview = useCallback(async () => {
+    const trimmedName = workoutName.trim() || DEFAULT_WORKOUT_NAME;
+    const payload = {
+      name: trimmedName,
+      description: preview.description,
+      exercises: preview.exercises,
+      criteria: { subMuscles, equipment, level, durationMin: duration },
+    };
+    if (editingId) {
+      return updateSavedWorkout(editingId, payload);
+    }
+    return createSavedWorkout(payload);
+  }, [workoutName, preview, subMuscles, equipment, level, duration, editingId, createSavedWorkout, updateSavedWorkout]);
+
+  // Bouton "Sauver" du bandeau d'aperçu — toggle : sauvegarde si absent,
+  // retire des séances si déjà sauvegardé (l'icône passe pleine ↔ contour).
+  const onToggleSave = useCallback(async () => {
     if (!preview || preview.exercises.length === 0) return;
     setSaving(true);
     try {
-      await createSavedWorkout({
-        name: preview.name,
-        description: preview.description,
-        exercises: preview.exercises,
-      });
-      Alert.alert(
-        'Sauvegardé',
-        `"${preview.name}" est dans tes séances. Retrouve-la dans la page Séances.`,
-        [{ text: 'OK' }],
-      );
+      if (savedWorkoutId) {
+        await removeSavedWorkout(savedWorkoutId);
+        setSavedWorkoutId(null);
+        setEditingId(null);
+        showToast('Retirée de tes séances', 'success');
+      } else {
+        const item = await persistCurrentPreview();
+        setSavedWorkoutId(item.id);
+        setEditingId(item.id);
+        showToast('Séance sauvegardée', 'success');
+      }
     } catch (e) {
-      Alert.alert('Erreur', e && e.message ? e.message : 'Sauvegarde impossible');
+      setInfoModal({ title: 'Erreur', body: e && e.message ? e.message : 'Action impossible' });
     } finally {
       setSaving(false);
     }
-  }, [preview, createSavedWorkout]);
+  }, [preview, savedWorkoutId, persistCurrentPreview, removeSavedWorkout, showToast]);
+
+  const handleSaveAndLaunch = useCallback(async () => {
+    if (!preview || preview.exercises.length === 0) return;
+    setSaving(true);
+    try {
+      const item = await persistCurrentPreview();
+      setSavedWorkoutId(item.id);
+      setEditingId(item.id);
+    } catch (e) {
+      // La séance se lance quand même : un échec de sauvegarde ne doit jamais
+      // empêcher l'entraînement. On informe juste via un toast non bloquant
+      // (l'utilisateur pourra retenter avec le bouton "Sauver" dédié).
+      showToast(e && e.message ? e.message : 'Sauvegarde impossible, séance lancée sans template.', 'error');
+    } finally {
+      setSaving(false);
+      setSavePromptVisible(false);
+      launchWorkout();
+    }
+  }, [preview, persistCurrentPreview, launchWorkout, showToast]);
+
+  const handleLaunchWithoutSave = useCallback(() => {
+    setSavePromptVisible(false);
+    launchWorkout();
+  }, [launchWorkout]);
+
+  const handleDismissSavePrompt = useCallback(() => {
+    setSavePromptVisible(false);
+  }, []);
 
   const totalSelectedCount = subMuscles.length;
 
@@ -101,7 +187,7 @@ export default function WorkoutBuilderScreen({ navigation }) {
         >
           <Ionicons name="chevron-back" size={26} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Crée ta séance</Text>
+        <Text style={styles.headerTitle}>{editWorkout ? 'Modifier ta séance' : 'Crée ta séance'}</Text>
         <View style={styles.headerSide} />
       </View>
 
@@ -119,7 +205,7 @@ export default function WorkoutBuilderScreen({ navigation }) {
           <MuscleHierarchyPicker
             mode="multi"
             selected={subMuscles}
-            onChange={setSubMuscles}
+            onChange={(v) => { setSubMuscles(v); invalidateSaved(); }}
             showSelectAll
           />
         </Section>
@@ -131,7 +217,7 @@ export default function WorkoutBuilderScreen({ navigation }) {
                 key={eq.id}
                 label={eq.label}
                 selected={equipment.includes(eq.label)}
-                onPress={() => setEquipment((s) => toggleArr(s, eq.label))}
+                onPress={() => { setEquipment((s) => toggleArr(s, eq.label)); invalidateSaved(); }}
               />
             ))}
           </View>
@@ -144,7 +230,7 @@ export default function WorkoutBuilderScreen({ navigation }) {
                 key={lv.id}
                 label={lv.label}
                 selected={level === lv.id}
-                onPress={() => setLevel(level === lv.id ? '' : lv.id)}
+                onPress={() => { setLevel(level === lv.id ? '' : lv.id); invalidateSaved(); }}
               />
             ))}
           </View>
@@ -157,10 +243,22 @@ export default function WorkoutBuilderScreen({ navigation }) {
                 key={d.id}
                 label={d.label}
                 selected={duration === d.id}
-                onPress={() => setDuration(d.id)}
+                onPress={() => { setDuration(d.id); invalidateSaved(); }}
               />
             ))}
           </View>
+        </Section>
+
+        <Section title="Libellé de la séance">
+          <TextInput
+            value={workoutName}
+            onChangeText={setWorkoutName}
+            placeholder={DEFAULT_WORKOUT_NAME}
+            placeholderTextColor={Colors.textMuted}
+            style={styles.nameInput}
+            maxLength={60}
+            underlineColorAndroid="transparent"
+          />
         </Section>
 
         <View style={styles.previewBlock}>
@@ -176,14 +274,24 @@ export default function WorkoutBuilderScreen({ navigation }) {
             {preview && preview.exercises.length > 0 ? (
               <View style={styles.previewActions}>
                 <TouchableOpacity
-                  onPress={onSave}
-                  style={[styles.previewActionBtn, saving && styles.previewActionDisabled]}
+                  onPress={onToggleSave}
+                  style={[
+                    styles.previewActionBtn,
+                    savedWorkoutId && styles.previewActionSaved,
+                    saving && styles.previewActionDisabled,
+                  ]}
                   activeOpacity={0.85}
                   disabled={saving}
                   hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 >
-                  <Ionicons name="bookmark-outline" size={15} color={Colors.primary} />
-                  <Text style={styles.previewActionText}>{saving ? '...' : 'Sauver'}</Text>
+                  <Ionicons
+                    name={savedWorkoutId ? 'bookmark' : 'bookmark-outline'}
+                    size={15}
+                    color={savedWorkoutId ? '#fff' : Colors.primary}
+                  />
+                  <Text style={[styles.previewActionText, savedWorkoutId && styles.previewActionTextSaved]}>
+                    {saving ? '...' : savedWorkoutId ? 'Sauvée' : 'Sauver'}
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={onRegenerate}
@@ -216,7 +324,7 @@ export default function WorkoutBuilderScreen({ navigation }) {
             preview.exercises.map((ex, i) => (
               <View key={`prev-${i}-${ex.id || ''}`} style={styles.previewItem}>
                 <View style={styles.previewIconBox}>
-                  <Text style={styles.previewIcon}>{pickExerciseIcon(ex)}</Text>
+                  <Ionicons name={pickExerciseIcon(ex)} size={18} color={Colors.primary} />
                 </View>
                 <View style={styles.previewItemContent}>
                   <Text style={styles.previewItemName} numberOfLines={1}>{ex.name}</Text>
@@ -246,6 +354,23 @@ export default function WorkoutBuilderScreen({ navigation }) {
           <Text style={styles.launchBtnText}>Lancer la séance</Text>
         </TouchableOpacity>
       </View>
+
+      <InfoModal
+        visible={!!infoModal}
+        icon={infoModal?.title === 'Erreur' ? 'alert-circle-outline' : 'checkmark-circle-outline'}
+        title={infoModal?.title}
+        body={infoModal?.body}
+        destructive={infoModal?.title === 'Erreur'}
+        onClose={() => setInfoModal(null)}
+      />
+
+      <SaveWorkoutPromptModal
+        visible={savePromptVisible}
+        saving={saving}
+        onSaveAndLaunch={handleSaveAndLaunch}
+        onLaunchWithoutSave={handleLaunchWithoutSave}
+        onDismiss={handleDismissSavePrompt}
+      />
     </SafeAreaView>
   );
 }
@@ -272,7 +397,7 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1f1f27',
+    borderBottomColor: Colors.borderSubtle,
   },
   headerTitle: {
     color: Colors.textPrimary,
@@ -352,11 +477,27 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   previewActionDisabled: { opacity: 0.5 },
+  previewActionSaved: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
   previewActionText: {
     color: Colors.primary,
     fontSize: 12,
     fontWeight: '700',
     marginLeft: 4,
+  },
+  previewActionTextSaved: { color: '#fff' },
+  nameInput: {
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: Colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '600',
   },
   previewEmpty: {
     paddingVertical: 18,
@@ -378,7 +519,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 9,
-    backgroundColor: '#0e0e12',
+    backgroundColor: Colors.cardInner,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
@@ -391,6 +532,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   previewItemMuscle: {
+    color: Colors.textSecondary,
     fontSize: 12,
     marginTop: 2,
   },
@@ -409,7 +551,7 @@ const styles = StyleSheet.create({
     paddingBottom: 26,
     backgroundColor: Colors.background,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#1f1f27',
+    borderTopColor: Colors.borderSubtle,
   },
   launchBtn: {
     flexDirection: 'row',

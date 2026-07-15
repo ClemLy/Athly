@@ -18,7 +18,7 @@ import {
   primaryMuscleLabel,
   secondaryMusclesLabels,
 } from '../../constants/exerciseFilters';
-import useEffortTimer from '../../hooks/useEffortTimer';
+import { useEffortTimer } from '../../hooks';
 import { useWorkoutInProgress } from '../../context/WorkoutInProgressContext';
 import ExerciseHeader from '../../components/workouts/ExerciseHeader';
 import SetTable from '../../components/workouts/SetTable';
@@ -73,6 +73,11 @@ export default function ExerciseDetailScreen({ route, navigation }) {
     if (exerciseIndex < 0) return;
     actions.addSet(exerciseIndex);
   }, [actions, exerciseIndex]);
+
+  const handleRemove = useCallback((i) => {
+    if (exerciseIndex < 0 || sets.length <= 1) return;
+    actions.removeSet(exerciseIndex, i);
+  }, [actions, exerciseIndex, sets.length]);
 
   const handleNotes = useCallback((text) => {
     if (exerciseIndex < 0) return;
@@ -161,6 +166,7 @@ export default function ExerciseDetailScreen({ route, navigation }) {
             sets={sets}
             onToggle={handleToggle}
             onChange={handleChange}
+            onRemove={handleRemove}
           />
 
           <TouchableOpacity

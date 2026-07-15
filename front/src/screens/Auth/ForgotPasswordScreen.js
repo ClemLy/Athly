@@ -9,8 +9,8 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '../../constants/theme';
 import AuthInput from '../../components/inputs/AuthInput';
-import NotificationBanner from '../../components/common/NotificationBanner';
-import { forgotPassword, resetPassword } from '../../services/auth.service';
+import { NotificationBanner } from '../../components/common';
+import { forgotPassword, resetPassword } from '../../services';
 import { useToast } from '../../context/ToastContext';
 
 const EMAIL_RE   = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -33,7 +33,7 @@ function getStrength(pwd) {
 function StrengthBar({ password }) {
   const score = getStrength(password);
   if (!password) return null;
-  const color = score === 3 ? '#44FF88' : score === 2 ? '#FFA500' : '#FF4D4D';
+  const color = score === 3 ? Colors.success : score === 2 ? '#FFA500' : Colors.error;
   const label = score === 3 ? 'Fort' : score === 2 ? 'Moyen' : 'Faible';
   return (
     <View style={sb.wrap}>
@@ -134,7 +134,7 @@ function WeakPasswordModal({ visible, onImprove, onSave, loading }) {
         <View style={wm.card}>
 
           <View style={wm.iconWrap}>
-            <Ionicons name="warning-outline" size={28} color="#F59E0B" />
+            <Ionicons name="warning-outline" size={28} color={Colors.warningAmber} />
           </View>
 
           <Text style={wm.title}>Mot de passe simple</Text>
@@ -182,7 +182,7 @@ const wm = StyleSheet.create({
   },
   card: {
     width: '100%',
-    backgroundColor: '#13131C',
+    backgroundColor: Colors.bgDeep2,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: 'rgba(245,158,11,0.25)',
@@ -388,7 +388,7 @@ export default function ForgotPasswordScreen({ navigation }) {
           </TouchableOpacity>
 
           {/* ══════════════════════════════════════════════════
-              ÉTAPE 1 — Saisie de l'email
+              ÉTAPE 1 - Saisie de l'email
           ══════════════════════════════════════════════════ */}
           {step === 1 && (
             <>
@@ -438,7 +438,7 @@ export default function ForgotPasswordScreen({ navigation }) {
           )}
 
           {/* ══════════════════════════════════════════════════
-              ÉTAPE 2 — Code + Nouveau mot de passe
+              ÉTAPE 2 - Code + Nouveau mot de passe
           ══════════════════════════════════════════════════ */}
           {step === 2 && (
             <>

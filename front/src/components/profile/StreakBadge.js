@@ -6,7 +6,7 @@ import {
 
 const SCROLL_MAX_H = Math.round(Dimensions.get('window').height * 0.38);
 import { Ionicons } from '@expo/vector-icons';
-import { getStreakMultiplier, STREAK_MILESTONES } from '../../services/stats.service';
+import { getStreakMultiplier, STREAK_MILESTONES } from '../../services';
 import { Colors } from '../../constants/theme';
 
 // ─── StreakBonusModal — Roadmap des multiplicateurs ───────────────────────────
@@ -37,7 +37,7 @@ function StreakBonusModal({ visible, streak, onClose }) {
           {/* Header */}
           <View style={ms.header}>
             <View style={ms.headerLeft}>
-              <Ionicons name="flame" size={22} color="#FE7439" />
+              <Ionicons name="flame" size={22} color={Colors.primary} />
               <Text style={ms.headerTitle}>Régularité & Multiplicateurs</Text>
             </View>
             <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
@@ -64,7 +64,7 @@ function StreakBonusModal({ visible, streak, onClose }) {
                 </View>
                 <Text style={ms.progressHint}>
                   <Text style={{ color: nextMilestone.color || Colors.primary, fontWeight: '700' }}>{daysToNext} jour{daysToNext > 1 ? 's' : ''}</Text>
-                  {' '}avant ×{nextMilestone.multiplier} — {nextMilestone.label}
+                  {' '}avant ×{nextMilestone.multiplier} - {nextMilestone.label}
                 </Text>
               </>
             )}
@@ -133,7 +133,7 @@ export default function StreakBadge({ streak = 0, compact = false }) {
 
   if (streak === 0) return null;
 
-  const flameColor = color || '#FE7439';
+  const flameColor = color || Colors.primary;
 
   const openModal = () => setModalVisible(true);
 
@@ -270,8 +270,8 @@ const ms = StyleSheet.create({
     letterSpacing: 1.2, marginBottom: 8,
   },
   currentRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 12 },
-  currentDays: { color: '#FE7439', fontSize: 36, fontWeight: '900' },
-  currentUnit: { color: '#FE7439', fontSize: 16, fontWeight: '600' },
+  currentDays: { color: Colors.primary, fontSize: 36, fontWeight: '900' },
+  currentUnit: { color: Colors.primary, fontSize: 16, fontWeight: '600' },
   multChip: {
     marginLeft: 10, paddingHorizontal: 10, paddingVertical: 4,
     borderRadius: 12, borderWidth: 1,

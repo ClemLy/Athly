@@ -3,8 +3,8 @@ const authService = require("../services/auth.service");
 // ── Inscription ───────────────────────────────────────────────────────────────
 exports.registerUser = async (req, res, next) => {
   try {
-    const { pseudo, email, password } = req.body;
-    const result = await authService.register(pseudo, email, password);
+    const { pseudo, email, password, referralCode } = req.body;
+    const result = await authService.register(pseudo, email, password, referralCode);
     res.status(201).json({ success: true, ...result });
   } catch (error) {
     next(error);
@@ -26,6 +26,17 @@ exports.loginUser = async (req, res, next) => {
         code: error.code,
       });
     }
+    next(error);
+  }
+};
+
+// ── Connexion Google OAuth (Section VIII) ─────────────────────────────────────
+exports.googleLogin = async (req, res, next) => {
+  try {
+    const { idToken } = req.body;
+    const data = await authService.googleLogin(idToken);
+    res.status(200).json({ success: true, message: "Connexion Google réussie.", ...data });
+  } catch (error) {
     next(error);
   }
 };

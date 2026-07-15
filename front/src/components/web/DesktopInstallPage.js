@@ -1,5 +1,7 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '../../constants/theme';
 
 const LOGO = require('../../../assets/logo-orange.png');
 
@@ -18,7 +20,7 @@ function MethodCard({ icon, title, platform, steps, accent }) {
   return (
     <View style={[s.method, { borderColor: accent + '30' }]}>
       <View style={[s.methodHeader, { borderBottomColor: accent + '20' }]}>
-        <Text style={s.methodIcon}>{icon}</Text>
+        <Ionicons name={icon} size={24} color={accent} />
         <View>
           <Text style={[s.methodTitle, { color: accent }]}>{title}</Text>
           <Text style={s.methodPlatform}>{platform}</Text>
@@ -56,10 +58,10 @@ export default function DesktopInstallPage() {
 
         <View style={s.methods}>
           <MethodCard
-            icon="🤖"
+            icon="logo-chrome"
             title="Chrome"
             platform="Android"
-            accent="#FE7439"
+            accent={Colors.primary}
             steps={[
               'Ouvrez ce lien dans Chrome sur votre Android',
               'Appuyez sur ⋮ (3 points) en haut à droite',
@@ -67,10 +69,10 @@ export default function DesktopInstallPage() {
             ]}
           />
           <MethodCard
-            icon=""
+            icon="logo-apple"
             title="Safari"
             platform="iPhone · iPad"
-            accent="#6E6AF0"
+            accent={Colors.secondaryAccent}
             steps={[
               'Ouvrez ce lien dans Safari sur votre iPhone',
               'Appuyez sur l\'icône Partager (□↑) en bas',
@@ -104,7 +106,7 @@ const s = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 700,
-    backgroundColor: '#080910',
+    backgroundColor: Colors.bgAbyss,
     borderRadius: 24,
     borderWidth: 1,
     borderColor: 'rgba(110,106,240,0.18)',
@@ -125,7 +127,7 @@ const s = StyleSheet.create({
   headline: {
     fontSize: 32,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: Colors.textPrimary,
     textAlign: 'center',
     letterSpacing: -0.8,
     marginBottom: 12,
@@ -158,7 +160,7 @@ const s = StyleSheet.create({
   },
   urlText: {
     fontSize: 15,
-    color: '#6E6AF0',
+    color: Colors.secondaryAccent,
     fontWeight: '600',
     letterSpacing: 0.2,
   },

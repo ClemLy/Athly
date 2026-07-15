@@ -68,7 +68,7 @@ export default function AddExerciseSheet({ visible, mode = 'add', onClose, onSel
         activeOpacity={0.85}
       >
         <View style={styles.itemIcon}>
-          <Text style={styles.itemEmoji}>{icon}</Text>
+          <Ionicons name={icon} size={19} color={Colors.primary} />
         </View>
         <View style={styles.itemContent}>
           <View style={styles.itemTitleRow}>
@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: '#0e0e12',
+    backgroundColor: Colors.cardInner,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,

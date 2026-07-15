@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -18,6 +17,8 @@ import { EQUIPMENTS, LEVELS } from '../../constants/exerciseFilters';
 import SelectableChip from '../../components/workouts/SelectableChip';
 import MuscleHierarchyPicker from '../../components/workouts/MuscleHierarchyPicker';
 import { useCustomExercises } from '../../context/CustomExercisesContext';
+import { ConfirmModal } from '../../components/common';
+import { InfoModal } from '../../components/common';
 
 // Form add/edit d'un exercice perso. Aligné sur la structure du catalogue (sous-muscles
 // précis), donc directement compatible avec le Builder et l'algo de tri.
@@ -49,6 +50,8 @@ export default function EditExerciseScreen({ route, navigation }) {
   const [videoUrl, setVideoUrl] = useState(existing ? existing.videoUrl || '' : '');
   const [notes, setNotes] = useState(existing ? existing.notes || '' : '');
   const [saving, setSaving] = useState(false);
+  const [infoModal, setInfoModal] = useState(null); // { title, body }
+  const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
 
   const toggle = useCallback((arr, value) => (
     arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value]
@@ -65,11 +68,11 @@ export default function EditExerciseScreen({ route, navigation }) {
 
   const handleSave = useCallback(async () => {
     if (!name.trim()) {
-      Alert.alert('Nom requis', 'Donne un nom à ton exercice.');
+      setInfoModal({ title: 'Nom requis', body: 'Donne un nom à ton exercice.' });
       return;
     }
     if (!targetMuscle.trim()) {
-      Alert.alert('Muscle principal requis', 'Sélectionne le sous-muscle principal travaillé.');
+      setInfoModal({ title: 'Muscle principal requis', body: 'Sélectionne le sous-muscle principal travaillé.' });
       return;
     }
     setSaving(true);
@@ -90,7 +93,7 @@ export default function EditExerciseScreen({ route, navigation }) {
       }
       if (navigation) navigation.goBack();
     } catch (e) {
-      Alert.alert('Erreur', e && e.message ? e.message : 'Sauvegarde impossible');
+      setInfoModal({ title: 'Erreur', body: e && e.message ? e.message : 'Sauvegarde impossible' });
     } finally {
       setSaving(false);
     }
@@ -98,26 +101,18 @@ export default function EditExerciseScreen({ route, navigation }) {
 
   const handleDelete = useCallback(() => {
     if (!exerciseId) return;
-    Alert.alert(
-      'Supprimer',
-      `Supprimer "${name || 'cet exercice'}" ?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await remove(exerciseId);
-              if (navigation) navigation.goBack();
-            } catch (e) {
-              Alert.alert('Erreur', e && e.message ? e.message : 'Suppression impossible');
-            }
-          },
-        },
-      ],
-    );
-  }, [exerciseId, name, remove, navigation]);
+    setDeleteConfirmVisible(true);
+  }, [exerciseId]);
+
+  const confirmDelete = useCallback(async () => {
+    setDeleteConfirmVisible(false);
+    try {
+      await remove(exerciseId);
+      if (navigation) navigation.goBack();
+    } catch (e) {
+      setInfoModal({ title: 'Erreur', body: e && e.message ? e.message : 'Suppression impossible' });
+    }
+  }, [exerciseId, remove, navigation]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -262,6 +257,25 @@ export default function EditExerciseScreen({ route, navigation }) {
           ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ConfirmModal
+        visible={deleteConfirmVisible}
+        icon="trash-outline"
+        title="Supprimer"
+        body={`Supprimer "${name || 'cet exercice'}" ?`}
+        confirmLabel="Supprimer"
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirmVisible(false)}
+      />
+      <InfoModal
+        visible={!!infoModal}
+        icon={infoModal?.title === 'Erreur' ? 'alert-circle-outline' : 'information-circle-outline'}
+        title={infoModal?.title}
+        body={infoModal?.body}
+        destructive={infoModal?.title === 'Erreur'}
+        onClose={() => setInfoModal(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -289,7 +303,7 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1f1f27',
+    borderBottomColor: Colors.borderSubtle,
   },
   headerTitle: {
     color: Colors.textPrimary,

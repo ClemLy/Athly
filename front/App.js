@@ -3,8 +3,10 @@ import { Platform, StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/context/AuthContext';
 import { ToastProvider } from './src/context/ToastContext';
+
 import AppNavigator from './src/navigation';
 import DesktopInstallPage from './src/components/web/DesktopInstallPage';
+import { ErrorBoundary } from './src/components/common';
 
 const isDesktopWeb =
   Platform.OS === 'web' &&
@@ -17,13 +19,15 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <ToastProvider>
-          <StatusBar barStyle="light-content" />
-          <AppNavigator />
-        </ToastProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <StatusBar barStyle="light-content" />
+            <AppNavigator />
+          </ToastProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }

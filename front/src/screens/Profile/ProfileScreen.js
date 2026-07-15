@@ -19,16 +19,20 @@ import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import { useUser } from '../../context/UserContext';
 import { Colors } from '../../constants/theme';
 import {
-  getPersonalRecords,
   aggregateActivityHeatmap,
   xpToLevel,
   computeStreak,
   getRank,
-} from '../../services/stats.service';
-import { MAJOR_EXERCISES } from '../../data/majorExercises';
-import { useAvatarFrame } from '../../hooks/useAvatarFrame';
-import { useDevSettings } from '../../hooks/useDevSettings';
-import { useFeaturedTrophies } from '../../hooks/useFeaturedTrophies';
+} from '../../services';
+import { resolveExerciseMeta } from '../../data/majorExercises';
+import { getMyRecords } from '../../services';
+import { getTitles } from '../../services';
+import { haptics } from '../../services';
+import { RARITY_META } from '../../services';
+import { syncLocalAchievements } from '../../services';
+import { useAvatarFrame } from '../../hooks';
+import { useDevSettings } from '../../hooks';
+import { useFeaturedTrophies } from '../../hooks';
 import { getTheme } from '../../data/profileThemes';
 import { evaluateTrophies, ULTIMATE_TROPHY } from '../../data/trophyCatalog';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
@@ -37,13 +41,16 @@ import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 import HeroLevelCard    from '../../components/profile/HeroLevelCard';
 import TrophyGrid       from '../../components/profile/TrophyGrid';
 import PersonalRecordsList from '../../components/profile/PersonalRecordsList';
+import RecordsShowcasePicker from '../../components/profile/RecordsShowcasePicker';
 import ActivityHeatmap  from '../../components/profile/ActivityHeatmap';
 import EmberParticles   from '../../components/profile/EmberParticles';
 import StreakBadge      from '../../components/profile/StreakBadge';
 import BorderPicker     from '../../components/profile/BorderPicker';
+import TitlePickerModal from '../../components/profile/TitlePickerModal';
 
 
-function buildBgGradient(isGod, isLegend, isElite) {
+function buildBgGradient(isGod, isLegend, isElite, isBlood) {
+  if (isBlood)  return ['#0A0000', '#150202', Colors.bgAbyss, '#0A0000'];
   if (isGod)    return ['#0A0800', '#100D02', Colors.bgAbyss, '#08080E'];
   if (isLegend) return [Colors.bgAbyss, '#0C0816', '#0D0A1A', Colors.bgAbyss];
   if (isElite)  return [Colors.bgAbyss, '#0A0A18', '#0D0D1C', Colors.bgAbyss];
@@ -57,9 +64,11 @@ export default function ProfileScreen({ navigation }) {
   const { sessionLogs: logs, activityLogs, totalXP, loading: logsLoading } = useWorkoutLogs();
   const { user, loading: profileLoading, refetch: refetchUser } = useUser();
   const [borderPickerVisible, setBorderPickerVisible] = useState(false);
+  const [titlePickerVisible, setTitlePickerVisible] = useState(false);
   const { shapeId, colorId, selectShape, selectColor } = useAvatarFrame();
   const { profileThemeId, godMode, trophyOverrides, reload: reloadDevSettings } = useDevSettings();
   const { featuredIds, toggleFeatured, reload: reloadFeatured } = useFeaturedTrophies();
+  const [equippedTitleMeta, setEquippedTitleMeta] = useState(null); // { label, rarity } | null
 
   // ─── Tutorial ─────────────────────────────────────────────────────────────
   const {
@@ -80,6 +89,21 @@ export default function ProfileScreen({ navigation }) {
       }
     }, [pendingChapterId, startChapter]),
   );
+
+  // Résout le titre équipé (label + couleur de rareté) — rafraîchi à chaque
+  // retour sur l'écran et à chaque fermeture du sélecteur de titres (l'équipement
+  // a pu changer pendant que la popup était ouverte).
+  const loadEquippedTitle = useCallback(async () => {
+    try {
+      const res = await getTitles();
+      const equipped = res.titles.find((t) => t.id === res.equippedTitle);
+      setEquippedTitleMeta(equipped ? { label: equipped.label, rarity: equipped.rarity } : null);
+    } catch (_) {
+      // best-effort — l'absence de titre affiché n'est pas bloquant.
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { loadEquippedTitle(); }, [loadEquippedTitle]));
 
   // Enregistre le ScrollView et la fonction de re-mesure dans le contexte tutoriel.
   // Indispensable pour que scrollY: 260 de l'étape profile_vitrine fonctionne,
@@ -118,8 +142,43 @@ export default function ProfileScreen({ navigation }) {
     }, [refetchUser, reloadFeatured, reloadDevSettings]),
   );
 
+  // ─── Records mis en avant (Section III) ──────────────────────────────────
+  // Source de vérité backend (ExerciseRecord), pas les logs locaux — pour
+  // rester identique à ce que voient les amis sur leur profil (getFriendProfile).
+  const [myRecords, setMyRecords] = useState([]);
+  const [recordsPickerVisible, setRecordsPickerVisible] = useState(false);
+
+  const loadMyRecords = useCallback(async () => {
+    try {
+      const res = await getMyRecords();
+      setMyRecords(Array.isArray(res.records) ? res.records : []);
+    } catch (_) {
+      // Best-effort — ne doit jamais bloquer l'affichage du profil.
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { loadMyRecords(); }, [loadMyRecords]));
+
+  const showcasedRecordNames = user?.showcasedRecords ?? [];
+
+  const records = useMemo(() => {
+    const byName = new Map(myRecords.map((r) => [r.exercice, r]));
+    return showcasedRecordNames.map((name) => {
+      const r = byName.get(name);
+      const meta = resolveExerciseMeta(name);
+      return {
+        name,
+        group: meta.group,
+        icon: meta.icon,
+        prWeight: r ? r.maxPoids : null,
+        prEstimate1RM: r ? Math.round(r.maxPoids * (1 + r.maxReps / 30) * 10) / 10 : null,
+        hasData: !!r,
+        subtitle: r ? `${r.maxReps} reps max` : undefined,
+      };
+    });
+  }, [myRecords, showcasedRecordNames]);
+
   // ─── Computed values ──────────────────────────────────────────────────────
-  const records       = useMemo(() => getPersonalRecords(logs, MAJOR_EXERCISES), [logs]);
   const heatmap       = useMemo(() => aggregateActivityHeatmap(logs), [logs]);
   const totalSessions = logs.length;
   const totalActiveDays = useMemo(() => {
@@ -139,6 +198,19 @@ export default function ProfileScreen({ navigation }) {
     return [...base, { ...ULTIMATE_TROPHY, unlocked: ultimateUnlocked, naturalUnlocked: ultimateUnlocked }];
   }, [level, totalSessions, logs, totalXP, trophyOverrides]);
 
+  // Synchronise les trophées locaux NATURELLEMENT débloqués (jamais les
+  // overrides God Mode) vers le backend, pour qu'ils apparaissent sur le
+  // profil public consulté par les amis. Dédupliqué par un ref (déclenche au
+  // plus une requête par changement réel de l'ensemble débloqué).
+  const lastSyncedRef = useRef('');
+  useEffect(() => {
+    const unlockedIds = evaluatedTrophies.filter((t) => t.naturalUnlocked).map((t) => t.id);
+    const key = [...unlockedIds].sort().join(',');
+    if (key === lastSyncedRef.current || unlockedIds.length === 0) return;
+    lastSyncedRef.current = key;
+    syncLocalAchievements(unlockedIds).catch(() => { lastSyncedRef.current = ''; });
+  }, [evaluatedTrophies]);
+
   // Active profile theme (null when 'auto' or not set)
   const activeTheme = useMemo(() => {
     const t = getTheme(profileThemeId);
@@ -146,9 +218,10 @@ export default function ProfileScreen({ navigation }) {
   }, [profileThemeId]);
 
   // Background variant: theme overrides level-based flags
-  const isElite  = activeTheme ? ['elite','legend','god'].includes(activeTheme.bgVariant) : level >= 91;
-  const isLegend = activeTheme ? ['legend','god'].includes(activeTheme.bgVariant)         : level >= 171;
-  const isGod    = activeTheme ? activeTheme.bgVariant === 'god'                          : level >= 200;
+  const isElite  = activeTheme ? ['elite','legend','god','blood'].includes(activeTheme.bgVariant) : level >= 91;
+  const isLegend = activeTheme ? ['legend','god','blood'].includes(activeTheme.bgVariant)         : level >= 171;
+  const isGod    = activeTheme ? activeTheme.bgVariant === 'god'                                  : level >= 200;
+  const isBlood  = activeTheme?.bgVariant === 'blood';
 
   // rank is used for QuickBtn accent — also override with theme
   const rank = useMemo(() => {
@@ -156,7 +229,7 @@ export default function ProfileScreen({ navigation }) {
     return { ...realRank, color: activeTheme.accentColor || realRank.color };
   }, [activeTheme, realRank]);
 
-  const bgColors = buildBgGradient(isGod, isLegend, isElite);
+  const bgColors = buildBgGradient(isGod, isLegend, isElite, isBlood);
   const topPad   = insets.top + 16;
 
   if (profileLoading && !user && logsLoading) {
@@ -218,10 +291,12 @@ export default function ProfileScreen({ navigation }) {
               shapeId={shapeId}
               colorId={colorId}
               profileTheme={activeTheme}
+              titleLabel={equippedTitleMeta?.label}
+              titleColor={equippedTitleMeta ? RARITY_META[equippedTitleMeta.rarity]?.color : undefined}
             />
             <EmberParticles
               visible={activeTheme ? activeTheme.shimmer : isLegend}
-              color={isGod || activeTheme?.bgVariant === 'god' ? '#FFD700' : '#C084FC'}
+              color={isBlood ? Colors.uniqueBloodBright : (isGod || activeTheme?.bgVariant === 'god' ? Colors.gold : Colors.legendAccent)}
             />
           </View>
 
@@ -248,7 +323,29 @@ export default function ProfileScreen({ navigation }) {
               onPress={() => navigation && navigation.navigate('TrophyRoom')}
               accentColor={isElite ? rank.color : null}
             />
+            <QuickBtn
+              icon="ribbon-outline"
+              label="Titres"
+              onPress={() => setTitlePickerVisible(true)}
+              accentColor={isElite ? rank.color : null}
+            />
           </View>
+
+          {/* ── Inventaire (bannière pleine largeur — trop à l'étroit dans quickActions) ── */}
+          <TouchableOpacity
+            style={styles.inventoryBanner}
+            onPress={() => navigation && navigation.navigate('Inventory')}
+            activeOpacity={0.85}
+          >
+            <View style={[styles.inventoryIconBox, isElite && { backgroundColor: `${rank.color}20`, borderColor: `${rank.color}45` }]}>
+              <Ionicons name="cube" size={20} color={isElite ? rank.color : Colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.inventoryTitle}>Inventaire</Text>
+              <Text style={styles.inventorySub}>Coffres, objets & récompenses</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.chevron} />
+          </TouchableOpacity>
 
           {/* ── Vitrine de trophées ── */}
           <View ref={vitrineRef} onLayout={onVitrineLayout} collapsable={false}>
@@ -264,14 +361,14 @@ export default function ProfileScreen({ navigation }) {
           </View>
 
           {/* ── Records personnels ── */}
-          <Section title="Records personnels">
+          <Section title="Records personnels" onSeeAll={() => setRecordsPickerVisible(true)} seeAllLabel="Choisir">
             <GlassCard>
-              <PersonalRecordsList records={records} onPressItem={onPressRecord} />
+              <PersonalRecordsList records={records} onPressItem={onPressRecord} emptyLabel="Aucun record mis en avant" />
             </GlassCard>
           </Section>
 
           {/* ── Activité 12 mois ── */}
-          <Section title="Activité — 12 mois">
+          <Section title="Activité - 12 mois">
             <GlassCard>
               <ActivityHeatmap heatmap={heatmap} />
             </GlassCard>
@@ -303,28 +400,41 @@ export default function ProfileScreen({ navigation }) {
         currentShapeId={shapeId}
         currentColorId={colorId}
         playerLevel={level}
+        unlockedCosmetics={user?.unlockedCosmetics ?? []}
         userInitial={userInitial}
         onSelectShape={selectShape}
         onSelectColor={selectColor}
       />
 
+      <TitlePickerModal
+        visible={titlePickerVisible}
+        onClose={() => { setTitlePickerVisible(false); loadEquippedTitle(); }}
+      />
+
       {activeChapterId === 'profile' && (
         <TutorialOverlay navigation={navigation} />
       )}
+
+      <RecordsShowcasePicker
+        visible={recordsPickerVisible}
+        current={showcasedRecordNames}
+        onSaved={() => { refetchUser(); loadMyRecords(); }}
+        onClose={() => setRecordsPickerVisible(false)}
+      />
     </View>
   );
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function Section({ title, children, onSeeAll }) {
+function Section({ title, children, onSeeAll, seeAllLabel = 'Voir tout' }) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionRow}>
         <Text style={styles.sectionTitle}>{title}</Text>
         {onSeeAll && (
           <TouchableOpacity onPress={onSeeAll} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.seeAllText}>Voir tout</Text>
+            <Text style={styles.seeAllText}>{seeAllLabel}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -347,7 +457,7 @@ function QuickBtn({ icon, label, onPress, accentColor }) {
   return (
     <TouchableOpacity
       style={[styles.quickBtn, accentColor && { borderColor: accentColor + '28' }]}
-      onPress={onPress}
+      onPress={() => { haptics.success(); if (onPress) onPress(); }}
       activeOpacity={0.82}
     >
       <Ionicons name={icon} size={15} color={accentColor || Colors.textSecondary} />
@@ -373,9 +483,9 @@ const styles = StyleSheet.create({
   heroWrapper: { position: 'relative' },
   streakWrap:  { marginTop: 10 },
 
-  quickActions: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
   quickBtn: {
-    flex: 1,
+    width: '47.5%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -387,6 +497,31 @@ const styles = StyleSheet.create({
     borderColor: Colors.glassBorder,
   },
   quickBtnText: { color: Colors.textSecondary, fontSize: 12, fontWeight: '700' },
+
+  inventoryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 10,
+    backgroundColor: Colors.glassBg,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.glassBorder,
+  },
+  inventoryIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: 'rgba(254,116,57,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(254,116,57,0.30)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  inventoryTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: '700' },
+  inventorySub:   { color: Colors.textMuted, fontSize: 11.5, marginTop: 1 },
 
   section: { marginTop: 26 },
   sectionRow: {
