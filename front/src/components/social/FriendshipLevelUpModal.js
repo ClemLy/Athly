@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, Animated } from 'react
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import BirthdayConfetti from '../profile/BirthdayConfetti';
+import { getFriendshipTitle } from '../../data/friendshipTitles';
 
 // Progression de couleur vers le Rouge Sang du niveau 5 ("Lien de Sang") —
 // même esprit que RANK_COLORS dans LevelUpModal.js, mais indexé par niveau
@@ -29,6 +30,7 @@ const FRIENDSHIP_LEVEL_COLORS = {
 export default function FriendshipLevelUpModal({ visible, pseudo, level, onClose }) {
   const color = FRIENDSHIP_LEVEL_COLORS[level] || FRIENDSHIP_LEVEL_COLORS[1];
   const isMax = level >= 5;
+  const friendshipTitle = getFriendshipTitle(level);
   const badgeScale = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -56,6 +58,7 @@ export default function FriendshipLevelUpModal({ visible, pseudo, level, onClose
 
           <Text style={styles.eyebrow}>NIVEAU D'AMITIÉ</Text>
           <Text style={[styles.level, { color }]}>Niveau {level}/5</Text>
+          <Text style={[styles.title, { color }]}>{friendshipTitle.label}</Text>
           <Text style={styles.rank}>avec {pseudo}</Text>
 
           <Text style={styles.body}>
@@ -117,6 +120,11 @@ const styles = StyleSheet.create({
     fontSize:      30,
     fontWeight:    '800',
     letterSpacing: -0.5,
+  },
+  title: {
+    fontSize:   13,
+    fontWeight: '700',
+    marginTop:  6,
   },
   rank: {
     color:        Colors.textSecondary,

@@ -19,6 +19,7 @@ import AchievementShowcase  from '../../components/profile/AchievementShowcase';
 import FriendShowcaseGrid   from '../../components/profile/FriendShowcaseGrid';
 import PersonalRecordsList  from '../../components/profile/PersonalRecordsList';
 import { resolveExerciseMeta } from '../../data/majorExercises';
+import { getFriendshipTitle } from '../../data/friendshipTitles';
 
 // ─── FriendProfileScreen ──────────────────────────────────────────────────────
 // Profil public d'un ami (Brique III) : miroir en lecture seule de notre propre
@@ -111,6 +112,7 @@ export default function FriendProfileScreen({ route, navigation }) {
 
   const level = useMemo(() => xpToLevel(profile?.user?.xp ?? 0).level, [profile]);
   const rank  = useMemo(() => getRank(level), [level]);
+  const friendshipTitle = useMemo(() => getFriendshipTitle(profile?.friendshipLevel), [profile]);
   const isElite  = level >= 91;
   const isLegend = level >= 171;
   const isGod    = level >= 200;
@@ -205,6 +207,7 @@ export default function FriendProfileScreen({ route, navigation }) {
               Niveau d'amitié {profile.friendshipLevel}/5
               {profile.friendshipLevel === 5 ? ' · Lien de Sang' : ''}
             </Text>
+            <Text style={styles.friendshipTitle}>{friendshipTitle.label}</Text>
             <Text style={styles.friendshipXp}>{profile.friendshipXp} XP d'amitié</Text>
           </View>
 
@@ -293,6 +296,7 @@ const styles = StyleSheet.create({
   },
   friendshipHearts: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   friendshipLevel:  { color: Colors.textPrimary, fontSize: 13.5, fontWeight: '700' },
+  friendshipTitle:  { color: Colors.primary, fontSize: 12, fontWeight: '700', marginTop: 4 },
   friendshipXp:     { color: Colors.textMuted, fontSize: 11.5, marginTop: 2 },
 
   shakeBanner: {
