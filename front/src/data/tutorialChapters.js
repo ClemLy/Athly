@@ -260,6 +260,12 @@ export const TUTORIAL_CHAPTERS = [
         targetKey: null, position: 'center', scrollY: null,
       },
       {
+        key: 'social_friendship_titles',
+        title: "Titres d'Amitié",
+        body: "Chaque jour de streak de groupe validé à plusieurs renforce ton lien avec chaque coéquipier. De 'Nouveaux Partenaires' à 'Âmes Sœurs de Muscle' au niveau 5 maximum, un Titre d'Amitié affiche l'histoire que vous avez construite ensemble.",
+        targetKey: null, position: 'center', scrollY: null,
+      },
+      {
         key: 'social_multi',
         title: 'Le Mode Multi',
         body: "Invite des amis dans un Lobby Multi : vous démarrez la séance ensemble, chacun sur son écran. Terminer à plusieurs débloque un bonus d'XP de groupe (+15% à 2, jusqu'à +50% à 5).",

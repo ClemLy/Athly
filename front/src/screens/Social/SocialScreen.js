@@ -20,6 +20,7 @@ import {
   getMyGroup, inviteToGroup, respondToGroupInvite, shakeMember, checkGroupStreak, leaveGroup,
 } from '../../services';
 import { MAJOR_EXERCISES } from '../../data/majorExercises';
+import { getFriendshipTitle } from '../../data/friendshipTitles';
 import ExercisePickerModal from '../../components/social/ExercisePickerModal';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
@@ -419,7 +420,7 @@ function FriendsSegment({
       ) : friends.map((f, i) => (
         <AnimatedRow key={f.user._id} index={i}>
           <TouchableOpacity activeOpacity={0.75} onPress={() => onOpenProfile(f.user, f.friendshipLevel)}>
-            <UserRow user={f.user}>
+            <UserRow user={f.user} subtitle={getFriendshipTitle(f.friendshipLevel).label}>
               <FriendshipHearts level={f.friendshipLevel ?? 1} />
               <TouchableOpacity
                 onPress={() => onRemoveFriend(f.friendshipId, f.user.pseudo)}
@@ -885,7 +886,7 @@ const WEATHER_META = {
   sleeping: { icon: 'moon',             color: Colors.textMuted, label: 'En sommeil' },
 };
 
-function UserRow({ user, children }) {
+function UserRow({ user, subtitle, children }) {
   const weather = user?.weatherStatus ? WEATHER_META[user.weatherStatus] : null;
   return (
     <View style={styles.userRow}>
@@ -903,6 +904,7 @@ function UserRow({ user, children }) {
           Nv. {user?.level ?? 1} · {user?.rank ?? 'Novice'}
           {weather ? ` · ${weather.label}` : ''}
         </Text>
+        {subtitle ? <Text style={styles.userFriendshipTitle}>{subtitle}</Text> : null}
       </View>
       <View style={styles.userActions}>{children}</View>
     </View>
@@ -1007,6 +1009,7 @@ const styles = StyleSheet.create({
   },
   userPseudo: { color: Colors.textPrimary, fontSize: 14, fontWeight: '700' },
   userMeta:   { color: Colors.textMuted, fontSize: 11.5, marginTop: 1 },
+  userFriendshipTitle: { color: Colors.primary, fontSize: 10.5, fontWeight: '700', marginTop: 2 },
   userActions:{ flexDirection: 'row', alignItems: 'center', gap: 6 },
   hearts:     { flexDirection: 'row', alignItems: 'center' },
 
