@@ -1,11 +1,14 @@
 import { useState, useCallback, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DEV_TOOLS_ENABLED } from '../constants/devTools';
 
 const THEME_KEY    = 'athly:pref:profileTheme:v1';
 const GOD_KEY      = 'athly:dev:godMode:v1';
 const OVERRIDES_KEY = 'athly:dev:trophyOverrides:v1';
 const BYPASS_KEY        = '@athly_bypass_anticheat';
 const FORCE_RITUALS_KEY = '@athly_force_show_rituals';
+
+const EMPTY_OVERRIDES = {};
 
 export function useDevSettings() {
   const [profileThemeId,   setProfileThemeIdState]   = useState('auto');
@@ -74,12 +77,15 @@ export function useDevSettings() {
     AsyncStorage.removeItem(OVERRIDES_KEY).catch(() => {});
   }, []);
 
+  // Hors développement, les réglages de test sont ignorés même s'ils ont été
+  // activés auparavant sur cet appareil.
   return {
     profileThemeId, setProfileThemeId,
-    godMode, setGodMode,
-    trophyOverrides, setTrophyOverride, clearTrophyOverrides,
-    bypassAnticheat, setBypassAnticheat,
-    forceShowRituals, setForceShowRituals,
+    godMode: DEV_TOOLS_ENABLED && godMode, setGodMode,
+    trophyOverrides: DEV_TOOLS_ENABLED ? trophyOverrides : EMPTY_OVERRIDES,
+    setTrophyOverride, clearTrophyOverrides,
+    bypassAnticheat: DEV_TOOLS_ENABLED && bypassAnticheat, setBypassAnticheat,
+    forceShowRituals: DEV_TOOLS_ENABLED && forceShowRituals, setForceShowRituals,
     reload,
   };
 }

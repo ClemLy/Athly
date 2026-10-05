@@ -35,7 +35,7 @@ function TitleInfoModal({ title, onClose }) {
             </View>
           )}
 
-          <TouchableOpacity style={[s.infoCloseBtn, { backgroundColor: meta.color }]} onPress={onClose} activeOpacity={0.85}>
+          <TouchableOpacity accessibilityRole="button" style={[s.infoCloseBtn, { backgroundColor: meta.color }]} onPress={onClose} activeOpacity={0.85}>
             <Text style={s.infoCloseTxt}>Compris</Text>
           </TouchableOpacity>
         </View>
@@ -93,7 +93,7 @@ export default function TitlePickerModal({ visible, onClose }) {
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
       <View style={s.backdrop}>
         <View style={s.sheet}>
-          <TouchableOpacity style={s.closeIcon} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button" style={s.closeIcon} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Ionicons name="close" size={22} color={Colors.textMuted} />
           </TouchableOpacity>
 
@@ -106,7 +106,7 @@ export default function TitlePickerModal({ visible, onClose }) {
             <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
               <View style={s.grid}>
                 {/* ── Tuile "Aucun titre" ── */}
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[s.tile, equippedTitleId === null && s.tileEquippedNeutral]}
                   onPress={() => handleSelect(null)}
                   activeOpacity={0.85}
@@ -128,7 +128,7 @@ export default function TitlePickerModal({ visible, onClose }) {
 
                   if (!title.unlocked) {
                     return (
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button"
                         key={title.id}
                         style={s.tileLocked}
                         onPress={() => setInfoTitle(title)}
@@ -146,7 +146,7 @@ export default function TitlePickerModal({ visible, onClose }) {
                   }
 
                   return (
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       key={title.id}
                       style={[
                         s.tile,

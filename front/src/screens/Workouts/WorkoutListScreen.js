@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { TEMPLATES, instantiateWorkout } from '../../data/workoutTemplates';
+import ResumeWorkoutCard from '../../components/workouts/ResumeWorkoutCard';
 import { useWorkoutInProgress } from '../../context/WorkoutInProgressContext';
 import { useSavedWorkouts } from '../../context/SavedWorkoutsContext';
 import { instantiateSavedWorkout } from '../../services/savedWorkouts.service';
@@ -22,6 +23,8 @@ import MultiLobbyModal from '../../components/workouts/MultiLobbyModal';
 import ConfirmModal from '../../components/common/ConfirmModal';
 import InfoModal from '../../components/common/InfoModal';
 import ActionSheetModal from '../../components/common/ActionSheetModal';
+import { getErrorMessage } from '../../utils/errorMessages';
+import { plural } from '../../utils/format';
 
 // Page d'entrée "Séances".
 // Header : titre + 2 icônes (Mes exercices, Créer un exercice).
@@ -29,7 +32,7 @@ import ActionSheetModal from '../../components/common/ActionSheetModal';
 
 function TemplateCard({ template, onPress }) {
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       style={styles.card}
       onPress={onPress}
       activeOpacity={0.85}
@@ -42,10 +45,10 @@ function TemplateCard({ template, onPress }) {
         <Text style={styles.muscles} numberOfLines={1}>{template.musclesSummary}</Text>
         <View style={styles.metaRow}>
           <Ionicons name="barbell-outline" size={13} color={Colors.textMuted} />
-          <Text style={styles.meta}>{template.buildExercises().length} exercices</Text>
+          <Text style={styles.meta} numberOfLines={1}>{plural(template.buildExercises().length, 'exercice')}</Text>
           <View style={styles.metaDot} />
           <Ionicons name="time-outline" size={13} color={Colors.textMuted} />
-          <Text style={styles.meta}>~{template.estimatedDurationMin} min</Text>
+          <Text style={styles.meta} numberOfLines={1}>~{template.estimatedDurationMin} min</Text>
         </View>
       </View>
       <Ionicons name="chevron-forward" size={22} color={Colors.chevron} />
@@ -56,7 +59,7 @@ function TemplateCard({ template, onPress }) {
 function SavedWorkoutCard({ saved, onPress, onLongPress }) {
   const count = Array.isArray(saved.exercises) ? saved.exercises.length : 0;
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       style={styles.card}
       onPress={onPress}
       onLongPress={onLongPress}
@@ -79,9 +82,9 @@ function SavedWorkoutCard({ saved, onPress, onLongPress }) {
         ) : null}
         <View style={styles.metaRow}>
           <Ionicons name="barbell-outline" size={13} color={Colors.textMuted} />
-          <Text style={styles.meta}>{count} exercice{count > 1 ? 's' : ''}</Text>
+          <Text style={styles.meta} numberOfLines={1}>{plural(count, 'exercice')}</Text>
           <View style={styles.metaDot} />
-          <Text style={styles.meta}>{new Date(saved.createdAt).toLocaleDateString('fr-FR')}</Text>
+          <Text style={styles.meta} numberOfLines={1}>{new Date(saved.createdAt).toLocaleDateString('fr-FR')}</Text>
         </View>
       </View>
       <Ionicons name="chevron-forward" size={22} color={Colors.chevron} />
@@ -92,7 +95,7 @@ function SavedWorkoutCard({ saved, onPress, onLongPress }) {
 const SKIP_CONFIRM_KEY = '@athly_skip_workout_confirm';
 
 export default function WorkoutListScreen({ navigation, route }) {
-  const { loadWorkout } = useWorkoutInProgress();
+  const { loadWorkout, resumable } = useWorkoutInProgress();
   const { items: savedWorkouts, remove: removeSaved } = useSavedWorkouts();
 
   const [confirmItem, setConfirmItem] = useState(null); // { type: 'template'|'saved', data }
@@ -227,7 +230,7 @@ export default function WorkoutListScreen({ navigation, route }) {
     const saved = deleteSavedTarget;
     setDeleteSavedTarget(null);
     try { await removeSaved(saved.id); } catch (e) {
-      setErrorInfo(e && e.message ? e.message : 'Suppression impossible');
+      setErrorInfo(getErrorMessage(e, 'La suppression n\'a pas abouti. Réessaie dans un instant.'));
     }
   }, [deleteSavedTarget, removeSaved]);
 
@@ -246,6 +249,7 @@ export default function WorkoutListScreen({ navigation, route }) {
   // Sections de FlatList unifiées : on utilise une seule data + renderItem
   // qui dispatch sur le type pour garder le scroll fluide.
   const sections = [];
+  if (resumable) sections.push({ type: 'resume', key: 'resume' });
   sections.push({ type: 'callout', key: 'cta-builder' });
   if (savedWorkouts && savedWorkouts.length > 0) {
     sections.push({ type: 'header', key: 'h-saved', label: 'Mes séances', count: savedWorkouts.length });
@@ -255,6 +259,13 @@ export default function WorkoutListScreen({ navigation, route }) {
   TEMPLATES.forEach((t) => sections.push({ type: 'template', key: `t-${t.id}`, item: t }));
 
   const renderItem = ({ item }) => {
+    if (item.type === 'resume') {
+      return (
+        <ResumeWorkoutCard
+          onResume={({ lobbyId }) => navigation.navigate('Workout', lobbyId ? { lobbyId } : {})}
+        />
+      );
+    }
     if (item.type === 'callout') {
       return (
         <View style={styles.builderCallout}>
@@ -264,7 +275,7 @@ export default function WorkoutListScreen({ navigation, route }) {
               Muscles, équipement, durée. L'algo s'adapte à ton niveau.
             </Text>
           </View>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.builderCalloutBtn}
             onPress={onOpenBuilder}
             activeOpacity={0.85}
@@ -312,19 +323,19 @@ export default function WorkoutListScreen({ navigation, route }) {
 
   const ItemSeparator = ({ leadingItem }) => {
     if (leadingItem && leadingItem.type === 'header') return <View style={{ height: 4 }} />;
-    if (leadingItem && leadingItem.type === 'callout') return <View style={{ height: 18 }} />;
+    if (leadingItem && (leadingItem.type === 'callout' || leadingItem.type === 'resume')) return <View style={{ height: 18 }} />;
     return <View style={styles.sep} />;
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.headerTitle}>Séances</Text>
           <Text style={styles.headerSubtitle}>Choisis ta séance du jour</Text>
         </View>
         <View style={styles.headerActions} ref={headerActionsRef} onLayout={onHeaderActionsLayout} collapsable={false}>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.iconBtn}
             onPress={onOpenCustomList}
             activeOpacity={0.8}
@@ -333,7 +344,7 @@ export default function WorkoutListScreen({ navigation, route }) {
           >
             <Ionicons name="library-outline" size={22} color={Colors.textPrimary} />
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[styles.iconBtn, styles.iconBtnPrimary]}
             onPress={onCreateManualWorkout}
             activeOpacity={0.85}
@@ -368,7 +379,7 @@ export default function WorkoutListScreen({ navigation, route }) {
               {confirmItem ? (confirmItem.data.name || 'Séance') : ''}
             </Text>
 
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.dontAskRow}
               onPress={() => setDontAsk((v) => !v)}
               activeOpacity={0.7}
@@ -380,15 +391,15 @@ export default function WorkoutListScreen({ navigation, route }) {
             </TouchableOpacity>
 
             <View style={styles.confirmBtns}>
-              <TouchableOpacity style={styles.confirmBtnNo} onPress={handleCancelConfirm} activeOpacity={0.8}>
+              <TouchableOpacity accessibilityRole="button" style={styles.confirmBtnNo} onPress={handleCancelConfirm} activeOpacity={0.8}>
                 <Text style={styles.confirmBtnNoText}>Annuler</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.confirmBtnYes} onPress={handleConfirm} activeOpacity={0.8}>
+              <TouchableOpacity accessibilityRole="button" style={styles.confirmBtnYes} onPress={handleConfirm} activeOpacity={0.8}>
                 <Text style={styles.confirmBtnYesText}>Lancer !</Text>
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.multiBtn} onPress={handleLaunchMulti} activeOpacity={0.8}>
+            <TouchableOpacity accessibilityRole="button" style={styles.multiBtn} onPress={handleLaunchMulti} activeOpacity={0.8}>
               <Ionicons name="people" size={15} color={Colors.primary} style={{ marginRight: 7 }} />
               <Text style={styles.multiBtnTxt}>Lancer en Multi</Text>
             </TouchableOpacity>
@@ -593,15 +604,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 4,
   },
+  // Les éléments de méta-données passent à la ligne en bloc (jamais "8 / exercices")
   metaRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
+    rowGap: 4,
     marginTop: 8,
   },
   meta: {
     color: Colors.textMuted,
     fontSize: 12,
     marginLeft: 4,
+    flexShrink: 0,
   },
   metaDot: {
     width: 3,

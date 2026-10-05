@@ -24,7 +24,7 @@ export default function SaveWorkoutPromptModal({
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onDismiss}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button"
             style={styles.closeBtn}
             onPress={onDismiss}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -42,7 +42,7 @@ export default function SaveWorkoutPromptModal({
             Souhaites-tu sauvegarder cette séance sur-mesure pour la retrouver plus tard ?
           </Text>
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[styles.primaryBtn, saving && styles.btnDisabled]}
             onPress={onSaveAndLaunch}
             disabled={saving}
@@ -54,7 +54,7 @@ export default function SaveWorkoutPromptModal({
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[styles.secondaryBtn, saving && styles.btnDisabled]}
             onPress={onLaunchWithoutSave}
             disabled={saving}

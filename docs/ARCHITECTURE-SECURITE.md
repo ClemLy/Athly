@@ -1,4 +1,4 @@
-# Athly — Architecture de sécurité & résilience
+# Athly : architecture de sécurité et résilience
 
 Référence des protections en place sur la stack (Node.js/Express + PWA Expo Web).
 Chaque section pointe vers le fichier source de vérité.
@@ -18,11 +18,30 @@ Chaque section pointe vers le fichier source de vérité.
 | Payload max | `express.json({ limit: '1mb' })` | `back/app.js` |
 | JWT imperméable | Algorithme épinglé HS256, signature+expiration vérifiées, **aucun log de headers/token**, erreur générique côté client | `back/middleware/auth.middleware.js` |
 | Cache intermédiaires | `Cache-Control: no-store` sur toutes les réponses `/api` | `back/app.js` |
+| Sessions révocables | Chaque requête vérifie que le compte existe encore et que le token a été émis après le dernier changement de mot de passe (`passwordChangedAt`) : un reset ou une suppression de compte coupe toutes les sessions | `back/middleware/auth.middleware.js` |
+| Codes OTP | Générés par `crypto.randomInt`, stockés hachés (HMAC lié au compte), comparés à temps constant, 5 essais max, 1 envoi par minute et par compte (refus silencieux, sans révéler l'existence du compte) | `back/services/auth.service.js` |
+| Anti-énumération | Mot de passe oublié, renvoi de code et vérification répondent la même chose que l'adresse existe ou non ; login à temps constant (hash leurre) | `back/services/auth.service.js` |
+| Mot de passe | 8 caractères minimum, au moins une lettre et un chiffre, 128 maximum (troncature bcrypt) | `back/validators/auth.validator.js` |
+| Google | Liaison à un compte existant uniquement si Google certifie l'email (`email_verified`) | `back/services/auth.service.js` |
+| Secrets jamais sérialisés | `toJSON`/`toObject` du modèle User retirent mot de passe, codes, compteurs et `googleId` de toute réponse | `back/models/User.js` |
+| Erreurs | Messages lisibles en français ; une erreur inattendue ne renvoie jamais son détail technique (stack uniquement en développement local) | `back/middleware/error.middleware.js` |
+| Outils de test | `/api/debug` fermé en production et sur tout hébergeur Render sauf opt-in `ENABLE_DEBUG_ROUTES=true` ; God Mode front limité au développement local | `back/middleware/devOnly.middleware.js`, `front/src/constants/devTools.js` |
 
 Notes de déploiement :
 - `app.set('trust proxy', 1)` est requis derrière Render pour que `req.ip` soit la vraie IP client.
 - **En production, définir `CORS_ORIGINS`** avec le(s) domaine(s) de la PWA.
 - Le rate-limiting est désactivé quand `NODE_ENV=test` (les suites Jest enchaînent des centaines de requêtes).
+
+### Intégrité des données de jeu
+
+- **Séances** : un brouillon ne peut fixer que nom, exercices, notes et durée (jamais propriétaire, statut ou XP). La clôture (`/finalize`, `/complete`) est réservée atomiquement : une séance ne rapporte son XP et ses coffres qu'une fois, même en cas de double envoi. Durée prise en compte plafonnée à 6 h.
+- **Parrainage, streak de groupe, lobby Multi** : écritures conditionnelles atomiques, aucune double récompense en cas de requêtes simultanées.
+- **Accès** : réactions du flux d'activité réservées aux membres du groupe, lobby Multi réservé aux amis de ses participants.
+- **RGPD** : la suppression de compte efface séances, records, pesées, amitiés, présence dans les groupes et lobbys, événements et réactions.
+
+## 1 bis. Sécurité de la PWA (Vercel)
+
+En-têtes posés par `front/vercel.json` sur toutes les pages : Content-Security-Policy stricte (scripts du domaine uniquement, aucun script inline, `connect-src` limité à l'API et à Google), HSTS, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`. Le token de session est stocké dans le `localStorage` du navigateur : la CSP est la protection principale contre son vol par injection de script.
 
 ## 2. Tolérance aux pannes & concurrence
 
@@ -36,13 +55,15 @@ Notes de déploiement :
   Deux requêtes simultanées sur la dernière `CHEST_KEY` → une seule réussit.
   Test de régression : « 5 ouvertures simultanées → 1 seul succès » (`back/tests/inventory.test.js`).
 - **Erreurs de rendu front** : `ErrorBoundary` global (`front/src/components/common/ErrorBoundary.js`)
-  monté dans `App.js` — état dégradé + bouton recharger, plus d'écran blanc.
+  monté dans `App.js` : état dégradé + bouton recharger, plus d'écran blanc.
 
-## 3. PWA — offline & performance
+## 3. PWA : hors ligne et performance
 
-- **Service worker** (`front/public/sw.js`, cache `athly-shell-v2`) :
-  navigations en *network-first* avec fallback shell hors-ligne ; assets statiques en
-  *stale-while-revalidate* (chargement instantané) ; `/api/` jamais caché par le SW.
+- **Service worker** (`front/public/sw.js`, enregistré par `public/register-sw.js`) :
+  navigations en *network-first* (4 s max) avec repli sur la coquille hors ligne ;
+  fichiers versionnés (`_expo/static`, `assets`) en cache d'abord ; `/api/` jamais caché.
+- **Reprise de séance** : la séance en cours est sauvegardée en continu sur l'appareil et
+  peut être reprise après une fermeture de l'app (iOS ferme les PWA en arrière-plan).
 - **Mode dégradé réseau** (`front/src/api/api.js`) : chaque GET réussi est mis en cache
   AsyncStorage (`athly:apicache:v1:*`) ; si le réseau tombe, les GET sont servis depuis
   ce cache avec `fromCache: true` au lieu d'échouer. **Purgé à la déconnexion**
@@ -55,12 +76,12 @@ Notes de déploiement :
 Pipeline sur chaque push/PR vers `main`/`develop` (jobs conditionnés aux chemins modifiés) :
 
 1. **Backend** : ESLint → syntax check → `npm audit --omit=dev --audit-level=high`
-   (bloquant) → **199 tests** Jest/Supertest sur **MongoDB en mémoire**
-   (`mongodb-memory-server` via `back/tests/globalSetup.js`) — plus aucun besoin de
+   (bloquant) → **près de 500 tests** Jest/Supertest sur **MongoDB en mémoire**
+   (`mongodb-memory-server` via `back/tests/globalSetup.js`) : plus aucun besoin de
    service Mongo ni de `MONGO_URI` : l'environnement de test est 100 % hermétique,
    identique en CI et en local. `npm test` local est donc **sans danger** (la base
    Atlas du `.env` est ignorée pendant les tests).
-2. **Frontend** : install → `npm audit` (bloquant) → build PWA complet (`expo export`).
+2. **Frontend** : install → `npm audit` (bloquant au niveau critical, voir le commentaire du workflow) → tests unitaires → build PWA complet (`expo export`).
 
 **Blocage du merge** : à activer une fois dans GitHub (Settings → Branches → Branch
 protection rules sur `main` et `develop` → *Require status checks to pass* en cochant

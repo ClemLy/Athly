@@ -71,7 +71,7 @@ function SetRow({ index, setData = {}, onChange, onToggle, onRemove }) {
       {/* ── [-] suppression ───────────────────────────────────────────── */}
       <View style={styles.colDel}>
         {onRemove ? (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityLabel="Retirer" accessibilityRole="button"
             onPress={handleRemove}
             hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
             activeOpacity={0.6}
@@ -131,7 +131,7 @@ function SetRow({ index, setData = {}, onChange, onToggle, onRemove }) {
 
       {/* ── VALIDER / Annuler ──────────────────────────────────────────── */}
       <View style={styles.colBtn}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           onPress={handleToggle}
           hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
           activeOpacity={0.7}

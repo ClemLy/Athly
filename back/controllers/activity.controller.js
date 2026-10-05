@@ -43,7 +43,7 @@ exports.react = async (req, res, next) => {
       const meta = REACTION_META[emoji];
       await sendPushToUser(notifyActorId, {
         title: 'Athly',
-        body: `${reactor?.pseudo ?? 'Un ami'} a réagi ${meta.emoji} : « ${meta.label} »`,
+        body: `${reactor?.pseudo ?? 'Un ami'} a réagi à ton exploit : « ${meta.label} »`,
         data: { type: 'activity_reaction', eventId: String(event._id) },
       });
     }

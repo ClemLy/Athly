@@ -52,17 +52,17 @@ export default function ShortSessionWarningModal({ visible, onModify, onForce, e
           <View style={styles.warningRow}>
             <Ionicons name="alert-circle-outline" size={13} color={Colors.warningAmber} />
             <Text style={styles.warningText}>
-              Valider quand même n'accordera aucun XP et ne comptera pas pour la streak.
+              Terminer maintenant n'accordera aucun XP et ne comptera pas pour ta streak.
             </Text>
           </View>
 
-          <TouchableOpacity style={styles.primaryBtn} onPress={onModify} activeOpacity={0.85}>
-            <Ionicons name="pencil-outline" size={16} color="#fff" style={{ marginRight: 8 }} />
-            <Text style={styles.primaryBtnText}>Modifier la séance</Text>
+          <TouchableOpacity accessibilityRole="button" style={styles.primaryBtn} onPress={onModify} activeOpacity={0.85}>
+            <Ionicons name="play-outline" size={16} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={styles.primaryBtnText}>Continuer ma séance</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.ghostBtn} onPress={onForce} activeOpacity={0.7}>
-            <Text style={styles.ghostBtnText}>Valider quand même (0 XP)</Text>
+          <TouchableOpacity accessibilityRole="button" style={styles.ghostBtn} onPress={onForce} activeOpacity={0.7}>
+            <Text style={styles.ghostBtnText}>Terminer quand même (0 XP)</Text>
           </TouchableOpacity>
         </Animated.View>
       </Animated.View>

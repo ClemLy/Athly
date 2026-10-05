@@ -331,15 +331,18 @@ exports.inviteToGroup = async (req, res, next) => {
     const myId = req.user.id;
     const { friendIds, name } = req.body;
 
-    if (!Array.isArray(friendIds) || friendIds.length === 0) {
-      return next(createError('friendIds doit être un tableau non vide.', 400));
+    if (!Array.isArray(friendIds) || friendIds.length === 0 || friendIds.length > MAX_GROUP_SIZE) {
+      return next(createError('Choisis au moins un ami à inviter.', 400));
     }
     for (const id of friendIds) {
-      if (!isValidId(id)) return next(createError(`ID invalide : ${id}`, 400));
+      if (typeof id !== 'string' || !isValidId(id)) return next(createError('Un des amis sélectionnés est invalide.', 400));
+    }
+    if (name !== undefined && name !== null && (typeof name !== 'string' || name.trim().length > 40)) {
+      return next(createError('Le nom du groupe ne peut pas dépasser 40 caractères.', 400));
     }
 
     if (friendIds.some((id) => id.toString() === myId)) {
-      return next(createError("Vous ne pouvez pas vous inviter vous-même.", 422));
+      return next(createError("Tu ne peux pas t'inviter toi-même.", 422));
     }
 
     const uniqueIds = [...new Set(friendIds.map(String))];
@@ -354,7 +357,7 @@ exports.inviteToGroup = async (req, res, next) => {
         status: 'accepted',
       });
       if (!friendship) {
-        return next(createError("Vous ne pouvez inviter que vos amis acceptés.", 403));
+        return next(createError("Tu ne peux inviter que tes amis.", 403));
       }
     }
 
@@ -376,7 +379,7 @@ exports.inviteToGroup = async (req, res, next) => {
       for (const friendId of toInvite) {
         const inOther = await StreakGroup.findOne({ members: friendId });
         if (inOther) {
-          return next(createError("Un des utilisateurs invités appartient déjà à un autre groupe.", 409));
+          return next(createError("Un de tes amis fait déjà partie d'un autre groupe.", 409));
         }
       }
 
@@ -398,12 +401,12 @@ exports.inviteToGroup = async (req, res, next) => {
     for (const friendId of uniqueIds) {
       const inGroup = await StreakGroup.findOne({ members: friendId });
       if (inGroup) {
-        return next(createError("Un des utilisateurs invités appartient déjà à un autre groupe.", 409));
+        return next(createError("Un de tes amis fait déjà partie d'un autre groupe.", 409));
       }
     }
 
     const group = await StreakGroup.create({
-      name:           name || undefined,
+      name:           (typeof name === 'string' && name.trim()) || undefined,
       members:        [myId],
       pendingInvites: uniqueIds,
     });
@@ -437,17 +440,17 @@ exports.respondToGroupInvite = async (req, res, next) => {
     const { groupId } = req.params;
     const { accept }  = req.body;
 
-    if (!isValidId(groupId)) return next(createError('groupId invalide.', 400));
+    if (!isValidId(groupId)) return next(createError("Ce groupe n'existe plus.", 400));
     if (typeof accept !== 'boolean') {
-      return next(createError("Le champ 'accept' doit être un booléen (true / false).", 400));
+      return next(createError("Réponse invalide. Réessaie.", 400));
     }
 
     const group = await StreakGroup.findById(groupId);
-    if (!group) return next(createError('Groupe introuvable.', 404));
+    if (!group) return next(createError("Ce groupe n'existe plus.", 404));
 
     const pendingIdx = group.pendingInvites.findIndex((id) => id.toString() === myId);
     if (pendingIdx === -1) {
-      return next(createError("Vous n'avez pas d'invitation en attente pour ce groupe.", 403));
+      return next(createError("Cette invitation n'est plus valable.", 403));
     }
 
     // Retirer de pendingInvites dans tous les cas
@@ -465,7 +468,7 @@ exports.respondToGroupInvite = async (req, res, next) => {
     // ── Acceptation ───────────────────────────────────────────────────────────
     const alreadyInGroup = await StreakGroup.findOne({ members: myId });
     if (alreadyInGroup) {
-      return next(createError("Vous appartenez déjà à un groupe de streak.", 409));
+      return next(createError("Tu fais déjà partie d'un groupe. Quitte-le avant d'en rejoindre un autre.", 409));
     }
 
     if (group.members.length >= MAX_GROUP_SIZE) {
@@ -503,18 +506,18 @@ exports.shakeMember = async (req, res, next) => {
     const myId              = req.user.id;
     const { groupId, memberId } = req.params;
 
-    if (!isValidId(groupId))  return next(createError('groupId invalide.', 400));
-    if (!isValidId(memberId)) return next(createError('memberId invalide.', 400));
+    if (!isValidId(groupId))  return next(createError("Ce groupe n'existe plus.", 400));
+    if (!isValidId(memberId)) return next(createError("Ce membre n'est plus dans le groupe.", 400));
 
     if (myId === memberId) {
-      return next(createError("Vous ne pouvez pas vous secouer vous-même.", 422));
+      return next(createError("Tu ne peux pas te secouer toi-même.", 422));
     }
 
     const group = await StreakGroup.findById(groupId);
-    if (!group) return next(createError('Groupe introuvable.', 404));
+    if (!group) return next(createError("Ce groupe n'existe plus.", 404));
 
     if (!group.members.some((m) => m.toString() === myId)) {
-      return next(createError("Vous ne faites pas partie de ce groupe.", 403));
+      return next(createError("Tu ne fais pas partie de ce groupe.", 403));
     }
 
     if (!group.members.some((m) => m.toString() === memberId)) {
@@ -533,7 +536,7 @@ exports.shakeMember = async (req, res, next) => {
     });
 
     if (workoutDone) {
-      return next(createError("Ce membre a déjà validé sa séance aujourd'hui - inutile de le secouer !", 422));
+      return next(createError("Ce membre a déjà fait sa séance aujourd'hui, inutile de le secouer.", 422));
     }
 
     // Limite 1 secousse par jour civil et par cible — évite le harcèlement
@@ -542,7 +545,7 @@ exports.shakeMember = async (req, res, next) => {
       s.from.toString() === myId && s.to.toString() === memberId && s.date >= todayStart && s.date < tomorrow,
     );
     if (alreadyShakenToday) {
-      return next(createError("Tu as déjà secoué cette personne aujourd'hui - reviens demain !", 422));
+      return next(createError("Tu as déjà secoué cette personne aujourd'hui. Réessaie demain.", 422));
     }
 
     const target       = await User.findById(memberId).select('pseudo');
@@ -551,7 +554,7 @@ exports.shakeMember = async (req, res, next) => {
 
     const trollMessage = SHAKE_TROLL_MESSAGES[Math.floor(Math.random() * SHAKE_TROLL_MESSAGES.length)];
     await sendPushToUser(memberId, {
-      title: `${me?.pseudo ?? 'Un ami'} t'a secoué ! 🚨`,
+      title: `${me?.pseudo ?? 'Un ami'} t'a secoué !`,
       body:  trollMessage,
       data:  { type: 'shake', fromUserId: myId },
     });
@@ -599,13 +602,13 @@ exports.checkAndUpdateGroupStreaks = async (req, res, next) => {
     const myId      = req.user.id;
     const { groupId } = req.params;
 
-    if (!isValidId(groupId)) return next(createError('groupId invalide.', 400));
+    if (!isValidId(groupId)) return next(createError("Ce groupe n'existe plus.", 400));
 
     const group = await StreakGroup.findById(groupId);
-    if (!group) return next(createError('Groupe introuvable.', 404));
+    if (!group) return next(createError("Ce groupe n'existe plus.", 404));
 
     if (!group.members.some((m) => m.toString() === myId)) {
-      return next(createError("Vous ne faites pas partie de ce groupe.", 403));
+      return next(createError("Tu ne fais pas partie de ce groupe.", 403));
     }
 
     // Garde idempotence : déjà validé aujourd'hui ?
@@ -647,10 +650,34 @@ exports.checkAndUpdateGroupStreaks = async (req, res, next) => {
     }
 
     // ── Tous ont validé ──────────────────────────────────────────────────────
-    group.currentStreak    += 1;
-    group.lastValidatedDate = new Date();
-    group.shameBreakers     = []; // une nouvelle streak efface le Hall of Shame
-    await group.save();
+    // Écriture atomique conditionnée à "pas encore validé aujourd'hui" : si
+    // deux membres déclenchent la vérification au même instant, un seul
+    // incrémente la streak et distribue l'XP, l'autre reçoit alreadyValidated.
+    const claimed = await StreakGroup.findOneAndUpdate(
+      {
+        _id: group._id,
+        $or: [{ lastValidatedDate: null }, { lastValidatedDate: { $lt: todayStart } }],
+      },
+      {
+        $inc: { currentStreak: 1 },
+        $set: { lastValidatedDate: new Date(), shameBreakers: [] }, // une nouvelle streak efface le Hall of Shame
+      },
+      { returnDocument: 'after' },
+    );
+
+    if (!claimed) {
+      const fresh = await StreakGroup.findById(group._id).select('currentStreak');
+      return res.status(200).json({
+        success:          true,
+        alreadyValidated: true,
+        message:          "La streak de groupe a déjà été validée aujourd'hui.",
+        currentStreak:    fresh ? fresh.currentStreak : group.currentStreak,
+      });
+    }
+
+    group.currentStreak     = claimed.currentStreak;
+    group.lastValidatedDate = claimed.lastValidatedDate;
+    group.shameBreakers     = claimed.shameBreakers;
 
     // XP d'amitié par paire (C(n, 2) mises à jour)
     const xpGain = computeGroupFriendshipXpGain(group.currentStreak);
@@ -678,8 +705,8 @@ exports.checkAndUpdateGroupStreaks = async (req, res, next) => {
       group.currentStreak >= BLOOD_SANG_STREAK_THRESHOLD
     ) {
       await Promise.all(memberIds.map((id) => addUniqueItemOnce(id, 'FRAME_COLOR_BLOOD_SANG', 'unique')));
+      await StreakGroup.updateOne({ _id: group._id }, { $set: { bloodSangAwarded: true } });
       group.bloodSangAwarded = true;
-      await group.save();
       bloodSangUnlocked = true;
       // FIRST_UNIQUE_ITEM peut se débloquer ici si c'est le tout premier objet
       // Unique du membre — doit être vérifié pendant que l'item est encore en
@@ -700,7 +727,7 @@ exports.checkAndUpdateGroupStreaks = async (req, res, next) => {
     return res.status(200).json({
       success:       true,
       allValidated:  true,
-      message:       `Streak de groupe validée ! Jour ${group.currentStreak} consécutif.`,
+      message:       `Streak de groupe validée : jour ${group.currentStreak}.`,
       currentStreak: group.currentStreak,
       xpGain,
       xpUpdates,
@@ -742,7 +769,7 @@ exports.getMyGroup = async (req, res, next) => {
         success: true,
         group:   null,
         invites,
-        message: "Vous ne faites partie d'aucun groupe.",
+        message: "Tu ne fais partie d'aucun groupe.",
       });
     }
 
@@ -796,7 +823,7 @@ exports.leaveGroup = async (req, res, next) => {
     const myId = req.user.id;
 
     const group = await StreakGroup.findOne({ members: myId });
-    if (!group) return next(createError("Vous ne faites partie d'aucun groupe.", 404));
+    if (!group) return next(createError("Tu ne fais partie d'aucun groupe.", 404));
 
     group.members = group.members.filter((m) => m.toString() !== myId);
 

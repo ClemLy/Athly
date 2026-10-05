@@ -6,13 +6,13 @@ const Joi = require('joi');
  */
 const userSchemas = {
   updateProfile: Joi.object({
-    name: Joi.string().min(2).max(50),
+    name: Joi.string().trim().min(2).max(30),
     age: Joi.number().min(12).max(100),
     sexe: Joi.string().valid("H", "F", "Autre"),
     poids: Joi.number().min(30).max(250),
     taille: Joi.number().min(100).max(250),
     poidsCible: Joi.number().min(30).max(250).allow(null),
-    equipements: Joi.array().items(Joi.string()).default([]),
+    equipements: Joi.array().items(Joi.string().max(60)).max(50),
     niveauSportif: Joi.string().valid("Débutant", "Intermédiaire", "Avancé"),
     objectif: Joi.string().valid("prise de masse", "perte de poids", "entretien", "force"),
     rythme: Joi.number().min(1).max(7).allow(null)

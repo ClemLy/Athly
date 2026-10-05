@@ -41,7 +41,7 @@ describe('POST /api/auth/google — connexion Google OAuth (Section VIII)', () =
 
   it('✅ Crée un nouveau compte au premier login Google', async () => {
     mockVerifyIdToken.mockResolvedValue({
-      getPayload: () => ({ sub: 'google-sub-1', email: 'nouveau@gmail.com', name: 'Nouvel Athlète' }),
+      getPayload: () => ({ sub: 'google-sub-1', email: 'nouveau@gmail.com', name: 'Nouvel Athlète', email_verified: true }),
     });
 
     const res = await request(app)
@@ -60,7 +60,7 @@ describe('POST /api/auth/google — connexion Google OAuth (Section VIII)', () =
 
   it('✅ Reconnecte directement un compte déjà lié (même googleId)', async () => {
     mockVerifyIdToken.mockResolvedValue({
-      getPayload: () => ({ sub: 'google-sub-2', email: 'existant@gmail.com', name: 'Existant' }),
+      getPayload: () => ({ sub: 'google-sub-2', email: 'existant@gmail.com', name: 'Existant', email_verified: true }),
     });
     const first = await request(app).post('/api/auth/google').send({ idToken: 't1' });
     const firstUserId = first.body.user.id;
@@ -78,7 +78,7 @@ describe('POST /api/auth/google — connexion Google OAuth (Section VIII)', () =
     });
 
     mockVerifyIdToken.mockResolvedValue({
-      getPayload: () => ({ sub: 'google-sub-3', email: 'deja.la@gmail.com', name: 'Déjà Là' }),
+      getPayload: () => ({ sub: 'google-sub-3', email: 'deja.la@gmail.com', name: 'Déjà Là', email_verified: true }),
     });
 
     const res = await request(app).post('/api/auth/google').send({ idToken: 't3' });
@@ -87,6 +87,23 @@ describe('POST /api/auth/google — connexion Google OAuth (Section VIII)', () =
     const user = await User.findOne({ email: 'deja.la@gmail.com' });
     expect(user.googleId).toBe('google-sub-3');
     expect(user.isVerified).toBe(true); // vérifié automatiquement même si le compte email ne l'était pas
+  });
+
+  it("❌ 401 et aucun lien de compte si l'email Google n'est pas vérifié", async () => {
+    await request(app).post('/api/auth/register').send({
+      pseudo: 'Victime', email: 'victime@exemple.fr', password: 'Password123!',
+    });
+
+    mockVerifyIdToken.mockResolvedValue({
+      getPayload: () => ({ sub: 'google-sub-4', email: 'victime@exemple.fr', name: 'Pirate', email_verified: false }),
+    });
+
+    const res = await request(app).post('/api/auth/google').send({ idToken: 't4' });
+
+    expect(res.statusCode).toBe(401);
+    expect(res.body.code).toBe('GOOGLE_EMAIL_UNVERIFIED');
+    const user = await User.findOne({ email: 'victime@exemple.fr' });
+    expect(user.googleId).toBeUndefined();
   });
 
   it('❌ 401 si le token Google est invalide', async () => {

@@ -101,10 +101,10 @@ export default function ExerciseDetailScreen({ route, navigation }) {
 
   if (!exercise) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <View style={styles.notFound}>
           <Text style={styles.notFoundText}>Exercice introuvable.</Text>
-          <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
+          <TouchableOpacity accessibilityRole="button" style={styles.backBtn} onPress={handleBack}>
             <Text style={styles.backBtnText}>Retour</Text>
           </TouchableOpacity>
         </View>
@@ -113,7 +113,7 @@ export default function ExerciseDetailScreen({ route, navigation }) {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -125,13 +125,13 @@ export default function ExerciseDetailScreen({ route, navigation }) {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.backRow}>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button"
               onPress={handleBack}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Ionicons name="chevron-back" size={26} color={Colors.textPrimary} />
             </TouchableOpacity>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={() => {
                 if (!navigation || !exercise) return;
                 navigation.navigate('ExerciseStats', {
@@ -169,7 +169,7 @@ export default function ExerciseDetailScreen({ route, navigation }) {
             onRemove={handleRemove}
           />
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.addBtn}
             onPress={handleAdd}
             activeOpacity={0.85}
@@ -185,12 +185,12 @@ export default function ExerciseDetailScreen({ route, navigation }) {
                 <Ionicons name="checkmark-circle" size={15} color={Colors.valid} />
                 <Text style={styles.doneBadgeText}>Exercice terminé</Text>
               </View>
-              <TouchableOpacity style={styles.undoneBtn} onPress={handleUndoneExercise} activeOpacity={0.8}>
+              <TouchableOpacity accessibilityRole="button" style={styles.undoneBtn} onPress={handleUndoneExercise} activeOpacity={0.8}>
                 <Text style={styles.undoneBtnText}>Annuler</Text>
               </TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity style={styles.finishBtn} onPress={handleFinishExercise} activeOpacity={0.85}>
+            <TouchableOpacity accessibilityRole="button" style={styles.finishBtn} onPress={handleFinishExercise} activeOpacity={0.85}>
               <Ionicons name="checkmark-done" size={16} color="#fff" />
               <Text style={styles.finishBtnText}>Terminer l'exercice</Text>
             </TouchableOpacity>

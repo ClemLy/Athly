@@ -9,203 +9,18 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '../../constants/theme';
 import AuthInput from '../../components/inputs/AuthInput';
+import PasswordGuide, { isPasswordValid, PASSWORD_RULES_MESSAGE } from '../../components/inputs/PasswordGuide';
 import { NotificationBanner } from '../../components/common';
 import { register } from '../../services';
 import { haptics } from '../../services';
+import { getErrorMessage } from '../../utils/errorMessages';
 
-const EMAIL_RE  = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const HAS_UPPER = /[A-Z]/;
-const HAS_DIGIT = /[0-9]/;
-const MIN_PWD   = 6;  // seuil minimal — la force est guidée par la StrengthBar + popup
-
-// ─── Calcul de force du mot de passe (0 = absent, 1 = faible, 2 = moyen, 3 = fort) ──
-function getStrength(pwd) {
-  if (!pwd) return 0;
-  let s = 0;
-  if (pwd.length >= 8)     s++;
-  if (HAS_UPPER.test(pwd)) s++;
-  if (HAS_DIGIT.test(pwd)) s++;
-  return s;
-}
-
-// ─── Barre de force ───────────────────────────────────────────────────────────
-function StrengthBar({ password }) {
-  const score = getStrength(password);
-  if (!password) return null;
-  const color = score === 3 ? Colors.success : score === 2 ? '#FFA500' : Colors.error;
-  const label = score === 3 ? 'Fort' : score === 2 ? 'Moyen' : 'Faible';
-  return (
-    <View style={sb.wrap}>
-      <View style={sb.row}>
-        {[0, 1, 2].map(i => (
-          <View
-            key={i}
-            style={[
-              sb.seg,
-              i < 2 && { marginRight: 6 },
-              { backgroundColor: i < score ? color : 'rgba(255,255,255,0.08)' },
-            ]}
-          />
-        ))}
-      </View>
-      <Text style={[sb.lbl, { color }]}>{label}</Text>
-    </View>
-  );
-}
-
-const sb = StyleSheet.create({
-  wrap: { marginTop: 6, marginBottom: 12 },
-  row:  { flexDirection: 'row' },
-  seg:  { flex: 1, height: 3, borderRadius: 2 },
-  lbl:  { fontSize: 11, fontWeight: '600', marginTop: 5 },
-});
-
-// ─── Popup "Mot de passe simple" ─────────────────────────────────────────────
-
-function WeakPasswordModal({ visible, onImprove, onCreate, loading }) {
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      onRequestClose={onImprove}
-    >
-      <View style={wm.backdrop}>
-        <View style={wm.card}>
-
-          {/* Icône */}
-          <View style={wm.iconWrap}>
-            <Ionicons name="warning-outline" size={28} color={Colors.warningAmber} />
-          </View>
-
-          <Text style={wm.title}>Mot de passe simple</Text>
-          <Text style={wm.body}>
-            Votre mot de passe est facile à deviner. Pour la sécurité de vos
-            entraînements, nous vous conseillons d'ajouter des chiffres ou des majuscules.
-          </Text>
-
-          {/* Bouton principal : Améliorer */}
-          <TouchableOpacity
-            style={wm.improveBtn}
-            onPress={onImprove}
-            activeOpacity={0.82}
-          >
-            <Ionicons name="shield-checkmark-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
-            <Text style={wm.improveTxt}>Améliorer mon mot de passe</Text>
-          </TouchableOpacity>
-
-          {/* Bouton secondaire : Créer quand même */}
-          <TouchableOpacity
-            style={wm.createBtn}
-            onPress={onCreate}
-            disabled={loading}
-            activeOpacity={0.75}
-          >
-            {loading
-              ? <ActivityIndicator size="small" color={Colors.textMuted} />
-              : <Text style={wm.createTxt}>Créer quand même</Text>
-            }
-          </TouchableOpacity>
-
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-const wm = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.78)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  card: {
-    width: '100%',
-    backgroundColor: Colors.bgDeep2,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.25)',
-    padding: 28,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.6,
-    shadowRadius: 32,
-    elevation: 20,
-  },
-  iconWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
-    backgroundColor: 'rgba(245,158,11,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.25)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 18,
-  },
-  title: {
-    color: Colors.textPrimary,
-    fontSize: 19,
-    fontWeight: '800',
-    letterSpacing: -0.3,
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  body: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 21,
-    textAlign: 'center',
-    marginBottom: 26,
-  },
-
-  // Bouton principal — Améliorer (lumineux, Colors.primary)
-  improveBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    height: 50,
-    borderRadius: 13,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    marginBottom: 10,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  improveTxt: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-
-  // Bouton secondaire — Créer quand même (discret)
-  createBtn: {
-    width: '100%',
-    height: 44,
-    borderRadius: 13,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  createTxt: {
-    color: Colors.textMuted,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-});
+const EMAIL_RE   = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_PSEUDO = 30;
 
 // ─── Popup "Pseudo non autorisé" ──────────────────────────────────────────────
-// Ton volontairement plus ferme que WeakPasswordModal (qui reste un conseil) :
-// ici on avertit explicitement que le pseudo a été refusé par la modération
-// automatique et qu'une insistance répétée peut mener à des restrictions de
-// compte — dissuasif sans bloquer techniquement la nouvelle tentative.
+// Affichée quand la modération automatique du serveur refuse le pseudo
+// (code PSEUDO_NOT_ALLOWED) : explique pourquoi et vide le champ.
 
 function PseudoRejectedModal({ visible, onClose }) {
   return (
@@ -224,15 +39,11 @@ function PseudoRejectedModal({ visible, onClose }) {
 
           <Text style={pm.title}>Pseudo non autorisé</Text>
           <Text style={pm.body}>
-            Ce pseudo a été refusé car il contient un terme injurieux ou inapproprié.
-            Athly est une communauté respectueuse - merci d'en choisir un autre.
-          </Text>
-          <Text style={pm.warning}>
-            Toute tentative répétée avec un pseudo de ce type pourra entraîner des
-            restrictions sur ton compte.
+            Ce pseudo contient un terme injurieux ou inapproprié. Tes amis le
+            verront partout dans l'app : choisis-en un autre.
           </Text>
 
-          <TouchableOpacity style={pm.closeBtn} onPress={onClose} activeOpacity={0.85}>
+          <TouchableOpacity style={pm.closeBtn} onPress={onClose} activeOpacity={0.85} accessibilityRole="button">
             <Text style={pm.closeTxt}>Choisir un autre pseudo</Text>
           </TouchableOpacity>
         </View>
@@ -270,8 +81,7 @@ const pm = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', marginBottom: 18,
   },
   title: { color: Colors.textPrimary, fontSize: 19, fontWeight: '800', letterSpacing: -0.3, marginBottom: 12, textAlign: 'center' },
-  body: { color: Colors.textSecondary, fontSize: 14, lineHeight: 21, textAlign: 'center', marginBottom: 14 },
-  warning: { color: Colors.destructive, fontSize: 12.5, fontWeight: '700', lineHeight: 18, textAlign: 'center', marginBottom: 24 },
+  body: { color: Colors.textSecondary, fontSize: 14, lineHeight: 21, textAlign: 'center', marginBottom: 24 },
   closeBtn: {
     width: '100%', height: 50, borderRadius: 13,
     backgroundColor: Colors.destructive, justifyContent: 'center', alignItems: 'center',
@@ -287,103 +97,93 @@ export default function RegisterScreen({ navigation }) {
   const [password, setPassword] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [confirm,  setConfirm]  = useState('');
+  const [accepted, setAccepted] = useState(false);
   const [loading,  setLoading]  = useState(false);
 
   const [showPwd,     setShowPwd]     = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const [pseudoErr,  setPseudoErr]  = useState('');
-  const [emailErr,   setEmailErr]   = useState('');
-  const [pwdErr,     setPwdErr]     = useState('');
-  const [confirmErr, setConfirmErr] = useState('');
-  const [globalErr,  setGlobalErr]  = useState('');
-  const [errType,    setErrType]    = useState('error');
+  const [pseudoErr,   setPseudoErr]   = useState('');
+  const [emailErr,    setEmailErr]    = useState('');
+  const [pwdErr,      setPwdErr]      = useState('');
+  const [confirmErr,  setConfirmErr]  = useState('');
+  const [referralErr, setReferralErr] = useState('');
+  const [consentErr,  setConsentErr]  = useState('');
+  const [globalErr,   setGlobalErr]   = useState('');
+  const [errType,     setErrType]     = useState('error');
+  const [emailTaken,  setEmailTaken]  = useState(false);
 
-  const [weakModalVisible, setWeakModalVisible] = useState(false);
   const [pseudoRejectedVisible, setPseudoRejectedVisible] = useState(false);
 
-  // ── Règles allégées : seul le minimum absolu bloque le bouton ────────────────
-  const isPwdMinimal = password.length >= MIN_PWD;
-  const isFormValid  =
-    pseudo.trim().length >= 2 &&
-    EMAIL_RE.test(email) &&
-    isPwdMinimal &&
-    confirm.length > 0 &&
-    confirm === password;
-
-  // ── Validation UI (erreurs champ par champ) ───────────────────────────────
+  // ── Validation UI (erreurs champ par champ, au clic sur "Créer mon compte") ──
   const validate = useCallback(() => {
     let ok = true;
+    const p = pseudo.trim();
 
-    if (!pseudo.trim()) { setPseudoErr('Pseudo requis'); ok = false; }
+    if (!p)                        { setPseudoErr('Choisis un pseudo.'); ok = false; }
+    else if (p.length < 2)         { setPseudoErr('Ton pseudo doit faire au moins 2 caractères.'); ok = false; }
+    else if (p.length > MAX_PSEUDO){ setPseudoErr(`Ton pseudo ne peut pas dépasser ${MAX_PSEUDO} caractères.`); ok = false; }
+    else if (/[#<>]/.test(p))      { setPseudoErr('Ton pseudo ne peut pas contenir les caractères # < >.'); ok = false; }
     else setPseudoErr('');
 
-    if (!email)                     { setEmailErr('Email requis');   ok = false; }
-    else if (!EMAIL_RE.test(email)) { setEmailErr('Email invalide'); ok = false; }
+    const e = email.trim();
+    if (!e)                     { setEmailErr('Entre ton adresse email.'); ok = false; }
+    else if (!EMAIL_RE.test(e)) { setEmailErr('Cette adresse email n\'est pas valide. Exemple : nom@exemple.fr'); ok = false; }
     else setEmailErr('');
 
-    // Seul le minimum de 6 caractères est bloquant côté formulaire.
-    // La popup se charge de guider vers un mot de passe plus fort.
-    if (!password)                     { setPwdErr('Mot de passe requis');    ok = false; }
-    else if (password.length < MIN_PWD){ setPwdErr(`${MIN_PWD} caractères minimum`); ok = false; }
+    if (!password)                      { setPwdErr('Choisis un mot de passe.'); ok = false; }
+    else if (!isPasswordValid(password)){ setPwdErr(PASSWORD_RULES_MESSAGE); ok = false; }
     else setPwdErr('');
 
-    if (!confirm)                  { setConfirmErr('Confirmez le mot de passe');               ok = false; }
-    else if (confirm !== password) { setConfirmErr('Les mots de passe ne correspondent pas');  ok = false; }
+    if (!confirm)                  { setConfirmErr('Retape ton mot de passe pour le confirmer.'); ok = false; }
+    else if (confirm !== password) { setConfirmErr('Les deux mots de passe ne sont pas identiques.'); ok = false; }
     else setConfirmErr('');
 
-    return ok;
-  }, [pseudo, email, password, confirm]);
+    if (!accepted) { setConsentErr('Accepte les conditions pour créer ton compte.'); ok = false; }
+    else setConsentErr('');
 
-  // ── Appel API réel ────────────────────────────────────────────────────────
-  const doRegister = useCallback(async () => {
-    setWeakModalVisible(false);
+    return ok;
+  }, [pseudo, email, password, confirm, accepted]);
+
+  // ── Appel API ─────────────────────────────────────────────────────────────
+  const handleSubmit = useCallback(async () => {
+    setGlobalErr('');
+    setEmailTaken(false);
+    if (!validate()) {
+      haptics.error();
+      return;
+    }
     try {
       setLoading(true);
-      setGlobalErr('');
-      await register({ pseudo, email, password, referralCode: referralCode.trim() });
-      navigation.navigate('EmailVerification', { email });
+      setReferralErr('');
+      await register({
+        pseudo: pseudo.trim(),
+        email: email.trim(),
+        password,
+        referralCode: referralCode.trim(),
+      });
+      navigation.navigate('EmailVerification', { email: email.trim() });
     } catch (error) {
-      const status = error?.status;
-      const msg    = error?.data?.message ?? '';
-      if (status === 429) {
-        setErrType('warning');
-        setGlobalErr('Trop de tentatives. Veuillez patienter avant de réessayer.');
-      } else if (status >= 500) {
-        setErrType('info');
-        setGlobalErr('Une erreur est survenue, notre équipe est sur le coup.');
-      } else if (msg.toLowerCase().includes('parrainage')) {
-        setErrType('error');
-        setGlobalErr('Code de parrainage invalide. Vérifie-le ou laisse le champ vide.');
-      } else if (msg.toLowerCase().includes('email')) {
-        setErrType('error');
-        setGlobalErr('Cet email est déjà utilisé.');
-      } else if (msg.toLowerCase().includes('pseudo')) {
-        haptics.error();
-        setPseudoErr('Pseudo non autorisé');
+      const code = error?.data?.code;
+      haptics.error();
+      if (code === 'PSEUDO_NOT_ALLOWED') {
+        setPseudoErr('Ce pseudo n\'est pas autorisé.');
         setPseudoRejectedVisible(true);
+      } else if (code === 'EMAIL_TAKEN') {
+        setEmailErr('Un compte existe déjà avec cette adresse.');
+        setEmailTaken(true);
+      } else if (code === 'REFERRAL_INVALID') {
+        setReferralErr(getErrorMessage(error, 'Ce code de parrainage n\'existe pas.'));
       } else {
-        setErrType('error');
-        setGlobalErr("Erreur lors de l'inscription. Réessayez.");
+        setErrType(error?.status === 429 || error?.network ? 'warning' : 'error');
+        setGlobalErr(getErrorMessage(error, 'La création du compte n\'a pas abouti. Réessaie dans un instant.'));
       }
     } finally {
       setLoading(false);
     }
-  }, [pseudo, email, password, referralCode, navigation]);
+  }, [validate, pseudo, email, password, referralCode, navigation]);
 
-  // ── Soumission : validation + vérification de force ───────────────────────
-  const handleSubmit = useCallback(() => {
-    if (!validate()) return;
-
-    const strength = getStrength(password);
-    if (strength < 3) {
-      // Mot de passe faible ou moyen → popup pédagogique
-      setWeakModalVisible(true);
-    } else {
-      // Fort → inscription directe
-      doRegister();
-    }
-  }, [validate, password, doRegister]);
+  const openLegal = (doc) => navigation.navigate('Legal', { doc });
 
   return (
     <SafeAreaView style={s.safeArea} edges={['top', 'bottom']}>
@@ -394,53 +194,76 @@ export default function RegisterScreen({ navigation }) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={22} color={Colors.textMuted} />
+          <TouchableOpacity
+            style={s.backBtn}
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Retour à la connexion"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="arrow-back" size={22} color={Colors.textSecondary} />
           </TouchableOpacity>
 
           <View style={s.titleBlock}>
-            <Text style={s.title}>Créer un compte</Text>
-            <Text style={s.tagline}>Rejoignez la communauté Athly</Text>
+            <Text style={s.title} accessibilityRole="header">Créer un compte</Text>
+            <Text style={s.tagline}>Tes séances, ton XP et tes records, au même endroit.</Text>
           </View>
 
           <AuthInput
             label="Pseudo"
             icon="person-outline"
-            placeholder="VotreAlias"
+            placeholder="Ton nom d'athlète"
             value={pseudo}
             onChangeText={(v) => { setPseudo(v); if (pseudoErr) setPseudoErr(''); }}
             error={pseudoErr}
             autoCapitalize="none"
             autoCorrect={false}
+            autoComplete="username"
+            textContentType="username"
+            maxLength={MAX_PSEUDO}
+            enterKeyHint="next"
           />
 
           <AuthInput
             label="Email"
             icon="mail-outline"
-            placeholder="votre@email.com"
+            placeholder="nom@exemple.fr"
             value={email}
-            onChangeText={(v) => { setEmail(v); if (emailErr) setEmailErr(''); }}
+            onChangeText={(v) => { setEmail(v); if (emailErr) { setEmailErr(''); setEmailTaken(false); } }}
             onBlur={() => {
-              if (!email) setEmailErr('Email requis');
-              else if (!EMAIL_RE.test(email)) setEmailErr('Email invalide');
-              else setEmailErr('');
+              const e = email.trim();
+              if (e && !EMAIL_RE.test(e)) setEmailErr('Cette adresse email n\'est pas valide. Exemple : nom@exemple.fr');
             }}
             error={emailErr}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            autoComplete="email"
+            textContentType="emailAddress"
+            inputMode="email"
+            enterKeyHint="next"
           />
+          {emailTaken && (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Auth')}
+              style={s.inlineLink}
+              accessibilityRole="link"
+            >
+              <Text style={s.inlineLinkTxt}>Se connecter avec cette adresse</Text>
+              <Ionicons name="arrow-forward" size={14} color={Colors.primary} />
+            </TouchableOpacity>
+          )}
 
           <AuthInput
             label="Mot de passe"
             icon="lock-closed-outline"
-            placeholder="••••••••"
+            placeholder="8 caractères minimum"
             value={password}
             onChangeText={(v) => {
               setPassword(v);
-              if (pwdErr && v.length >= MIN_PWD) setPwdErr('');
+              if (pwdErr && isPasswordValid(v)) setPwdErr('');
               if (confirmErr && confirm) {
-                setConfirmErr(v !== confirm ? 'Les mots de passe ne correspondent pas' : '');
+                setConfirmErr(v !== confirm ? 'Les deux mots de passe ne sont pas identiques.' : '');
               }
             }}
             isPassword
@@ -448,18 +271,21 @@ export default function RegisterScreen({ navigation }) {
             showPassword={showPwd}
             setShowPassword={setShowPwd}
             error={pwdErr}
+            autoComplete="new-password"
+            textContentType="newPassword"
+            enterKeyHint="next"
           />
-          <StrengthBar password={password} />
+          <PasswordGuide password={password} />
 
           <AuthInput
             label="Confirmer le mot de passe"
             icon="shield-checkmark-outline"
-            placeholder="••••••••"
+            placeholder="Retape ton mot de passe"
             value={confirm}
             onChangeText={(v) => {
               setConfirm(v);
               if (confirmErr) {
-                setConfirmErr(v !== password ? 'Les mots de passe ne correspondent pas' : '');
+                setConfirmErr(v !== password ? 'Les deux mots de passe ne sont pas identiques.' : '');
               }
             }}
             isPassword
@@ -467,48 +293,78 @@ export default function RegisterScreen({ navigation }) {
             showPassword={showConfirm}
             setShowPassword={setShowConfirm}
             error={confirmErr}
+            autoComplete="new-password"
+            textContentType="newPassword"
           />
 
           <AuthInput
-            label="Code de parrainage (optionnel)"
+            label="Code de parrainage (facultatif)"
             icon="gift-outline"
             placeholder="ATH-XXXXX"
             value={referralCode}
-            onChangeText={(v) => setReferralCode(v.toUpperCase())}
+            onChangeText={(v) => { setReferralCode(v.toUpperCase()); if (referralErr) setReferralErr(''); }}
+            error={referralErr}
             autoCapitalize="characters"
             autoCorrect={false}
+            maxLength={20}
           />
+
+          {/* Consentement explicite (RGPD) : l'app traite poids, taille et date de naissance */}
+          <TouchableOpacity
+            style={s.consentRow}
+            onPress={() => { setAccepted((v) => !v); if (consentErr) setConsentErr(''); }}
+            activeOpacity={0.8}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: accepted }}
+            accessibilityLabel="J'accepte les conditions d'utilisation et la politique de confidentialité"
+          >
+            <View style={[s.checkbox, accepted && s.checkboxActive, consentErr && !accepted && s.checkboxError]}>
+              {accepted && <Ionicons name="checkmark" size={13} color="#fff" />}
+            </View>
+            <Text style={s.consentTxt}>
+              J'accepte les{' '}
+              <Text style={s.consentLink} onPress={() => openLegal('conditions')} accessibilityRole="link">
+                conditions d'utilisation
+              </Text>
+              {' '}et la{' '}
+              <Text style={s.consentLink} onPress={() => openLegal('confidentialite')} accessibilityRole="link">
+                politique de confidentialité
+              </Text>
+              .
+            </Text>
+          </TouchableOpacity>
+          {consentErr ? (
+            <Text style={s.consentErr} accessibilityRole="alert">{consentErr}</Text>
+          ) : null}
 
           {globalErr ? <NotificationBanner message={globalErr} type={errType} /> : null}
 
           <TouchableOpacity
-            style={[s.primaryBtn, !isFormValid && s.btnDisabled]}
+            style={s.primaryBtn}
             onPress={handleSubmit}
-            disabled={loading || !isFormValid}
+            disabled={loading}
             activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityState={{ busy: loading, disabled: loading }}
           >
             {loading
               ? <ActivityIndicator color="#fff" />
-              : <Text style={[s.btnText, !isFormValid && s.btnTextMuted]}>S'inscrire</Text>
+              : <Text style={s.btnText}>Créer mon compte</Text>
             }
           </TouchableOpacity>
 
           <View style={s.switchRow}>
             <Text style={s.switchLabel}>Déjà inscrit ? </Text>
-            <TouchableOpacity onPress={() => navigation.goBack()}>
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              accessibilityRole="link"
+              hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+            >
               <Text style={s.linkBold}>Se connecter</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* Popup "Mot de passe simple" — rendue hors du ScrollView pour couvrir tout l'écran */}
-      <WeakPasswordModal
-        visible={weakModalVisible}
-        onImprove={() => setWeakModalVisible(false)}
-        onCreate={doRegister}
-        loading={loading}
-      />
 
       <PseudoRejectedModal
         visible={pseudoRejectedVisible}
@@ -531,15 +387,32 @@ const s = StyleSheet.create({
   },
   tagline: { color: Colors.textMuted, fontSize: 14, letterSpacing: 0.2 },
 
+  inlineLink: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    alignSelf: 'flex-start', marginTop: -6, marginBottom: 14, paddingVertical: 4,
+  },
+  inlineLinkTxt: { color: Colors.primary, fontSize: 13.5, fontWeight: '700' },
+
+  consentRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 6, paddingVertical: 4 },
+  checkbox: {
+    width: 22, height: 22, borderRadius: 6,
+    borderWidth: 1.5, borderColor: Colors.textMuted,
+    justifyContent: 'center', alignItems: 'center',
+    marginRight: 12, marginTop: 1,
+  },
+  checkboxActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  checkboxError:  { borderColor: Colors.error },
+  consentTxt:  { flex: 1, color: Colors.textSecondary, fontSize: 13.5, lineHeight: 20 },
+  consentLink: { color: Colors.primary, fontWeight: '700' },
+  consentErr:  { color: Colors.error, fontSize: 13, marginTop: 6, marginLeft: 34 },
+
   primaryBtn: {
     backgroundColor: Colors.primary, height: 56, borderRadius: 14,
-    justifyContent: 'center', alignItems: 'center', marginTop: 16,
+    justifyContent: 'center', alignItems: 'center', marginTop: 20,
     shadowColor: Colors.primary, shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4, shadowRadius: 16, elevation: 8,
   },
-  btnDisabled:  { backgroundColor: 'rgba(255,255,255,0.08)', shadowOpacity: 0, elevation: 0 },
   btnText:      { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.4 },
-  btnTextMuted: { color: Colors.textMuted },
 
   switchRow:   { flexDirection: 'row', justifyContent: 'center', marginTop: 36 },
   switchLabel: { color: Colors.textMuted, fontSize: 14 },

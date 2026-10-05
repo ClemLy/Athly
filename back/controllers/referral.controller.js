@@ -1,6 +1,7 @@
 'use strict';
 
 const User = require('../models/User');
+const { addItemAtomic } = require('../services/inventory.service');
 const { checkAndUnlockAchievements } = require('./reward.controller');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -11,14 +12,6 @@ function createError(message, statusCode = 400) {
   return err;
 }
 
-function addItem(user, itemType, rarity, qty = 1) {
-  const existing = user.inventory.find((i) => i.itemType === itemType);
-  if (existing) {
-    existing.quantity += qty;
-  } else {
-    user.inventory.push({ itemType, rarity, quantity: qty });
-  }
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // claimReferral  POST /api/referral/claim
@@ -41,44 +34,44 @@ exports.claimReferral = async (req, res, next) => {
     const myId         = req.user.id;
     const { referralCode } = req.body;
 
-    if (!referralCode) {
-      return next(createError('Le champ referralCode est obligatoire.', 400));
+    if (typeof referralCode !== 'string' || !referralCode.trim() || referralCode.length > 20) {
+      return next(createError('Entre un code de parrainage valide (ex : ATH-X7K2P).', 400));
     }
 
     // ── Trouver le parrain via son code ────────────────────────────────────
-    const referrer = await User.findOne({ referralCode: referralCode.trim() });
+    const referrer = await User.findOne({ referralCode: referralCode.trim().toUpperCase() }).select('_id');
     if (!referrer) {
-      return next(createError('Code de parrainage invalide.', 404));
+      return next(createError("Ce code de parrainage n'existe pas. Vérifie-le et réessaie.", 404));
     }
 
     // ── Garde : impossible d'utiliser son propre code ──────────────────────
     if (referrer._id.toString() === myId) {
-      return next(createError("Vous ne pouvez pas utiliser votre propre code de parrainage.", 400));
+      return next(createError("Tu ne peux pas utiliser ton propre code de parrainage.", 400));
     }
 
-    // ── Charger le filleul ─────────────────────────────────────────────────
-    const filleul = await User.findById(myId);
-    if (!filleul) return next(createError('Utilisateur introuvable.', 404));
+    // ── Enregistrement atomique du parrain : la condition referredBy: null
+    //    garantit qu'un double appel simultané ne distribue les récompenses
+    //    qu'une seule fois (sinon deux requêtes parallèles passaient le test
+    //    "déjà parrainé" avant que l'une d'elles n'enregistre).
+    const claimed = await User.findOneAndUpdate(
+      { _id: myId, referredBy: null },
+      { $set: { referredBy: referrer._id } },
+      { returnDocument: 'after' },
+    ).select('_id');
 
-    // ── Garde : déjà parrainé ─────────────────────────────────────────────
-    if (filleul.referredBy) {
-      return next(createError("Vous avez déjà utilisé un code de parrainage.", 409));
+    if (!claimed) {
+      const exists = await User.exists({ _id: myId });
+      if (!exists) return next(createError('Ce compte est introuvable.', 404));
+      return next(createError('Tu as déjà utilisé un code de parrainage.', 409));
     }
 
-    // ── Enregistrer le parrain sur le filleul ──────────────────────────────
-    filleul.referredBy = referrer._id;
-
-    // ── Récompenses filleul : 1 STREAK_FREEZE + 1 LEVEL_COUPON ───────────
-    addItem(filleul, 'STREAK_FREEZE', 'rare',      1);
-    addItem(filleul, 'LEVEL_COUPON',  'legendary',  1);
-    filleul.markModified('inventory');
-    await filleul.save();
-
-    // ── Récompenses parrain : 1 STREAK_FREEZE + 1 LEVEL_COUPON ──────────
-    addItem(referrer, 'STREAK_FREEZE', 'rare',     1);
-    addItem(referrer, 'LEVEL_COUPON',  'legendary', 1);
-    referrer.markModified('inventory');
-    await referrer.save();
+    // ── Récompenses : 1 STREAK_FREEZE + 1 LEVEL_COUPON chacun ─────────────
+    await Promise.all([
+      addItemAtomic(myId, 'STREAK_FREEZE', 'rare', 1),
+      addItemAtomic(myId, 'LEVEL_COUPON', 'legendary', 1),
+      addItemAtomic(referrer._id, 'STREAK_FREEZE', 'rare', 1),
+      addItemAtomic(referrer._id, 'LEVEL_COUPON', 'legendary', 1),
+    ]);
 
     // ── Déblocage des trophées (FIRST_REFERRAL pour le parrain) ──────────
     // Les deux saves ci-dessus doivent être terminés avant les checks.
@@ -89,7 +82,7 @@ exports.claimReferral = async (req, res, next) => {
 
     return res.status(200).json({
       success:                 true,
-      message:                 "Parrainage validé ! Vous avez chacun reçu vos récompenses.",
+      message:                 "Parrainage validé. Vous avez chacun reçu vos récompenses.",
       filleulRewards:          { STREAK_FREEZE: 1, LEVEL_COUPON: 1 },
       referrerRewards:         { STREAK_FREEZE: 1, LEVEL_COUPON: 1 },
       filleulNewAchievements:  filleulUnlocked,

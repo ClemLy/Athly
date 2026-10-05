@@ -67,7 +67,7 @@ export default function FriendshipLevelUpModal({ visible, pseudo, level, onClose
               : 'Continuez à vous entraîner ensemble pour renforcer ce lien.'}
           </Text>
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[styles.closeBtn, { backgroundColor: color, shadowColor: color }]}
             onPress={onClose}
             activeOpacity={0.85}

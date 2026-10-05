@@ -113,19 +113,19 @@ exports.sendFriendRequest = async (req, res, next) => {
     const { friendId } = req.body;
 
     // ── Validation de l'ID ────────────────────────────────────────────────
-    if (!friendId || !isValidId(friendId)) {
-      return next(createError('friendId manquant ou invalide.', 400));
+    if (typeof friendId !== 'string' || !isValidId(friendId)) {
+      return next(createError('Cet athlète est introuvable.', 400));
     }
 
     // ── Pas de demande à soi-même ─────────────────────────────────────────
     if (myId === friendId.toString()) {
-      return next(createError('Impossible de vous ajouter vous-même en ami.', 422));
+      return next(createError("Tu ne peux pas t'ajouter toi-même en ami.", 422));
     }
 
     // ── L'utilisateur cible existe-t-il ? ────────────────────────────────
     const targetUser = await User.findById(friendId).select('_id');
     if (!targetUser) {
-      return next(createError('Utilisateur introuvable.', 404));
+      return next(createError('Ce compte est introuvable.', 404));
     }
 
     // ── Relation déjà existante (dans les deux sens) ──────────────────────
@@ -177,22 +177,22 @@ exports.acceptFriendRequest = async (req, res, next) => {
     const { requestId } = req.params;
 
     if (!isValidId(requestId)) {
-      return next(createError('requestId invalide.', 400));
+      return next(createError("Cette demande d'ami n'existe plus.", 400));
     }
 
     const friendship = await Friendship.findById(requestId);
 
     if (!friendship) {
-      return next(createError('Demande d\'ami introuvable.', 404));
+      return next(createError("Cette demande d'ami n'existe plus.", 404));
     }
 
     // Seul le recipient peut accepter
     if (friendship.recipient.toString() !== myId) {
-      return next(createError('Action non autorisée : vous n\'êtes pas le destinataire de cette demande.', 403));
+      return next(createError("Cette demande d'ami ne t'est pas adressée.", 403));
     }
 
     if (friendship.status !== 'pending') {
-      return next(createError(`Impossible d'accepter une demande au statut "${friendship.status}".`, 422));
+      return next(createError("Cette demande d'ami a déjà été traitée.", 422));
     }
 
     friendship.status = 'accepted';
@@ -230,21 +230,21 @@ exports.declineFriendRequest = async (req, res, next) => {
     const { requestId } = req.params;
 
     if (!isValidId(requestId)) {
-      return next(createError('requestId invalide.', 400));
+      return next(createError("Cette demande d'ami n'existe plus.", 400));
     }
 
     const friendship = await Friendship.findById(requestId);
 
     if (!friendship) {
-      return next(createError('Demande d\'ami introuvable.', 404));
+      return next(createError("Cette demande d'ami n'existe plus.", 404));
     }
 
     if (friendship.recipient.toString() !== myId) {
-      return next(createError('Action non autorisée : vous n\'êtes pas le destinataire de cette demande.', 403));
+      return next(createError("Cette demande d'ami ne t'est pas adressée.", 403));
     }
 
     if (friendship.status !== 'pending') {
-      return next(createError(`Impossible de refuser une demande au statut "${friendship.status}".`, 422));
+      return next(createError("Cette demande d'ami a déjà été traitée.", 422));
     }
 
     await friendship.deleteOne();
@@ -348,18 +348,18 @@ exports.cancelFriendRequest = async (req, res, next) => {
     const { requestId } = req.params;
 
     if (!isValidId(requestId)) {
-      return next(createError('requestId invalide.', 400));
+      return next(createError("Cette demande d'ami n'existe plus.", 400));
     }
 
     const friendship = await Friendship.findById(requestId);
     if (!friendship) {
-      return next(createError('Demande d\'ami introuvable.', 404));
+      return next(createError("Cette demande d'ami n'existe plus.", 404));
     }
     if (friendship.requester.toString() !== myId) {
-      return next(createError('Action non autorisée : vous n\'êtes pas l\'auteur de cette demande.', 403));
+      return next(createError("Tu ne peux annuler que tes propres demandes.", 403));
     }
     if (friendship.status !== 'pending') {
-      return next(createError(`Impossible d'annuler une demande au statut "${friendship.status}".`, 422));
+      return next(createError("Cette demande d'ami a déjà été traitée.", 422));
     }
 
     await friendship.deleteOne();
@@ -384,19 +384,19 @@ exports.removeFriend = async (req, res, next) => {
     const { friendshipId } = req.params;
 
     if (!isValidId(friendshipId)) {
-      return next(createError('friendshipId invalide.', 400));
+      return next(createError("Cet ami n'est plus dans ta liste.", 400));
     }
 
     const friendship = await Friendship.findById(friendshipId);
     if (!friendship) {
-      return next(createError('Amitié introuvable.', 404));
+      return next(createError("Cet ami n'est plus dans ta liste.", 404));
     }
     const isMember = friendship.requester.toString() === myId || friendship.recipient.toString() === myId;
     if (!isMember) {
-      return next(createError('Action non autorisée : vous ne faites pas partie de cette amitié.', 403));
+      return next(createError("Cet ami n'est plus dans ta liste.", 403));
     }
     if (friendship.status !== 'accepted') {
-      return next(createError('Cette relation n\'est pas une amitié active.', 422));
+      return next(createError("Cet ami n'est plus dans ta liste.", 422));
     }
 
     await friendship.deleteOne();
@@ -424,11 +424,11 @@ const FULL_TAG_PATTERN = /^(.+)#(\d{4})$/;
 exports.searchUsers = async (req, res, next) => {
   try {
     const myId = req.user.id;
-    const q    = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const q    = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 40) : '';
 
     const match = q.match(FULL_TAG_PATTERN);
     if (!match) {
-      return next(createError('Utilise le format complet "Pseudo#1234" pour rechercher un athlète.', 400));
+      return next(createError('Entre le tag complet de ton ami, au format Pseudo#1234.', 400));
     }
     const [, pseudo, discriminator] = match;
 
@@ -484,7 +484,7 @@ exports.getFriendProfile = async (req, res, next) => {
     const myId         = req.user.id;
     const { friendId } = req.params;
 
-    if (!isValidId(friendId)) return next(createError('friendId invalide.', 400));
+    if (!isValidId(friendId)) return next(createError("Ce profil est introuvable.", 400));
 
     const friendship = await Friendship.findOne({
       $or: [
@@ -494,12 +494,12 @@ exports.getFriendProfile = async (req, res, next) => {
       status: 'accepted',
     });
     if (!friendship) {
-      return next(createError("Vous devez être amis pour consulter ce profil.", 403));
+      return next(createError("Ce profil n'est visible que par ses amis.", 403));
     }
 
     const friend = await User.findById(friendId)
       .select('pseudo level rank xp achievements showcasedAchievements showcasedRecords streakGels totalWorkoutMinutes equippedFrame equippedTitle createdAt');
-    if (!friend) return next(createError('Utilisateur introuvable.', 404));
+    if (!friend) return next(createError('Ce compte est introuvable.', 404));
 
     // Résolu côté serveur (label + rareté) pour que le front n'ait pas besoin
     // de dupliquer le catalogue des titres juste pour afficher un badge —

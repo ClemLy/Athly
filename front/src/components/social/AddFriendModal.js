@@ -40,7 +40,7 @@ export default function AddFriendModal({ visible, myTag, searching, error, onSea
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
-          <TouchableOpacity style={styles.closeIcon} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button" style={styles.closeIcon} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Ionicons name="close" size={20} color={Colors.textMuted} />
           </TouchableOpacity>
 
@@ -89,7 +89,7 @@ export default function AddFriendModal({ visible, myTag, searching, error, onSea
           </View>
           {!!error && <Text style={styles.error}>{error}</Text>}
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[styles.searchBtn, !canSearch && styles.searchBtnDisabled]}
             onPress={handleSearch}
             disabled={!canSearch || searching}

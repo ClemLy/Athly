@@ -23,6 +23,8 @@ import { ConfirmModal } from '../../components/common';
 import { InfoModal } from '../../components/common';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 import { MOCK_TUTORIAL_LOGS } from '../../data/mockTutorialStats';
+import { getErrorMessage } from '../../utils/errorMessages';
+import { formatWeight, formatNumber } from '../../utils/format';
 
 const TABS = [
   { id: 'performance', label: 'Performance' },
@@ -39,7 +41,7 @@ export default function StatsScreen({ navigation }) {
 
   const handleDelete = useCallback(async (id) => {
     try { await remove(id); } catch (e) {
-      setErrorInfo(e?.message || 'Suppression impossible');
+      setErrorInfo(getErrorMessage(e, 'La suppression n\'a pas abouti. Réessaie dans un instant.'));
     }
   }, [remove]);
 
@@ -170,7 +172,7 @@ export default function StatsScreen({ navigation }) {
     const log = matching[0];
     setDayDetail({
       log,
-      body: [`Volume: ${Math.round(log.totalVolume)} kg`, `Sets: ${log.setsCompleted}`, `XP: ${log.xpEarned}`].join('\n'),
+      body: [`Volume : ${formatNumber(log.totalVolume)} kg`, `Séries : ${log.setsCompleted}`, `XP : ${log.xpEarned}`].join('\n'),
       deletable: activeChapterId !== 'stats',
     });
   }, [activeLogs, activeChapterId]);
@@ -180,17 +182,17 @@ export default function StatsScreen({ navigation }) {
     setDayDetail(null);
     if (!log) return;
     try { await remove(log.id); } catch (e) {
-      setErrorInfo(e?.message || 'Suppression impossible');
+      setErrorInfo(getErrorMessage(e, 'La suppression n\'a pas abouti. Réessaie dans un instant.'));
     }
   }, [dayDetail, remove]);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       {/* Bandeau mock data */}
       {activeChapterId === 'stats' && (
         <View style={styles.mockBanner}>
           <Ionicons name="flask-outline" size={12} color={Colors.gold} />
-          <Text style={styles.mockBannerText}>Données de démonstration - disparaîtront à la fin du chapitre</Text>
+          <Text style={styles.mockBannerText}>Données de démonstration, elles disparaissent à la fin du chapitre</Text>
         </View>
       )}
 
@@ -212,7 +214,7 @@ export default function StatsScreen({ navigation }) {
           {TABS.map((t) => {
             const active = t.id === tab;
             return (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 key={t.id}
                 ref={t.id === 'history' ? tabHistoryRef : null}
                 onLayout={t.id === 'history' ? onTabHistoryLayout : undefined}
@@ -233,13 +235,13 @@ export default function StatsScreen({ navigation }) {
             <View style={styles.kpisRow} ref={kpisRef} onLayout={onKpisLayout} collapsable={false}>
               <Kpi label="Séances" value={stats.totalSessions} icon="bookmark" />
               <Kpi label="Sets"    value={stats.totalSets}     icon="checkmark-done" />
-              <Kpi label="Volume"  value={`${Math.round(stats.totalVolume).toLocaleString('fr-FR')} kg`} icon="barbell" wide />
+              <Kpi label="Volume"  value={formatWeight(stats.totalVolume)} icon="barbell" wide />
             </View>
 
             <View ref={weightRef} onLayout={onWeightLayout} collapsable={false}>
               <Card title="Suivi de poids">
                 <WeightProgressChart history={weightHistory} goal={user?.poidsCible} />
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.addWeightBtn}
                   onPress={() => setWeightEntryVisible(true)}
                   activeOpacity={0.85}

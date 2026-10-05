@@ -1,4 +1,5 @@
 const crypto      = require("crypto");
+const mongoose    = require("mongoose");
 const User        = require("../models/User");
 const Friendship  = require("../models/Friendship");
 const bcrypt      = require("bcrypt");
@@ -11,12 +12,49 @@ const { containsProfanity } = require("../utils/profanityFilter");
 const MAX_OTP_ATTEMPTS  = 5;
 const CODE_TTL_VERIFY   = 10 * 60 * 1000; // 10 min
 const CODE_TTL_RESET    = 15 * 60 * 1000; // 15 min
+const CODE_RESEND_DELAY = 60 * 1000;      // 1 email de code par minute et par compte
 const BCRYPT_ROUNDS     = 12;
+
+// Hash bcrypt d'une valeur aléatoire, calculé au premier besoin : sert de
+// leurre au login quand l'adresse n'a pas de compte.
+let dummyHashPromise = null;
+function getDummyHash() {
+  if (!dummyHashPromise) dummyHashPromise = bcrypt.hash(crypto.randomBytes(16).toString("hex"), BCRYPT_ROUNDS);
+  return dummyHashPromise;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Code OTP à 6 chiffres tiré d'une source cryptographique (Math.random est
+// prévisible et ne doit jamais servir à générer un secret).
 function generateCode() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+// Les codes sont stockés hachés (HMAC lié au compte) : une fuite de la base ne
+// révèle aucun code valide, et un hash ne peut pas être rejoué sur un autre compte.
+function hashCode(userId, code) {
+  return crypto
+    .createHmac("sha256", config.jwtSecret)
+    .update(`${userId}:${code}`)
+    .digest("hex");
+}
+
+// Comparaison à temps constant : ne laisse pas deviner le code caractère par
+// caractère via le temps de réponse.
+function codeMatches(userId, submitted, storedHash) {
+  if (!storedHash || typeof submitted !== "string") return false;
+  const a = Buffer.from(hashCode(userId, submitted), "hex");
+  const b = Buffer.from(storedHash, "hex");
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+// Anti-spam : au plus un email de code par minute et par compte. Quand la
+// limite est atteinte, on ne renvoie PAS d'erreur spécifique (elle trahirait
+// l'existence du compte) : la réponse générique est servie sans nouvel envoi.
+// Le front affiche de son côté un compte à rebours avant de proposer le renvoi.
+function canSendCode(user) {
+  return !user.lastCodeSentAt || Date.now() - user.lastCodeSentAt.getTime() >= CODE_RESEND_DELAY;
 }
 
 // Code de parrainage lisible : ATH-XXXXX (sans 0/O/1/I ambigus).
@@ -45,7 +83,7 @@ async function uniqueReferralCode() {
 // unique QUE combiné au pseudo — 9000 combinaisons par pseudo suffisent
 // largement avant toute collision réelle.
 function generateDiscriminator() {
-  return String(Math.floor(1000 + Math.random() * 9000));
+  return String(crypto.randomInt(1000, 10000));
 }
 
 async function uniqueDiscriminator(pseudo) {
@@ -90,7 +128,7 @@ class AuthService {
     }
 
     const existing = await User.findOne({ email });
-    if (existing) throw httpError("Un utilisateur avec cet email existe déjà.", 409, "EMAIL_TAKEN");
+    if (existing) throw httpError("Un compte existe déjà avec cette adresse email. Connecte-toi ou réinitialise ton mot de passe.", 409, "EMAIL_TAKEN");
 
     // ── Résolution du parrain AVANT création : un code invalide ne doit pas
     //    laisser un compte à moitié parrainé en base ────────────────────────
@@ -99,21 +137,24 @@ class AuthService {
     if (cleanCode) {
       referrer = await User.findOne({ referralCode: cleanCode }).select("_id");
       if (!referrer) {
-        throw httpError("Code de parrainage invalide.", 400, "REFERRAL_INVALID");
+        throw httpError("Ce code de parrainage n'existe pas. Vérifie-le ou laisse le champ vide.", 400, "REFERRAL_INVALID");
       }
     }
 
     const hashedPassword   = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const verificationCode = generateCode();
+    const userId           = new mongoose.Types.ObjectId();
 
     const newUser = await User.create({
+      _id: userId,
       pseudo,
       name: pseudo,           // rétrocompatibilité
       email,
       password: hashedPassword,
       isVerified:      false,
-      verificationCode,
+      verificationCode: hashCode(userId, verificationCode),
       codeExpires:     new Date(Date.now() + CODE_TTL_VERIFY),
+      lastCodeSentAt:  new Date(),
       verifyAttempts:  0,
       referralCode:    await uniqueReferralCode(),
       discriminator:   await uniqueDiscriminator(pseudo),
@@ -149,17 +190,17 @@ class AuthService {
         const { checkAndUnlockTitles } = require("../controllers/title.controller");
         await checkAndUnlockTitles(newUser._id.toString());
       } catch (err) {
-        console.error("⚠️  [register] Récompenses de parrainage partielles :", err.message);
+        console.error("[register] Récompenses de parrainage partielles :", err.message);
       }
     }
 
     // Envoi non-bloquant : un échec SMTP ne plante pas la réponse
     emailService.sendVerificationEmail(email, verificationCode).catch(err =>
-      console.error("❌ Email de vérification :", err.message)
+      console.error("[register] Email de vérification :", err.message)
     );
 
     return {
-      message:  "Compte créé. Vérifiez votre email.",
+      message:  "Compte créé. Vérifie ta boîte mail.",
       email,
       referred: Boolean(referrer),
     };
@@ -168,24 +209,34 @@ class AuthService {
   // ── Connexion ──────────────────────────────────────────────────────────────
   async login(email, password) {
     const user = await User.findOne({ email });
-    if (!user) throw httpError("Identifiants incorrects.", 401, "INVALID_CREDENTIALS");
+    if (!user) {
+      // Hash factice : même temps de réponse que pour un compte existant,
+      // pour ne pas révéler par le chronomètre quelles adresses sont inscrites.
+      await bcrypt.compare(password, await getDummyHash());
+      throw httpError("Email ou mot de passe incorrect.", 401, "INVALID_CREDENTIALS");
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) throw httpError("Identifiants incorrects.", 401, "INVALID_CREDENTIALS");
+    if (!isMatch) throw httpError("Email ou mot de passe incorrect.", 401, "INVALID_CREDENTIALS");
 
     if (!user.isVerified) {
-      const verificationCode = generateCode();
-      user.verificationCode  = verificationCode;
-      user.codeExpires       = new Date(Date.now() + CODE_TTL_VERIFY);
-      user.verifyAttempts    = 0;
-      await user.save();
+      // Nouveau code seulement si le précédent date de plus d'une minute :
+      // des tentatives de connexion répétées ne doivent pas inonder la boîte mail.
+      if (canSendCode(user)) {
+        const verificationCode = generateCode();
+        user.verificationCode  = hashCode(user._id, verificationCode);
+        user.codeExpires       = new Date(Date.now() + CODE_TTL_VERIFY);
+        user.lastCodeSentAt    = new Date();
+        user.verifyAttempts    = 0;
+        await user.save();
 
-      emailService.sendVerificationEmail(user.email, verificationCode).catch(err =>
-        console.error("❌ Renvoi code (login) :", err.message)
-      );
+        emailService.sendVerificationEmail(user.email, verificationCode).catch(err =>
+          console.error("[login] Renvoi du code :", err.message)
+        );
+      }
 
       throw httpError(
-        "Email non vérifié. Un nouveau code de validation a été envoyé.",
+        "Ton adresse email n'est pas encore confirmée. Entre le code à 6 chiffres reçu par email.",
         403,
         "EMAIL_NOT_VERIFIED"
       );
@@ -219,7 +270,7 @@ class AuthService {
    */
   async googleLogin(idToken) {
     if (!config.googleClientIds.length) {
-      throw httpError("Connexion Google non configurée sur ce serveur.", 501, "GOOGLE_OAUTH_NOT_CONFIGURED");
+      throw httpError("La connexion avec Google n'est pas encore disponible. Utilise ton email et ton mot de passe.", 501, "GOOGLE_OAUTH_NOT_CONFIGURED");
     }
     if (!idToken) {
       throw httpError("idToken manquant.", 400, "GOOGLE_TOKEN_MISSING");
@@ -235,11 +286,17 @@ class AuthService {
       const ticket = await client.verifyIdToken({ idToken, audience: config.googleClientIds });
       payload = ticket.getPayload();
     } catch (_err) {
-      throw httpError("Token Google invalide.", 401, "GOOGLE_TOKEN_INVALID");
+      throw httpError("La connexion avec Google a échoué. Réessaie.", 401, "GOOGLE_TOKEN_INVALID");
     }
 
     if (!payload?.sub || !payload?.email) {
       throw httpError("Token Google invalide.", 401, "GOOGLE_TOKEN_INVALID");
+    }
+
+    // Sans email vérifié par Google, lier ce compte à un compte Athly existant
+    // portant la même adresse permettrait une prise de contrôle de compte.
+    if (payload.email_verified !== true) {
+      throw httpError("Ton adresse Google n'est pas vérifiée. Vérifie-la chez Google puis réessaie.", 401, "GOOGLE_EMAIL_UNVERIFIED");
     }
 
     let user = await User.findOne({ googleId: payload.sub });
@@ -285,14 +342,15 @@ class AuthService {
   // ── Vérification email ─────────────────────────────────────────────────────
   async verifyEmail(email, code) {
     const user = await User.findOne({ email });
-    if (!user) throw httpError("Utilisateur introuvable.", 404, "USER_NOT_FOUND");
+    // Même réponse qu'un mauvais code : ne révèle pas si l'adresse a un compte.
+    if (!user) throw httpError("Ce code n'est pas valide. Vérifie-le ou demande-en un nouveau.", 400, "INVALID_CODE");
 
-    if (user.isVerified) throw httpError("Ce compte est déjà vérifié.", 400, "ALREADY_VERIFIED");
+    if (user.isVerified) throw httpError("Ce compte est déjà confirmé. Tu peux te connecter.", 400, "ALREADY_VERIFIED");
 
     // Brute-force : max MAX_OTP_ATTEMPTS tentatives
     if (user.verifyAttempts >= MAX_OTP_ATTEMPTS) {
       throw httpError(
-        `Trop de tentatives (max ${MAX_OTP_ATTEMPTS}). Demandez un nouveau code.`,
+        "Trop de codes erronés. Demande un nouveau code pour réessayer.",
         429,
         "TOO_MANY_ATTEMPTS"
       );
@@ -300,25 +358,31 @@ class AuthService {
 
     // Expiration
     if (!user.codeExpires || user.codeExpires < new Date()) {
-      throw httpError("Code expiré. Demandez un nouveau code.", 400, "CODE_EXPIRED");
+      throw httpError("Ce code a expiré. Demande un nouveau code.", 400, "CODE_EXPIRED");
     }
 
-    // Mauvais code → incrémenter le compteur
-    if (user.verificationCode !== code) {
-      user.verifyAttempts += 1;
-      await user.save();
-      const remaining = MAX_OTP_ATTEMPTS - user.verifyAttempts;
+    // Mauvais code → incrémenter le compteur (atomique : deux essais simultanés comptent double)
+    if (!codeMatches(user._id, code, user.verificationCode)) {
+      const updated = await User.findOneAndUpdate(
+        { _id: user._id },
+        { $inc: { verifyAttempts: 1 } },
+        { returnDocument: "after" }
+      ).select("verifyAttempts");
+      const remaining = Math.max(0, MAX_OTP_ATTEMPTS - (updated?.verifyAttempts ?? MAX_OTP_ATTEMPTS));
       throw httpError(
-        `Code invalide. ${remaining} tentative(s) restante(s).`,
+        remaining > 0
+          ? `Ce code n'est pas le bon. Il te reste ${remaining} essai${remaining > 1 ? "s" : ""}.`
+          : "Trop de codes erronés. Demande un nouveau code pour réessayer.",
         400,
         "INVALID_CODE"
       );
     }
 
-    // ✅ Succès : activer le compte et nettoyer les champs OTP
+    // Succès : activer le compte et nettoyer les champs OTP
     user.isVerified       = true;
     user.verificationCode = undefined;
     user.codeExpires      = undefined;
+    user.lastCodeSentAt   = null;
     user.verifyAttempts   = 0;
     await user.save();
 
@@ -333,49 +397,47 @@ class AuthService {
   async resendVerification(email) {
     const user = await User.findOne({ email });
 
-    // Réponse identique si l'email n'existe pas (évite l'énumération)
-    if (!user || user.isVerified) {
-      if (user?.isVerified) throw httpError("Ce compte est déjà vérifié.", 400, "ALREADY_VERIFIED");
-      return { message: "Si cet email est enregistré, un nouveau code a été envoyé." };
+    // Réponse identique si l'email n'existe pas ou est déjà vérifié (évite l'énumération)
+    if (!user || user.isVerified || !canSendCode(user)) {
+      return { message: "Si cette adresse a un compte en attente, un nouveau code vient d'être envoyé." };
     }
 
     const verificationCode = generateCode();
-    user.verificationCode  = verificationCode;
+    user.verificationCode  = hashCode(user._id, verificationCode);
     user.codeExpires       = new Date(Date.now() + CODE_TTL_VERIFY);
+    user.lastCodeSentAt    = new Date();
     user.verifyAttempts    = 0;          // réinitialiser le compteur
     await user.save();
 
     emailService.sendVerificationEmail(email, verificationCode).catch(err =>
-      console.error("❌ Renvoi email :", err.message)
+      console.error("[resendVerification] Envoi du code :", err.message)
     );
 
-    return { message: "Si cet email est enregistré, un nouveau code a été envoyé." };
+    return { message: "Si cette adresse a un compte en attente, un nouveau code vient d'être envoyé." };
   }
 
   // ── Mot de passe oublié ────────────────────────────────────────────────────
   async forgotPassword(email) {
     const user = await User.findOne({ email });
+    const genericResponse = {
+      message: "Si un compte existe pour cette adresse, un code de réinitialisation vient d'être envoyé.",
+    };
 
-    // 404 explicite : le frontend affiche un message clair à l'utilisateur.
-    // Trade-off assumé : on révèle si l'email existe (meilleure UX, app non publique).
-    if (!user) {
-      throw httpError(
-        "Aucun compte n'est associé à cette adresse e-mail.",
-        404,
-        "EMAIL_NOT_FOUND"
-      );
-    }
+    // App publique : même réponse que l'adresse existe ou non, pour ne pas
+    // permettre de tester quelles adresses ont un compte Athly.
+    if (!user || !canSendCode(user)) return genericResponse;
 
     const resetPasswordCode = generateCode();
-    user.resetPasswordCode  = resetPasswordCode;
+    user.resetPasswordCode  = hashCode(user._id, resetPasswordCode);
     user.codeExpires        = new Date(Date.now() + CODE_TTL_RESET);
+    user.lastCodeSentAt     = new Date();
     user.verifyAttempts     = 0;
     await user.save();
 
     try {
       await emailService.sendResetPasswordEmail(email, resetPasswordCode);
     } catch (err) {
-      console.error(`❌ [forgotPassword] Échec d'envoi à ${email} :`, {
+      console.error("[forgotPassword] Échec d'envoi :", {
         code:         err.code,
         command:      err.command,
         response:     err.response,
@@ -386,18 +448,20 @@ class AuthService {
       // le développeur voit la cause exacte dans les logs terminal.
     }
 
-    return { message: "Code de réinitialisation envoyé." };
+    return genericResponse;
   }
 
   // ── Réinitialisation du mot de passe ──────────────────────────────────────
   async resetPassword(email, code, newPassword) {
     const user = await User.findOne({ email });
-    if (!user) throw httpError("Utilisateur introuvable.", 404, "USER_NOT_FOUND");
+    if (!user || !user.resetPasswordCode) {
+      throw httpError("Ce code n'est pas valide. Vérifie-le ou demande-en un nouveau.", 400, "INVALID_CODE");
+    }
 
     // Brute-force
     if (user.verifyAttempts >= MAX_OTP_ATTEMPTS) {
       throw httpError(
-        `Trop de tentatives (max ${MAX_OTP_ATTEMPTS}). Demandez un nouveau code.`,
+        "Trop de codes erronés. Demande un nouveau code pour réessayer.",
         429,
         "TOO_MANY_ATTEMPTS"
       );
@@ -405,29 +469,37 @@ class AuthService {
 
     // Expiration
     if (!user.codeExpires || user.codeExpires < new Date()) {
-      throw httpError("Code expiré. Demandez un nouveau code.", 400, "CODE_EXPIRED");
+      throw httpError("Ce code a expiré. Demande un nouveau code.", 400, "CODE_EXPIRED");
     }
 
-    // Mauvais code
-    if (user.resetPasswordCode !== code) {
-      user.verifyAttempts += 1;
-      await user.save();
-      const remaining = MAX_OTP_ATTEMPTS - user.verifyAttempts;
+    // Mauvais code (compteur atomique)
+    if (!codeMatches(user._id, code, user.resetPasswordCode)) {
+      const updated = await User.findOneAndUpdate(
+        { _id: user._id },
+        { $inc: { verifyAttempts: 1 } },
+        { returnDocument: "after" }
+      ).select("verifyAttempts");
+      const remaining = Math.max(0, MAX_OTP_ATTEMPTS - (updated?.verifyAttempts ?? MAX_OTP_ATTEMPTS));
       throw httpError(
-        `Code invalide. ${remaining} tentative(s) restante(s).`,
+        remaining > 0
+          ? `Ce code n'est pas le bon. Il te reste ${remaining} essai${remaining > 1 ? "s" : ""}.`
+          : "Trop de codes erronés. Demande un nouveau code pour réessayer.",
         400,
         "INVALID_CODE"
       );
     }
 
-    // ✅ Succès : hacher et sauvegarder le nouveau mot de passe
+    // Succès : nouveau mot de passe + invalidation de toutes les sessions ouvertes
     user.password          = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    user.passwordChangedAt = new Date();
     user.resetPasswordCode = undefined;
     user.codeExpires       = undefined;
     user.verifyAttempts    = 0;
+    // Recevoir le code par email prouve la possession de l'adresse
+    if (!user.isVerified) user.isVerified = true;
     await user.save();
 
-    return { message: "Mot de passe réinitialisé avec succès." };
+    return { message: "Mot de passe modifié. Tu peux te connecter avec ton nouveau mot de passe." };
   }
 }
 

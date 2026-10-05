@@ -27,7 +27,7 @@ export default function MultiLootModal({ visible, memberCount, bonusPercent, bon
           <Text style={styles.eyebrow}>SÉANCE D'ÉQUIPE TERMINÉE</Text>
           <Text style={styles.title}>Butin distribué !</Text>
           <Text style={styles.body}>
-            Vous avez terminé cette séance à {memberCount} - l'effort collectif paie.
+            Vous avez terminé cette séance à {memberCount}. L'effort collectif paie.
           </Text>
 
           <View style={styles.bonusChip}>
@@ -37,7 +37,7 @@ export default function MultiLootModal({ visible, memberCount, bonusPercent, bon
             </Text>
           </View>
 
-          <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.85}>
+          <TouchableOpacity accessibilityRole="button" style={styles.closeBtn} onPress={onClose} activeOpacity={0.85}>
             <Text style={styles.closeBtnTxt}>Nickel !</Text>
           </TouchableOpacity>
         </View>

@@ -28,9 +28,11 @@ export default function DailyQuestsCard() {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Ionicons name="flash" size={13} color={Colors.primary} />
-          <Text style={styles.title}>QUÊTES DU JOUR</Text>
+          <Text style={styles.title}>
+            {allDone ? 'TOUTES ACCOMPLIES' : `${3 - completedCount} À ACCOMPLIR`}
+          </Text>
         </View>
-        <View style={styles.headerRight}>
+        <View style={styles.headerRight} accessible accessibilityLabel={`${completedCount} quêtes sur 3 accomplies`}>
           <Text style={[styles.progressLabel, allDone && { color: Colors.primary }]}>
             {completedCount}/3
           </Text>

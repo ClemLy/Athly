@@ -42,4 +42,10 @@ if (!config.jwtSecret) {
   throw new Error("ERREUR : JWT_SECRET est manquante dans le fichier .env");
 }
 
+// En production, un secret court se brute-force hors ligne à partir d'un seul
+// token intercepté : on refuse de démarrer plutôt que de signer des JWT faibles.
+if (config.nodeEnv === "production" && config.jwtSecret.length < 32) {
+  throw new Error("ERREUR : JWT_SECRET doit faire au moins 32 caractères en production.");
+}
+
 module.exports = config;

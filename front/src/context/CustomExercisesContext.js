@@ -5,6 +5,7 @@ import {
   updateCustomExercise,
   removeCustomExercise,
 } from '../services';
+import { getErrorMessage } from '../utils/errorMessages';
 
 // Context global pour les exercices personnalisés.
 // - Charge la liste depuis AsyncStorage au montage
@@ -25,7 +26,7 @@ export function CustomExercisesProvider({ children }) {
       const list = await listCustomExercises();
       setItems(list);
     } catch (e) {
-      setError(e && e.message ? e.message : 'Erreur de chargement');
+      setError(getErrorMessage(e, 'Tes données n\'ont pas pu être chargées.'));
     } finally {
       setLoading(false);
     }

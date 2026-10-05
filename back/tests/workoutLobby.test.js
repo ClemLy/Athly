@@ -19,6 +19,10 @@ async function makeFriends(a, b) {
   return Friendship.create({ requester: a, recipient: b, status: 'accepted' });
 }
 
+async function befriend(a, b) {
+  await Friendship.create({ requester: a.userId, recipient: b.userId, status: 'accepted' });
+}
+
 describe('Lobby Multi — Section VII', () => {
   let alice, bob, carol, dave;
 
@@ -44,6 +48,14 @@ describe('Lobby Multi — Section VII', () => {
     carol = await createAndLoginUser('CarolMulti', 'carol.multi@athly.fr');
     dave  = await createAndLoginUser('DaveMulti', 'dave.multi@athly.fr');
   });
+
+  // Un lobby n'est rejoignable que par un ami d'un membre : pour les blocs
+  // qui testent join/ready/finish, Alice (créatrice) est amie avec tout le monde.
+  async function befriendEveryoneWithAlice() {
+    await befriend(alice, bob);
+    await befriend(alice, carol);
+    await befriend(alice, dave);
+  }
 
   describe('POST /api/lobby/create', () => {
     it('✅ Crée un lobby waiting avec le créateur comme premier membre', async () => {
@@ -113,6 +125,8 @@ describe('Lobby Multi — Section VII', () => {
   });
 
   describe('POST /api/lobby/:id/join', () => {
+    beforeEach(befriendEveryoneWithAlice);
+
     let lobbyId;
     beforeEach(async () => {
       const res = await request(app).post('/api/lobby/create').set('Authorization', `Bearer ${alice.token}`);
@@ -129,6 +143,17 @@ describe('Lobby Multi — Section VII', () => {
       expect(res.body.lobby.members.map((m) => m.user._id)).toContain(bob.userId);
     });
 
+    it("❌ 403 si l'utilisateur n'est ami avec aucun membre du lobby", async () => {
+      const stranger = await createAndLoginUser('InconnuMulti', 'inconnu.multi@athly.fr');
+      const res = await request(app)
+        .post(`/api/lobby/${lobbyId}/join`)
+        .set('Authorization', `Bearer ${stranger.token}`);
+
+      expect(res.statusCode).toBe(403);
+      const lobby = await WorkoutLobby.findById(lobbyId);
+      expect(lobby.members.some((m) => m.user.toString() === stranger.userId)).toBe(false);
+    });
+
     it('✅ Idempotent : rejoindre deux fois ne duplique pas le membre', async () => {
       await request(app).post(`/api/lobby/${lobbyId}/join`).set('Authorization', `Bearer ${bob.token}`);
       const res = await request(app).post(`/api/lobby/${lobbyId}/join`).set('Authorization', `Bearer ${bob.token}`);
@@ -140,6 +165,7 @@ describe('Lobby Multi — Section VII', () => {
       const extraTokens = [];
       for (let i = 0; i < 3; i++) {
         const u = await createAndLoginUser(`Filler${i}`, `filler${i}@athly.fr`);
+        await befriend(alice, u);
         extraTokens.push(u.token);
       }
       await request(app).post(`/api/lobby/${lobbyId}/join`).set('Authorization', `Bearer ${bob.token}`);
@@ -168,6 +194,8 @@ describe('Lobby Multi — Section VII', () => {
   });
 
   describe('POST /api/lobby/:id/ready — passage waiting → active', () => {
+    beforeEach(befriendEveryoneWithAlice);
+
     let lobbyId;
     beforeEach(async () => {
       const res = await request(app).post('/api/lobby/create').set('Authorization', `Bearer ${alice.token}`);
@@ -226,6 +254,8 @@ describe('Lobby Multi — Section VII', () => {
   });
 
   describe('POST /api/lobby/:id/unready — annule son statut ready', () => {
+    beforeEach(befriendEveryoneWithAlice);
+
     let lobbyId;
     beforeEach(async () => {
       const res = await request(app).post('/api/lobby/create').set('Authorization', `Bearer ${alice.token}`);
@@ -266,9 +296,12 @@ describe('Lobby Multi — Section VII', () => {
   });
 
   describe('God Mode — coéquipiers isTestBot auto-progressés', () => {
+    beforeEach(befriendEveryoneWithAlice);
+
     it("✅ Le lobby passe 'active' dès que le seul vrai joueur est ready (bot en miroir)", async () => {
       const bot = await createAndLoginUser('BotMulti', 'bot.multi@athly.fr');
       await User.updateOne({ _id: bot.userId }, { isTestBot: true });
+      await befriend(alice, bot);
 
       const createRes = await request(app).post('/api/lobby/create').set('Authorization', `Bearer ${alice.token}`);
       const lobbyId = createRes.body.lobby._id;
@@ -285,6 +318,7 @@ describe('Lobby Multi — Section VII', () => {
     it("✅ Le lobby passe 'completed' dès que le seul vrai joueur a fini (bot en miroir)", async () => {
       const bot = await createAndLoginUser('BotMulti2', 'bot2.multi@athly.fr');
       await User.updateOne({ _id: bot.userId }, { isTestBot: true });
+      await befriend(alice, bot);
 
       const createRes = await request(app).post('/api/lobby/create').set('Authorization', `Bearer ${alice.token}`);
       const lobbyId = createRes.body.lobby._id;
@@ -302,6 +336,8 @@ describe('Lobby Multi — Section VII', () => {
   });
 
   describe('POST /api/lobby/:id/finish — passage active → completed + bonus XP', () => {
+    beforeEach(befriendEveryoneWithAlice);
+
     // Tous les membres rejoignent D'ABORD (pour que le lobby connaisse déjà
     // son effectif complet), puis tout le monde se déclare prêt — sinon le
     // premier "ready" activerait le lobby avant que les autres n'aient pu
@@ -344,6 +380,7 @@ describe('Lobby Multi — Section VII', () => {
 
     it('✅ Bonus XP à 5 joueurs plafonné à 50%', async () => {
       const eve = await createAndLoginUser('EveMulti', 'eve.multi@athly.fr');
+      await befriend(alice, eve);
       const lobbyId = await createActiveLobby([alice, bob, carol, dave, eve]);
 
       let res;
@@ -435,6 +472,8 @@ describe('Lobby Multi — Section VII', () => {
   });
 
   describe('GET /api/lobby/:id', () => {
+    beforeEach(befriendEveryoneWithAlice);
+
     it("✅ Un membre peut consulter l'état du lobby", async () => {
       const createRes = await request(app).post('/api/lobby/create').set('Authorization', `Bearer ${alice.token}`);
       const lobbyId = createRes.body.lobby._id;

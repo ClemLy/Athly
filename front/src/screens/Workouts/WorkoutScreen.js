@@ -52,7 +52,10 @@ function estimateMinutes(count) {
 }
 
 export default function WorkoutScreen({ route, navigation }) {
-  const { state, actions, loadWorkout } = useWorkoutInProgress();
+  const {
+    state, actions, loadWorkout, startedAt,
+    resumable, restoreChecked, resumeWorkout,
+  } = useWorkoutInProgress();
   const { totalXP, addBonusXp } = useWorkoutLogs();
   const { bypassAnticheat } = useDevSettings();
   const [allInOne, setAllInOne] = useState(false);
@@ -114,18 +117,43 @@ export default function WorkoutScreen({ route, navigation }) {
   const toastQueueRef   = useRef([]);
   const pendingRecapRef = useRef(null);
 
-  // Chronomètre
+  // Chronomètre : calculé depuis l'heure de début de la séance (et non compté
+  // seconde par seconde), pour rester exact après une mise en arrière-plan ou
+  // une reprise de séance interrompue.
+  const startedAtRef = useRef(startedAt);
+  startedAtRef.current = startedAt;
   useEffect(() => {
-    timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
+    const localStart = Date.now();
+    const tick = () => {
+      const origin = startedAtRef.current || localStart;
+      setElapsed(Math.max(0, Math.floor((Date.now() - origin) / 1000)));
+    };
+    tick();
+    timerRef.current = setInterval(tick, 1000);
     return () => clearInterval(timerRef.current);
   }, []);
 
   // Charge la séance reçue par navigation params
   useEffect(() => {
     const incoming = route && route.params && route.params.workout;
-    if (incoming) loadWorkout(incoming);
+    if (incoming) loadWorkout(incoming, { lobbyId: route?.params?.lobbyId ?? null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route?.params?.workout]);
+
+  // Arrivée sans séance (page rechargée sur /seances/en-cours) : on reprend la
+  // séance interrompue s'il y en a une, sinon retour à la liste des séances.
+  useEffect(() => {
+    if (!restoreChecked || route?.params?.workout) return;
+    if (Array.isArray(state.exercises) && state.exercises.length > 0) return;
+    if (resumable) {
+      const info = resumeWorkout();
+      if (info?.lobbyId) navigation.setParams({ lobbyId: info.lobbyId });
+    } else {
+      allowExitRef.current = true;
+      navigation.replace('WorkoutList');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restoreChecked]);
 
   // Cache le titre natif de la stack (on a notre propre header)
   useEffect(() => {
@@ -509,7 +537,7 @@ export default function WorkoutScreen({ route, navigation }) {
   };
 
   const renderFooter = () => (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       style={styles.addBtn}
       onPress={openAddSheet}
       activeOpacity={0.85}
@@ -549,7 +577,7 @@ export default function WorkoutScreen({ route, navigation }) {
       {/* ── Toggle vue globale ── */}
       {sourceExercises.length > 0 && (
         <View style={styles.viewToggleBar}>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[styles.viewToggleBtn, allInOne && styles.viewToggleBtnActive]}
             onPress={() => setAllInOne((v) => !v)}
             activeOpacity={0.8}
@@ -587,7 +615,7 @@ export default function WorkoutScreen({ route, navigation }) {
                 : 'Aucun exercice dans cette séance.'}
             </Text>
             {!filterActive ? (
-              <TouchableOpacity style={styles.emptyAddBtn} onPress={openAddSheet} activeOpacity={0.85}>
+              <TouchableOpacity accessibilityRole="button" style={styles.emptyAddBtn} onPress={openAddSheet} activeOpacity={0.85}>
                 <Ionicons name="add" size={18} color="#fff" />
                 <Text style={styles.emptyAddBtnText}>Ajouter un exercice</Text>
               </TouchableOpacity>
@@ -598,7 +626,7 @@ export default function WorkoutScreen({ route, navigation }) {
 
       {/* ── Bouton TERMINER — View fixe, jamais dans le scroll ── */}
       <View style={styles.terminateBar}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.terminateBtn, isFinalizing && styles.terminateBtnLoading]}
           onPress={handleTerminate}
           activeOpacity={0.85}
@@ -648,7 +676,7 @@ export default function WorkoutScreen({ route, navigation }) {
         visible={abandonModalVisible}
         icon="warning"
         title="Abandonner la séance ?"
-        body="Êtes-vous sûr de vouloir quitter la séance ? Cela va annuler toute votre progression actuelle !"
+        body="Si tu quittes maintenant, les séries de cette séance ne seront pas enregistrées."
         confirmLabel="Quitter la séance"
         cancelLabel="Continuer la séance"
         destructive

@@ -73,9 +73,33 @@ WorkoutSchema.methods.computeTotals = function () {
   return { totalVolume, setsCompleted };
 };
 
+const FINAL_STATUSES = ["finished", "completed"];
+
+/**
+ * Réserve atomiquement la clôture de la séance : passe le statut à `nextStatus`
+ * UNIQUEMENT si la séance n'est pas déjà terminée. Deux appels simultanés (double
+ * tap, retry réseau) : un seul gagne, l'autre reçoit une erreur 409 — l'XP et
+ * les coffres ne peuvent jamais être attribués deux fois pour la même séance.
+ */
+WorkoutSchema.methods.claimClosure = async function (nextStatus) {
+  const res = await this.constructor.updateOne(
+    { _id: this._id, status: { $nin: FINAL_STATUSES } },
+    { $set: { status: nextStatus } },
+  );
+  if (!res || res.modifiedCount !== 1) {
+    const err = new Error("Cette séance est déjà terminée.");
+    err.statusCode = 409;
+    err.code = "WORKOUT_ALREADY_FINISHED";
+    throw err;
+  }
+  this.status = nextStatus;
+};
+
 // Instance method : calcule XP brut (avant anti-cheat) et finalise la séance.
 // L'anti-cheat temporel et le calcul du niveau sont appliqués dans workout.service.js.
 WorkoutSchema.methods.finalize = async function (options = {}) {
+  await this.claimClosure("finished");
+
   // Recalculer toujours côté serveur
   const { totalVolume, setsCompleted } = this.computeTotals();
 
@@ -103,3 +127,4 @@ WorkoutSchema.methods.finalize = async function (options = {}) {
 WorkoutSchema.index({ user: 1, status: 1, date: -1 });
 
 module.exports = mongoose.model("Workout", WorkoutSchema);
+module.exports.FINAL_STATUSES = FINAL_STATUSES;

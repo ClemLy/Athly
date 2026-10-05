@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import HomeScreen from '../screens/Home/HomeScreen';
 import WorkoutStack from './WorkoutStack';
@@ -7,25 +8,43 @@ import SocialStack from './SocialStack';
 import ProfileStack from './ProfileStack';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Création du Bottom Tab Navigator
 const Tab = createBottomTabNavigator();
 
+const TAB_ICONS = {
+    Accueil:    ['home', 'home-outline'],
+    'Séances':  ['barbell', 'barbell-outline'],
+    Stats:      ['stats-chart', 'stats-chart-outline'],
+    SocialTab:  ['people', 'people-outline'],
+    ProfileTab: ['person', 'person-outline'],
+};
+
 export default function BottomTabs() {
+    const insets = useSafeAreaInsets();
     return (
         <Tab.Navigator
         screenOptions={({ route }) => ({
             headerShown: false,
-            tabBarStyle: { backgroundColor: Colors.backgroundDeep, borderTopWidth: 0 },
+            // Pas d'animation entre onglets : ce sont des pairs (pas une hiérarchie)
+            // et ils sont changés des dizaines de fois par session.
+            animation: 'none',
+            tabBarHideOnKeyboard: true,
+            // 56 px de zone tactile + la barre d'accueil iOS (inset) en dessous
+            tabBarStyle: {
+                backgroundColor: Colors.backgroundDeep,
+                borderTopWidth: StyleSheet.hairlineWidth,
+                borderTopColor: Colors.borderSubtle,
+                height: 56 + insets.bottom,
+            },
+            tabBarItemStyle: { paddingTop: 4 },
+            tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
             tabBarActiveTintColor: Colors.primary,
-            tabBarInactiveTintColor: Colors.textMuted,
-            tabBarIcon: ({ color, size }) => {
-                let icon = 'home';
-                if (route.name === 'Séances') icon = 'barbell';
-                if (route.name === 'Stats') icon = 'stats-chart';
-                if (route.name === 'SocialTab') icon = 'people';
-                if (route.name === 'ProfileTab') icon = 'person';
-                return <Ionicons name={icon} size={22} color={color} />;
+            tabBarInactiveTintColor: Colors.textSecondary,
+            tabBarIcon: ({ color, focused }) => {
+                const [active, inactive] = TAB_ICONS[route.name] || ['ellipse', 'ellipse-outline'];
+                return <Ionicons name={focused ? active : inactive} size={22} color={color} />;
             },
         })}
         >
@@ -35,15 +54,12 @@ export default function BottomTabs() {
         <Tab.Screen
             name="SocialTab"
             component={SocialStack}
-            options={{ tabBarLabel: 'Social' }}
+            options={{ tabBarLabel: 'Social', tabBarAccessibilityLabel: 'Social' }}
         />
         <Tab.Screen
             name="ProfileTab"
             component={ProfileStack}
-            options={{
-                tabBarLabel: 'Profil',
-                headerShown: false, // On cache le header du Tab car la Stack en a déjà un
-            }}
+            options={{ tabBarLabel: 'Profil', tabBarAccessibilityLabel: 'Profil' }}
         />
         </Tab.Navigator>
     );

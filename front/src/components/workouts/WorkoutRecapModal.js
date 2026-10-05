@@ -441,7 +441,7 @@ export default function WorkoutRecapModal({
                 </Text>
                 <View style={styles.capBadge}>
                   <Ionicons name="time-outline" size={13} color={Colors.textMuted} style={{ marginRight: 5 }} />
-                  <Text style={styles.capText}>Limite quotidienne atteinte - reviens demain !</Text>
+                  <Text style={styles.capText}>Limite d'XP du jour atteinte. Reviens demain pour en gagner à nouveau.</Text>
                 </View>
               </>
             ) : (
@@ -531,7 +531,7 @@ export default function WorkoutRecapModal({
                   <Text style={styles.prName} numberOfLines={1}>{pr.name}</Text>
                   <Text style={styles.prValues}>
                     <Text style={styles.prOld}>{pr.oldPR || '-'} kg</Text>
-                    <Text style={styles.prArrow}>  →  </Text>
+                    <Text style={styles.prArrow}>  à  </Text>
                     <Text style={styles.prNew}>{pr.newPR} kg</Text>
                   </Text>
                 </View>
@@ -575,7 +575,7 @@ export default function WorkoutRecapModal({
           </View>
 
           {/* ── CTA ── */}
-          <TouchableOpacity style={styles.cta} onPress={onClose} activeOpacity={0.85}>
+          <TouchableOpacity accessibilityRole="button" style={styles.cta} onPress={onClose} activeOpacity={0.85}>
             <Text style={styles.ctaText}>Retour au tableau de bord</Text>
           </TouchableOpacity>
 
@@ -632,7 +632,7 @@ export default function WorkoutRecapModal({
             <Animated.Text style={[styles.rkTap, { opacity: rkTapOpacity }]}>
               Appuie pour continuer
             </Animated.Text>
-            <TouchableOpacity style={StyleSheet.absoluteFill} onPress={dismissRankUpAnim} activeOpacity={1} />
+            <TouchableOpacity accessible={false} style={StyleSheet.absoluteFill} onPress={dismissRankUpAnim} activeOpacity={1} />
           </Animated.View>
         ) : null}
 
@@ -676,7 +676,7 @@ export default function WorkoutRecapModal({
               Appuie pour continuer
             </Animated.Text>
 
-            <TouchableOpacity
+            <TouchableOpacity accessible={false}
               style={StyleSheet.absoluteFill}
               onPress={dismissRankAnim}
               activeOpacity={1}

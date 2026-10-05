@@ -115,7 +115,7 @@ function SessionCard({ log, onDelete }) {
     <View style={[styles.card, expanded && styles.cardExpanded]}>
 
       {/* ── Header ── */}
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         onPress={toggle}
         activeOpacity={0.75}
         style={styles.cardHeader}
@@ -162,7 +162,7 @@ function SessionCard({ log, onDelete }) {
             )}
 
             {onDelete && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.deleteBtn}
                 onPress={handleDelete}
                 activeOpacity={0.75}

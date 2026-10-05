@@ -82,7 +82,7 @@ function InlineExerciseBlock({ exercise, exerciseIndex, onRemoveExercise, onRepl
     <View style={[styles.block, isDone && styles.blockDone]}>
 
       {/* ── En-tête exercice ──────────────────────────────────────────── */}
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         style={styles.blockHeader}
         onLongPress={showActions}
         activeOpacity={0.85}
@@ -128,7 +128,7 @@ function InlineExerciseBlock({ exercise, exerciseIndex, onRemoveExercise, onRepl
       />
 
       {/* ── Ajouter une série ─────────────────────────────────────────── */}
-      <TouchableOpacity style={styles.addBtn} onPress={handleAdd} activeOpacity={0.8}>
+      <TouchableOpacity accessibilityRole="button" style={styles.addBtn} onPress={handleAdd} activeOpacity={0.8}>
         <Ionicons name="add" size={15} color={Colors.primary} />
         <Text style={styles.addBtnText}>Ajouter une série</Text>
       </TouchableOpacity>

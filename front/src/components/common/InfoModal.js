@@ -35,7 +35,7 @@ export default function InfoModal({
           <Text style={modalStyles.title}>{title}</Text>
           {body ? <Text style={modalStyles.body}>{body}</Text> : null}
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[modalStyles.ctaBtn, { backgroundColor: accent, shadowColor: accent }]}
             onPress={onClose}
             activeOpacity={0.85}

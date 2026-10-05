@@ -82,7 +82,7 @@ export default function BirthdatePicker({ value, onConfirm }) {
 
   return (
     <>
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         style={styles.trigger}
         onPress={openPicker}
         activeOpacity={locked ? 1 : 0.7}
@@ -116,7 +116,7 @@ export default function BirthdatePicker({ value, onConfirm }) {
                 <ChipScroll label="Mois"  items={MONTHS.map((_, i) => i)}    selected={month} onSelect={setMonth} format={(i) => MONTHS[i]} />
                 <ChipScroll label="Année" items={years}                      selected={year}  onSelect={setYear}  format={(y) => String(y)} />
 
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[styles.primaryBtn, !canContinue && styles.primaryBtnDisabled]}
                   onPress={handleContinue}
                   disabled={!canContinue}
@@ -124,7 +124,7 @@ export default function BirthdatePicker({ value, onConfirm }) {
                 >
                   <Text style={styles.primaryBtnTxt}>Continuer</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.secondaryBtn} onPress={() => setModalOpen(false)} activeOpacity={0.75}>
+                <TouchableOpacity accessibilityRole="button" style={styles.secondaryBtn} onPress={() => setModalOpen(false)} activeOpacity={0.75}>
                   <Text style={styles.secondaryBtnTxt}>Annuler</Text>
                 </TouchableOpacity>
               </>
@@ -139,7 +139,7 @@ export default function BirthdatePicker({ value, onConfirm }) {
                   Attention, cette date ne pourra plus être modifiée par la suite. Vérifie-la avant de valider.
                 </Text>
 
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[styles.primaryBtn, saving && styles.primaryBtnDisabled]}
                   onPress={handleConfirm}
                   disabled={saving}
@@ -147,7 +147,7 @@ export default function BirthdatePicker({ value, onConfirm }) {
                 >
                   <Text style={styles.primaryBtnTxt}>{saving ? 'Enregistrement…' : 'Valider définitivement'}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStep('pick')} disabled={saving} activeOpacity={0.75}>
+                <TouchableOpacity accessibilityRole="button" style={styles.secondaryBtn} onPress={() => setStep('pick')} disabled={saving} activeOpacity={0.75}>
                   <Text style={styles.secondaryBtnTxt}>Modifier</Text>
                 </TouchableOpacity>
               </>
@@ -167,7 +167,7 @@ function ChipScroll({ label, items, selected, onSelect, format }) {
         {items.map((item) => {
           const isSel = selected === item;
           return (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               key={item}
               style={[styles.chip, isSel && styles.chipSel]}
               onPress={() => onSelect(item)}

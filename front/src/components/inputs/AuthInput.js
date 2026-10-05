@@ -9,6 +9,7 @@ export default function AuthInput({
   error, onBlur, ...props
 }) {
   const [isFocused, setIsFocused] = useState(false);
+  const labelId = `auth-input-${String(label).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
   const borderColor = error
     ? Colors.error
@@ -24,11 +25,14 @@ export default function AuthInput({
 
   return (
     <View style={styles.group}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.label} nativeID={labelId}>{label}</Text>
       <View style={[styles.inputContainer, { borderColor }]}>
         <Ionicons name={icon} size={20} color={iconColor} style={styles.icon} />
         <TextInput
           style={styles.input}
+          accessibilityLabel={label}
+          accessibilityLabelledBy={labelId}
+          aria-invalid={error ? true : undefined}
           placeholder={placeholder}
           placeholderTextColor={Colors.textMuted}
           value={value}
@@ -42,7 +46,9 @@ export default function AuthInput({
         {isPassword && (
           <TouchableOpacity
             onPress={() => setShowPassword(!showPassword)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
           >
             <Ionicons
               name={showPassword ? 'eye-off-outline' : 'eye-outline'}
@@ -52,7 +58,11 @@ export default function AuthInput({
           </TouchableOpacity>
         )}
       </View>
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? (
+        <Text style={styles.errorText} accessibilityRole="alert" accessibilityLiveRegion="polite">
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -77,11 +87,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   icon: { marginRight: 12 },
-  input: { flex: 1, color: Colors.textPrimary, fontSize: 15 },
+  // 16 px minimum : en dessous, Safari iOS zoome la page à chaque focus
+  input: { flex: 1, color: Colors.textPrimary, fontSize: 16, height: '100%' },
   errorText: {
     color: Colors.error,
-    fontSize: 12,
-    marginTop: 5,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 6,
     marginLeft: 2,
   },
 });

@@ -26,6 +26,8 @@ import { normalizeAchievement } from '../../components/profile/AchievementShowca
 import { TrophyIcon } from '../../components/profile/TrophySlot';
 import { COLLECTION_CATEGORY, BACKEND_CATEGORY_MAP } from '../../data/backendTrophyCategories';
 
+const TIER_LABELS = { bronze: 'Bronze', silver: 'Argent', gold: 'Or', platinum: 'Platine', diamond: 'Diamant' };
+
 // Masque un trophée "secret" tant qu'il n'est pas débloqué — même logique que
 // le masquage backend (buildAchievementsView) appliqué au profil d'un ami :
 // la surprise doit rester entière, y compris pour soi-même.
@@ -35,7 +37,7 @@ function maskIfSecret(trophy) {
     ...trophy,
     label: '???',
     condition: 'Trophée secret',
-    epicDesc: 'Ce trophée est encore secret. Continuez à vous entraîner pour le découvrir.',
+    epicDesc: 'Ce trophée est encore secret. Continue à t\'entraîner pour le découvrir.',
     icon: 'help-circle',
   };
 }
@@ -95,7 +97,7 @@ function UltimateTile({ unlocked, unlockedCount, totalCount, onPress }) {
   const shadowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.95] });
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={styles.ultimateWrapper}>
+    <TouchableOpacity accessibilityRole="button" onPress={onPress} activeOpacity={0.85} style={styles.ultimateWrapper}>
       <Animated.View style={[
         styles.ultimateTile,
         unlocked && {
@@ -146,7 +148,7 @@ function UltimateTile({ unlocked, unlockedCount, totalCount, onPress }) {
               {ULTIMATE_TROPHY.label}
             </Text>
             <Text style={[styles.ultimateCond, { color: unlocked ? 'rgba(255,215,0,0.7)' : 'rgba(255,255,255,0.15)' }]}>
-              {unlocked ? 'Collection complète - Vous régnez.' : ULTIMATE_TROPHY.condition}
+              {unlocked ? 'Collection complète. Bravo.' : ULTIMATE_TROPHY.condition}
             </Text>
             {unlocked && (
               <View style={styles.ultimateBadge}>
@@ -159,7 +161,7 @@ function UltimateTile({ unlocked, unlockedCount, totalCount, onPress }) {
 
         {!unlocked && (
           <Text style={styles.ultimateHint}>
-            {unlockedCount}/{totalCount} trophées débloqués · Progressez pour tous les débloquer
+            {unlockedCount}/{totalCount} trophées débloqués. Débloque-les tous pour obtenir celui-ci.
           </Text>
         )}
       </Animated.View>
@@ -274,10 +276,10 @@ export default function TrophyRoomScreen({ navigation }) {
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button"
           onPress={() => navigation && navigation.goBack()}
           style={styles.backBtn}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -301,7 +303,7 @@ export default function TrophyRoomScreen({ navigation }) {
           {filterTabs.map((tab) => {
             const active = activeFilter === tab.id;
             return (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 key={tab.id}
                 style={[styles.filterTab, active && styles.filterTabActive]}
                 onPress={() => setFilter(tab.id)}
@@ -391,7 +393,7 @@ function GalleryTile({ trophy, onPress, tutorialRef, tutorialOnLayout }) {
   const glow = TIER_GLOW[tier] || TIER_GLOW.bronze;
 
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       ref={tutorialRef}
       onLayout={tutorialOnLayout}
       style={[styles.tile, unlocked && { borderColor: color + '40', borderTopColor: color + '90' }]}
@@ -423,7 +425,7 @@ function GalleryTile({ trophy, onPress, tutorialRef, tutorialOnLayout }) {
       <Text style={[styles.tileCond,  { color: unlocked ? color : 'rgba(255,255,255,0.14)' }]} numberOfLines={2}>{condition}</Text>
       {unlocked && (
         <View style={[styles.tierBadge, { backgroundColor: color + '22', borderColor: color + '50' }]}>
-          <Text style={[styles.tierText, { color }]}>{tier.toUpperCase()}</Text>
+          <Text style={[styles.tierText, { color }]}>{(TIER_LABELS[tier] || tier).toUpperCase()}</Text>
         </View>
       )}
     </TouchableOpacity>
@@ -448,9 +450,9 @@ function TrophyDetailModal({ trophy, onClose, isFeatured = false, onToggleFeatur
 
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <Pressable accessible={false} style={styles.overlay} onPress={onClose}>
         <Animated.View style={[styles.modalCard, { transform: [{ scale }], opacity }]}>
-          <Pressable onPress={() => {}}>
+          <Pressable accessibilityRole="button" onPress={() => {}}>
             <View style={[styles.modalIconShadow, { shadowColor: color, shadowOpacity: glow.opacity, shadowRadius: glow.radius + 8 }]}>
               <LinearGradient colors={gradientColors} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.modalIconGrad}>
                 {unlocked
@@ -467,15 +469,15 @@ function TrophyDetailModal({ trophy, onClose, isFeatured = false, onToggleFeatur
               <Ionicons name={unlocked ? 'checkmark-circle' : 'lock-closed'} size={13}
                 color={unlocked ? color : Colors.textMuted} />
               <Text style={[styles.badgeText, { color: unlocked ? color : Colors.textMuted }]}>
-                {unlocked ? `${tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : ''} - Débloqué` : 'Verrouillé'}
+                {unlocked ? (TIER_LABELS[tier] ? `Débloqué · ${TIER_LABELS[tier]}` : 'Débloqué') : 'Verrouillé'}
               </Text>
             </View>
             <View style={[styles.divider, { backgroundColor: color + '30' }]} />
             <Text style={[styles.epicDesc, !unlocked && { color: Colors.textMuted, fontStyle: 'italic' }]}>
-              {unlocked ? epicDesc : "Accomplissez encore - ce trophée attend le guerrier que vous deviendrez."}
+              {unlocked ? epicDesc : "Pas encore débloqué. Continue, il est à ta portée."}
             </Text>
             {unlocked && !isBackend && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.featuredBtn, isFeatured && { backgroundColor: color + '18', borderColor: color + '55' }]}
                 onPress={() => { onToggleFeatured?.(); onClose(); }}
                 activeOpacity={0.75}
@@ -493,7 +495,7 @@ function TrophyDetailModal({ trophy, onClose, isFeatured = false, onToggleFeatur
               </View>
             )}
 
-            <TouchableOpacity style={[styles.closeBtn, { borderColor: color + '50' }]} onPress={onClose} activeOpacity={0.75}>
+            <TouchableOpacity accessibilityRole="button" style={[styles.closeBtn, { borderColor: color + '50' }]} onPress={onClose} activeOpacity={0.75}>
               <Text style={[styles.closeTxt, { color }]}>Fermer</Text>
             </TouchableOpacity>
           </Pressable>

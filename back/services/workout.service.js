@@ -12,6 +12,36 @@ const { checkAndUnlockTitles } = require("../controllers/title.controller");
 const CHEST_MINUTES_THRESHOLD = 120;
 const MIN_LEVEL_FOR_CHEST_DROP = 11;
 
+// Durée maximale prise en compte pour une séance (6 h). La durée vient du
+// chronomètre client : sans plafond, un client modifié pourrait déclarer une
+// séance de plusieurs jours et encaisser des dizaines de coffres d'un coup.
+const MAX_COUNTED_DURATION_SECONDS = 6 * 3600;
+
+// Seuls ces champs peuvent être fournis par le client à la création d'un
+// brouillon. Tout le reste (propriétaire, statut, XP, date…) est fixé par le serveur.
+const DRAFT_FIELDS = ["name", "exercises", "notes", "durationSeconds"];
+
+function pick(source, fields) {
+  const out = {};
+  for (const f of fields) {
+    if (source && source[f] !== undefined) out[f] = source[f];
+  }
+  return out;
+}
+
+function notFound() {
+  const err = new Error("Cette séance est introuvable.");
+  err.statusCode = 404;
+  err.code = "WORKOUT_NOT_FOUND";
+  return err;
+}
+
+function clampDuration(seconds) {
+  const n = Number(seconds);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(Math.floor(n), MAX_COUNTED_DURATION_SECONDS);
+}
+
 /**
  * Accumule atomiquement les minutes de séance et attribue les CHEST_KEY
  * de chaque palier de CHEST_MINUTES_THRESHOLD franchi.
@@ -70,7 +100,7 @@ class WorkoutService {
    */
   async getWorkoutById(userId, workoutId) {
     const workout = await Workout.findOne({ _id: workoutId, user: userId });
-    if (!workout) throw new Error("Séance introuvable.");
+    if (!workout) throw notFound();
     return workout;
   }
 
@@ -79,7 +109,7 @@ class WorkoutService {
    */
   async deleteWorkout(userId, workoutId) {
     const result = await Workout.findOneAndDelete({ _id: workoutId, user: userId });
-    if (!result) throw new Error("Impossible de supprimer : séance introuvable.");
+    if (!result) throw notFound();
     return result;
   }
 
@@ -87,10 +117,12 @@ class WorkoutService {
    * Crée une séance vide (draft) pour l'utilisateur
    */
   async createDraft(userId, initial = {}) {
+    // L'ordre compte : les champs serveur sont posés APRÈS les champs client,
+    // un body { user, status: 'finished' } ne peut donc rien écraser.
     const workout = await Workout.create({
+      ...pick(initial, DRAFT_FIELDS),
       user: userId,
       status: 'draft',
-      ...initial,
     });
     return workout;
   }
@@ -100,12 +132,18 @@ class WorkoutService {
    */
   async updateDraft(userId, workoutId, patch = {}) {
     const workout = await Workout.findOne({ _id: workoutId, user: userId });
-    if (!workout) throw new Error('Séance introuvable');
+    if (!workout) throw notFound();
+    if (['finished', 'completed'].includes(workout.status)) {
+      const err = new Error("Cette séance est déjà terminée.");
+      err.statusCode = 409;
+      err.code = "WORKOUT_ALREADY_FINISHED";
+      throw err;
+    }
 
     // autoriser uniquement certains champs
     if (patch.exercises) workout.exercises = patch.exercises;
     if (patch.notes !== undefined) workout.notes = patch.notes;
-    if (patch.durationSeconds !== undefined) workout.durationSeconds = patch.durationSeconds;
+    if (patch.durationSeconds !== undefined) workout.durationSeconds = clampDuration(patch.durationSeconds);
 
     // toujours recalculer les totaux côté serveur pour garder cohérence
     workout.computeTotals();
@@ -118,8 +156,34 @@ class WorkoutService {
    */
   async completeWorkout(userId, workoutId) {
     const workout = await Workout.findOne({ _id: workoutId, user: userId });
-    if (!workout) throw new Error('Séance introuvable');
+    if (!workout) throw notFound();
 
+    // Déjà finalisée via /finalize (flux normal du front, qui appelle ensuite
+    // /complete en fire-and-forget) : simple marquage, l'XP a déjà été comptée.
+    if (workout.status === 'finished' || workout.status === 'completed') {
+      if (workout.status === 'finished') {
+        await Workout.updateOne(
+          { _id: workout._id, status: 'finished' },
+          { $set: { status: 'completed', completedAt: new Date() } },
+        );
+        workout.status = 'completed';
+      }
+      return {
+        workout,
+        stats: {
+          xp: 0,
+          alreadyFinalized: true,
+          totalVolume: workout.totalVolume,
+          setsCompleted: workout.setsCompleted,
+          durationSeconds: workout.durationSeconds,
+          userXP: null,
+          userLevel: null,
+          newlyUnlockedTitles: [],
+        },
+      };
+    }
+
+    await workout.claimClosure('completed');
     workout.computeTotals();
 
     const validatedExerciseCount = Array.isArray(workout.exercises)
@@ -185,14 +249,17 @@ class WorkoutService {
    */
   async finalizeWorkout(userId, workoutId, options = {}) {
     const workout = await Workout.findOne({ _id: workoutId, user: userId });
-    if (!workout) throw new Error('Séance introuvable');
+    if (!workout) throw notFound();
 
     const result = await workout.finalize(options);
 
-    // Durée effective : on prend la valeur du client si fournie, sinon celle du document
-    const duration = typeof options.durationSeconds === 'number'
-      ? options.durationSeconds
-      : (workout.durationSeconds || 0);
+    // Durée effective : on prend la valeur du client si fournie, sinon celle du
+    // document, toujours plafonnée (voir MAX_COUNTED_DURATION_SECONDS).
+    const duration = clampDuration(
+      typeof options.durationSeconds === 'number'
+        ? options.durationSeconds
+        : (workout.durationSeconds || 0),
+    );
 
     // ── Anti-cheat temporel ──────────────────────────────────────────────────
     // duration = 0 est traité comme une durée invalide/inconnue → 0 XP.

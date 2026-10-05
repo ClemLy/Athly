@@ -15,7 +15,7 @@ function SelectableChip({ label, selected = false, onPress, size = 'md' }) {
   const sizeStyles = size === 'sm' ? styles.chipSm : styles.chipMd;
   const sizeTextStyles = size === 'sm' ? styles.textSm : styles.textMd;
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       onPress={onPress}
       activeOpacity={0.85}
       style={[styles.base, sizeStyles, selected ? styles.selected : styles.unselected]}

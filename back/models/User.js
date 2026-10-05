@@ -83,11 +83,18 @@ const UserSchema = new mongoose.Schema(
     },
 
     // ── Vérification email ────────────────────────────────────────────────────
+    // Les codes OTP sont stockés HACHÉS (SHA-256, voir auth.service.js) : une
+    // fuite de la base ne donne pas accès aux codes en cours de validité.
     isVerified:       { type: Boolean, default: false },
     verificationCode: { type: String },
     verifyAttempts:   { type: Number, default: 0 }, // protection brute-force OTP
     resetPasswordCode:{ type: String },
     codeExpires:      { type: Date },               // expire partagée (OTP & reset)
+    lastCodeSentAt:   { type: Date, default: null }, // anti-spam : 1 email de code / minute
+
+    // Horodatage du dernier changement de mot de passe : tout JWT émis avant
+    // est refusé par auth.middleware.js (déconnexion de toutes les sessions).
+    passwordChangedAt: { type: Date, default: null },
 
     // ── Profil physique ───────────────────────────────────────────────────────
     birthdate:      { type: Date },
@@ -258,5 +265,28 @@ UserSchema.index(
     partialFilterExpression: { discriminator: { $type: "string" } },
   }
 );
+
+// ─── Sérialisation ────────────────────────────────────────────────────────────
+// Défense en profondeur : quel que soit le .select() d'un contrôleur, les
+// secrets d'authentification ne sortent JAMAIS dans une réponse JSON.
+const PRIVATE_FIELDS = [
+  "password",
+  "verificationCode",
+  "resetPasswordCode",
+  "verifyAttempts",
+  "codeExpires",
+  "lastCodeSentAt",
+  "passwordChangedAt",
+  "googleId",
+  "__v",
+];
+
+function stripPrivateFields(_doc, ret) {
+  for (const field of PRIVATE_FIELDS) delete ret[field];
+  return ret;
+}
+
+UserSchema.set("toJSON", { transform: stripPrivateFields });
+UserSchema.set("toObject", { transform: stripPrivateFields });
 
 module.exports = mongoose.model("User", UserSchema);

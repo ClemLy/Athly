@@ -25,6 +25,18 @@ describe('Filtre anti-injures — Section VIII', () => {
       expect(containsProfanity('put4in')).toBe(true);
     });
 
+    it("❌ N'a pas de faux-positif sur des prénoms et mots courants", () => {
+      for (const legit of ['Dominique', 'Véronique', 'Monique', 'Conner', 'Computer', 'Tarek', 'Hancock', 'AliceRgpd']) {
+        expect(containsProfanity(legit)).toBe(false);
+      }
+    });
+
+    it('✅ Détecte un mot court quand il est isolé', () => {
+      expect(containsProfanity('gros pd')).toBe(true);
+      expect(containsProfanity('Nique Ta Mere')).toBe(true);
+      expect(containsProfanity('FDP')).toBe(true);
+    });
+
     it("❌ N'a pas de faux-positif sur un pseudo légitime", () => {
       expect(containsProfanity('AliceFit')).toBe(false);
       expect(containsProfanity('Classe2024')).toBe(false); // contient "ass" mais pas un mot banni isolé... voir note

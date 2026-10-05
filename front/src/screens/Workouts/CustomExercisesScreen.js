@@ -18,6 +18,7 @@ import {
 } from '../../constants/exerciseFilters';
 import { ConfirmModal } from '../../components/common';
 import { InfoModal } from '../../components/common';
+import { getErrorMessage } from '../../utils/errorMessages';
 
 export default function CustomExercisesScreen({ navigation }) {
   const { items, loading, remove } = useCustomExercises();
@@ -38,7 +39,7 @@ export default function CustomExercisesScreen({ navigation }) {
     const item = deleteTarget;
     setDeleteTarget(null);
     try { await remove(item.id); } catch (e) {
-      setErrorInfo(e && e.message ? e.message : 'Suppression impossible');
+      setErrorInfo(getErrorMessage(e, 'La suppression n\'a pas abouti. Réessaie dans un instant.'));
     }
   }, [deleteTarget, remove]);
 
@@ -48,7 +49,7 @@ export default function CustomExercisesScreen({ navigation }) {
     const secondary = secondaryMusclesLabels(item);
     const equipment = primaryEquipmentLabel(item);
     return (
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         style={styles.card}
         onPress={() => onEdit(item)}
         onLongPress={() => onDelete(item)}
@@ -68,10 +69,10 @@ export default function CustomExercisesScreen({ navigation }) {
           {equipment ? <Text style={styles.equip}>{equipment}</Text> : null}
         </View>
         <View style={styles.actions}>
-          <TouchableOpacity onPress={() => onEdit(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity accessibilityLabel="Modifier" accessibilityRole="button" onPress={() => onEdit(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons name="create-outline" size={20} color={Colors.textSecondary} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => onDelete(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={styles.actionDelete}>
+          <TouchableOpacity accessibilityLabel="Supprimer" accessibilityRole="button" onPress={() => onDelete(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={styles.actionDelete}>
             <Ionicons name="trash-outline" size={20} color={Colors.error} />
           </TouchableOpacity>
         </View>
@@ -80,13 +81,13 @@ export default function CustomExercisesScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation && navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button" onPress={() => navigation && navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="chevron-back" size={26} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Mes exercices</Text>
-        <TouchableOpacity onPress={onAdd} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <TouchableOpacity accessibilityLabel="Ajouter" accessibilityRole="button" onPress={onAdd} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="add" size={28} color={Colors.primary} />
         </TouchableOpacity>
       </View>
@@ -102,7 +103,7 @@ export default function CustomExercisesScreen({ navigation }) {
           <Text style={styles.emptyText}>
             Crée tes propres exercices pour les retrouver dans le builder et les séances.
           </Text>
-          <TouchableOpacity style={styles.emptyBtn} onPress={onAdd} activeOpacity={0.85}>
+          <TouchableOpacity accessibilityRole="button" style={styles.emptyBtn} onPress={onAdd} activeOpacity={0.85}>
             <Ionicons name="add" size={18} color="#fff" />
             <Text style={styles.emptyBtnText}>Créer un exercice</Text>
           </TouchableOpacity>

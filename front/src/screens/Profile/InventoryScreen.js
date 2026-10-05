@@ -17,6 +17,8 @@ import ChestOpeningModal from '../../components/inventory/ChestOpeningModal';
 import { haptics } from '../../services';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
+import { getErrorMessage } from '../../utils/errorMessages';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const MIN_LEVEL_FOR_CHEST = 11;
 const RARITY_ORDER = ['unique', 'legendary', 'epic', 'rare', 'common'];
@@ -35,6 +37,7 @@ const CLAIM_EQUIP_ACTION = {
 // cosmétiques Uniques. Chaque carte entre en scène en cascade (stagger).
 
 export default function InventoryScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const { user, refetch } = useUser();
   const { addBonusXp, totalXP } = useWorkoutLogs();
   const { showToast } = useToast();
@@ -96,7 +99,7 @@ export default function InventoryScreen({ navigation }) {
       }
     } catch (error) {
       if (error.isSessionExpired) return;
-      showToast(error.data?.message || 'Impossible d\'ouvrir le coffre.', 'error');
+      showToast(getErrorMessage(error, 'Impossible d\'ouvrir le coffre.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -129,7 +132,7 @@ export default function InventoryScreen({ navigation }) {
       }
     } catch (error) {
       if (error.isSessionExpired) return;
-      showToast(error.data?.message || 'Impossible d\'utiliser cet objet.', 'error');
+      showToast(getErrorMessage(error, 'Impossible d\'utiliser cet objet.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -151,7 +154,7 @@ export default function InventoryScreen({ navigation }) {
       }
     } catch (error) {
       if (error.isSessionExpired) return;
-      showToast(error.data?.message || 'Impossible de réclamer cet objet.', 'error');
+      showToast(getErrorMessage(error, 'Impossible de réclamer cet objet.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -167,8 +170,8 @@ export default function InventoryScreen({ navigation }) {
       <StatusBar barStyle="light-content" />
 
       {/* ── Header ── */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button" onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Inventaire</Text>
@@ -263,7 +266,7 @@ function ChestCard({ count, locked, busy, onOpen }) {
         </Text>
       </View>
 
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         style={[styles.openBtn, !canOpen && styles.openBtnDisabled]}
         onPress={onOpen}
         disabled={!canOpen}
@@ -329,7 +332,7 @@ function StaggeredItemCard({ entry, index, busy, onUse, onClaim }) {
       </View>
 
       {meta.usable && (
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.useBtn, { borderColor: rarity.color }, busy && { opacity: 0.4 }]}
           onPress={onUse}
           disabled={busy}
@@ -340,7 +343,7 @@ function StaggeredItemCard({ entry, index, busy, onUse, onClaim }) {
       )}
 
       {meta.claimable && (
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.useBtn, { borderColor: rarity.color, backgroundColor: `${rarity.color}14` }, busy && { opacity: 0.4 }]}
           onPress={onClaim}
           disabled={busy}
@@ -362,7 +365,6 @@ const styles = StyleSheet.create({
     alignItems:     'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop:     54,
     paddingBottom:  14,
   },
   headerTitle: { color: Colors.textPrimary, fontSize: 17, fontWeight: '800', letterSpacing: 0.2 },

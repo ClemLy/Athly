@@ -13,6 +13,7 @@ import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import { aggregateExercise } from '../../services';
 import ExerciseStatsChart from '../../components/stats/ExerciseStatsChart';
 import PRCard from '../../components/stats/PRCard';
+import { pluralWord } from '../../utils/format';
 
 // Détail historique d'un exercice : graphique de progression + PRs + suggestion.
 //
@@ -42,9 +43,9 @@ export default function ExerciseStatsScreen({ route, navigation }) {
   const stats = useMemo(() => aggregateExercise(logs, exerciseRef), [logs, exerciseRef]);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button"
           onPress={() => navigation && navigation.goBack()}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
@@ -72,7 +73,7 @@ export default function ExerciseStatsScreen({ route, navigation }) {
               {METRICS.map((m) => {
                 const active = m.id === metric;
                 return (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={m.id}
                     style={[styles.metricBtn, active && styles.metricBtnActive]}
                     onPress={() => setMetric(m.id)}
@@ -121,7 +122,9 @@ function LastSessionCard({ session }) {
         <Text style={styles.lastColLabel} numberOfLines={1}>SET</Text>
         <Text style={[styles.lastColLabel, { flex: 2, textAlign: 'center' }]}>POIDS</Text>
         <Text style={[styles.lastColLabel, { flex: 2, textAlign: 'center' }]}>REPS</Text>
-        <Text style={[styles.lastColLabel, { width: 28, textAlign: 'center' }]}>✓</Text>
+        <View style={{ width: 28, alignItems: 'center' }} accessibilityLabel="Série validée">
+          <Ionicons name="checkmark" size={13} color={Colors.textMuted} />
+        </View>
       </View>
 
       {session.sets.length === 0 ? (
@@ -154,7 +157,7 @@ function LastSessionCard({ session }) {
 
       {session.sets.length > 0 && (
         <Text style={styles.lastSummary}>
-          {completedCount}/{session.sets.length} sets validés
+          {completedCount}/{session.sets.length} {pluralWord(session.sets.length, 'série validée', 'séries validées')}
         </Text>
       )}
 

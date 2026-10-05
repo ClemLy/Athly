@@ -263,7 +263,7 @@ export default function ProfileScreen({ navigation }) {
       <LinearGradient colors={bgColors} style={StyleSheet.absoluteFill} pointerEvents="none" />
 
       {/* Gear icon — top-right corner, above scroll content */}
-      <TouchableOpacity
+      <TouchableOpacity accessibilityLabel="Réglages" accessibilityRole="button"
         style={[styles.gearBtn, { top: insets.top + 8 }]}
         onPress={() => navigation && navigation.navigate('Settings')}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -332,7 +332,7 @@ export default function ProfileScreen({ navigation }) {
           </View>
 
           {/* ── Inventaire (bannière pleine largeur — trop à l'étroit dans quickActions) ── */}
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={styles.inventoryBanner}
             onPress={() => navigation && navigation.navigate('Inventory')}
             activeOpacity={0.85}
@@ -368,7 +368,7 @@ export default function ProfileScreen({ navigation }) {
           </Section>
 
           {/* ── Activité 12 mois ── */}
-          <Section title="Activité - 12 mois">
+          <Section title="Activité sur 12 mois">
             <GlassCard>
               <ActivityHeatmap heatmap={heatmap} />
             </GlassCard>
@@ -376,7 +376,7 @@ export default function ProfileScreen({ navigation }) {
 
           {/* ── Actions ── */}
           <View style={styles.actions}>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.editBtn}
               onPress={() => navigation && navigation.navigate('EditProfile')}
               activeOpacity={0.85}
@@ -385,7 +385,7 @@ export default function ProfileScreen({ navigation }) {
               <Text style={styles.editBtnText}>Modifier le profil</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.logoutBtn} onPress={signOut} activeOpacity={0.7}>
+            <TouchableOpacity accessibilityRole="button" style={styles.logoutBtn} onPress={signOut} activeOpacity={0.7}>
               <Ionicons name="log-out-outline" size={14} color={Colors.error} style={{ marginRight: 6 }} />
               <Text style={styles.logoutText}>Déconnexion</Text>
             </TouchableOpacity>
@@ -433,7 +433,7 @@ function Section({ title, children, onSeeAll, seeAllLabel = 'Voir tout' }) {
       <View style={styles.sectionRow}>
         <Text style={styles.sectionTitle}>{title}</Text>
         {onSeeAll && (
-          <TouchableOpacity onPress={onSeeAll} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity accessibilityRole="button" onPress={onSeeAll} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={styles.seeAllText}>{seeAllLabel}</Text>
           </TouchableOpacity>
         )}
@@ -455,7 +455,7 @@ function GlassCard({ children }) {
 
 function QuickBtn({ icon, label, onPress, accentColor }) {
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       style={[styles.quickBtn, accentColor && { borderColor: accentColor + '28' }]}
       onPress={() => { haptics.success(); if (onPress) onPress(); }}
       activeOpacity={0.82}
@@ -476,8 +476,12 @@ const styles = StyleSheet.create({
 
   gearBtn: {
     position: 'absolute',
-    right: 20,
+    right: 16,
     zIndex: 10,
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(8,9,16,0.72)',
+    borderWidth: 1, borderColor: Colors.glassBorder,
   },
 
   heroWrapper: { position: 'relative' },

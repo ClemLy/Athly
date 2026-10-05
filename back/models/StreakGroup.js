@@ -17,7 +17,7 @@ const mongoose = require("mongoose");
 const StreakGroupSchema = new mongoose.Schema(
   {
     // Nom optionnel choisi par les membres (ex: "Les Guerriers du Lundi")
-    name: { type: String, trim: true },
+    name: { type: String, trim: true, maxlength: [40, "Le nom du groupe ne peut pas dépasser 40 caractères."] },
 
     // Tableau des membres (ObjectId → ref User). Max 5 appliqué côté contrôleur.
     members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],

@@ -63,13 +63,13 @@ export default function WorkoutCalendar({ workoutDates = {}, onSelectDate }) {
   return (
     <View style={styles.wrap}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={previous} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button" onPress={previous} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Ionicons name="chevron-back" size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
           {MONTH_LABELS[cursor.month]} {cursor.year}
         </Text>
-        <TouchableOpacity onPress={next} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity accessibilityLabel="Ouvrir" accessibilityRole="button" onPress={next} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Ionicons name="chevron-forward" size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
       </View>
@@ -89,7 +89,7 @@ export default function WorkoutCalendar({ workoutDates = {}, onSelectDate }) {
           const hasWorkout = !!workoutDates[k];
           const isToday = k === todayKey;
           return (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               key={`c-${i}`}
               style={[styles.cell, isToday && styles.cellToday]}
               onPress={() => onSelectDate && onSelectDate(k)}

@@ -20,6 +20,7 @@ import FriendShowcaseGrid   from '../../components/profile/FriendShowcaseGrid';
 import PersonalRecordsList  from '../../components/profile/PersonalRecordsList';
 import { resolveExerciseMeta } from '../../data/majorExercises';
 import { getFriendshipTitle } from '../../data/friendshipTitles';
+import { getErrorMessage } from '../../utils/errorMessages';
 
 // ─── FriendProfileScreen ──────────────────────────────────────────────────────
 // Profil public d'un ami (Brique III) : miroir en lecture seule de notre propre
@@ -64,7 +65,7 @@ export default function FriendProfileScreen({ route, navigation }) {
       Animated.timing(opacity, { toValue: 1, duration: 280, useNativeDriver: true }).start();
     } catch (error) {
       if (!error.isSessionExpired) {
-        showToast(error.data?.message || 'Profil inaccessible.', 'error');
+        showToast(getErrorMessage(error, 'Ce profil ne peut pas être affiché pour le moment.'), 'error');
       }
       navigation.goBack();
     } finally {
@@ -85,7 +86,7 @@ export default function FriendProfileScreen({ route, navigation }) {
       showToast(res.message || `${pseudo} a été secoué !`, 'success');
       await load();
     } catch (error) {
-      if (!error.isSessionExpired) showToast(error.data?.message || 'Action impossible.', 'error');
+      if (!error.isSessionExpired) showToast(getErrorMessage(error, 'L\'action n\'a pas abouti. Réessaie dans un instant.'), 'error');
     } finally {
       setShaking(false);
     }
@@ -145,7 +146,7 @@ export default function FriendProfileScreen({ route, navigation }) {
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       <LinearGradient colors={bgColors} style={StyleSheet.absoluteFill} pointerEvents="none" />
 
-      <TouchableOpacity
+      <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button"
         style={[styles.backBtn, { top: insets.top + 8 }]}
         onPress={() => navigation.goBack()}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -213,7 +214,7 @@ export default function FriendProfileScreen({ route, navigation }) {
 
           {/* ── Action sociale : Secouer (uniquement si coéquipier de streak) ── */}
           {sharedGroup && (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[styles.shakeBanner, alreadyShakenToday && styles.shakeBannerDisabled]}
               onPress={handleShake}
               disabled={shaking || alreadyShakenToday}
@@ -283,7 +284,14 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  backBtn: { position: 'absolute', left: 20, zIndex: 10 },
+  // Bouton flottant lisible par-dessus le contenu qui défile
+  backBtn: {
+    position: 'absolute', left: 16, zIndex: 10,
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(8,9,16,0.72)',
+    borderWidth: 1, borderColor: Colors.glassBorder,
+  },
 
   heroWrapper: { position: 'relative' },
   streakWrap:  { marginTop: 10 },

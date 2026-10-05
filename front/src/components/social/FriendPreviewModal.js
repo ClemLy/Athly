@@ -36,7 +36,7 @@ export default function FriendPreviewModal({ visible, result, onSend, onClose })
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
-          <TouchableOpacity style={styles.closeIcon} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button" style={styles.closeIcon} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Ionicons name="close" size={20} color={Colors.textMuted} />
           </TouchableOpacity>
 
@@ -55,7 +55,7 @@ export default function FriendPreviewModal({ visible, result, onSend, onClose })
           <Text style={styles.tag}>{user.pseudo}#{user.discriminator}</Text>
 
           {relationStatus === 'none' && (
-            <TouchableOpacity style={styles.sendBtn} onPress={handleSend} disabled={sending} activeOpacity={0.85}>
+            <TouchableOpacity accessibilityRole="button" style={styles.sendBtn} onPress={handleSend} disabled={sending} activeOpacity={0.85}>
               {sending
                 ? <ActivityIndicator size="small" color="#fff" />
                 : (
@@ -75,7 +75,7 @@ export default function FriendPreviewModal({ visible, result, onSend, onClose })
           {relationStatus === 'pending_received' && (
             <View style={styles.statusChip}>
               <Ionicons name="mail-unread-outline" size={14} color={Colors.gold} />
-              <Text style={styles.statusChipTxt}>Vous a envoyé une invitation - vois l'onglet Demandes</Text>
+              <Text style={styles.statusChipTxt}>T'a envoyé une demande : réponds-y dans l'onglet Demandes</Text>
             </View>
           )}
           {relationStatus === 'accepted' && (
@@ -85,7 +85,7 @@ export default function FriendPreviewModal({ visible, result, onSend, onClose })
             </View>
           )}
 
-          <TouchableOpacity style={styles.cancelBtn} onPress={onClose} activeOpacity={0.75}>
+          <TouchableOpacity accessibilityRole="button" style={styles.cancelBtn} onPress={onClose} activeOpacity={0.75}>
             <Text style={styles.cancelTxt}>Fermer</Text>
           </TouchableOpacity>
         </View>

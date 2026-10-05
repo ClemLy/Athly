@@ -19,7 +19,7 @@ import { FRAME_DEFS } from '../../components/profile/AvatarFrame';
 const RANKS = [
   {
     name: 'Novice',
-    levelRange: '0 – 10',
+    levelRange: '0 à 10',
     minLevel: 0,
     maxLevel: 10,
     color: Colors.primary,
@@ -35,7 +35,7 @@ const RANKS = [
   },
   {
     name: 'Initié',
-    levelRange: '11 – 30',
+    levelRange: '11 à 30',
     minLevel: 11,
     maxLevel: 30,
     color: '#FBBF24',
@@ -50,7 +50,7 @@ const RANKS = [
   },
   {
     name: 'Athlète',
-    levelRange: '31 – 50',
+    levelRange: '31 à 50',
     minLevel: 31,
     maxLevel: 50,
     color: Colors.valid,
@@ -64,7 +64,7 @@ const RANKS = [
   },
   {
     name: 'Compétiteur',
-    levelRange: '51 – 70',
+    levelRange: '51 à 70',
     minLevel: 51,
     maxLevel: 70,
     color: '#3B82F6',
@@ -79,7 +79,7 @@ const RANKS = [
   },
   {
     name: 'Warrior',
-    levelRange: '71 – 90',
+    levelRange: '71 à 90',
     minLevel: 71,
     maxLevel: 90,
     color: Colors.secondaryAccent,
@@ -93,7 +93,7 @@ const RANKS = [
   },
   {
     name: 'Élite',
-    levelRange: '91 – 110',
+    levelRange: '91 à 110',
     minLevel: 91,
     maxLevel: 110,
     color: Colors.secondaryAccent,
@@ -108,7 +108,7 @@ const RANKS = [
   },
   {
     name: 'Maître',
-    levelRange: '111 – 140',
+    levelRange: '111 à 140',
     minLevel: 111,
     maxLevel: 140,
     color: Colors.rankViolet,
@@ -122,7 +122,7 @@ const RANKS = [
   },
   {
     name: 'Grand Maître',
-    levelRange: '141 – 170',
+    levelRange: '141 à 170',
     minLevel: 141,
     maxLevel: 170,
     color: Colors.rankPurple,
@@ -136,7 +136,7 @@ const RANKS = [
   },
   {
     name: 'Légende',
-    levelRange: '171 – 199',
+    levelRange: '171 à 199',
     minLevel: 171,
     maxLevel: 199,
     color: Colors.legendAccent,
@@ -147,7 +147,7 @@ const RANKS = [
       'Forme Ailes débloquée (Niv. 171)',
       'Braises ascendantes animées sur le profil',
       'Fond Légende profond (violet abyssal)',
-      'Shimmer ✦ pulsant sur le pseudo (permanent)',
+      'Reflet scintillant permanent sur le pseudo',
     ],
     icon: 'planet',
   },
@@ -176,10 +176,10 @@ export default function RankRoadmapScreen({ navigation }) {
   const { level: currentLevel } = useMemo(() => xpToLevel(totalXP), [totalXP]);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button"
           onPress={() => navigation && navigation.goBack()}
           style={styles.backBtn}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: Colors.backgroundDeep,
-    paddingTop: 60,
+    paddingTop: 8,
   },
   header: {
     flexDirection: 'row',

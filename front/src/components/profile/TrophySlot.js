@@ -57,7 +57,7 @@ export function TrophySlot({ trophy, onPress }) {
   const glow = GLOW[tier] || GLOW[glowIntensity] || GLOW.bronze;
 
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       style={[styles.slot, unlocked && { borderColor: color + '35', borderTopColor: color + '90', borderWidth: 0.8 }]}
       onPress={onPress}
       activeOpacity={0.82}
@@ -86,7 +86,7 @@ export function TrophySlot({ trophy, onPress }) {
 
 export function EmptySlot({ onPress, label = 'Choisir', hint = 'Voir tout' }) {
   return (
-    <TouchableOpacity style={styles.emptySlot} onPress={onPress} activeOpacity={0.7} disabled={!onPress}>
+    <TouchableOpacity accessibilityRole="button" style={styles.emptySlot} onPress={onPress} activeOpacity={0.7} disabled={!onPress}>
       <View style={styles.emptyIcon}>
         <Ionicons name="add" size={22} color="rgba(255,255,255,0.18)" />
       </View>
@@ -113,9 +113,9 @@ export function FeaturedModal({ trophy, onClose, onUnfeature }) {
 
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <Pressable accessible={false} style={styles.overlay} onPress={onClose}>
         <Animated.View style={[styles.modalCard, { transform: [{ scale }], opacity }]}>
-          <Pressable style={styles.modalInner} onPress={() => {}}>
+          <Pressable accessibilityRole="button" style={styles.modalInner} onPress={() => {}}>
             <View style={[styles.modalIconShadow, { shadowColor: color }]}>
               <LinearGradient colors={gradientColors} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.modalIconGradient}>
                 <TrophyIcon name={icon} size={52} color="#fff" />
@@ -137,7 +137,7 @@ export function FeaturedModal({ trophy, onClose, onUnfeature }) {
             <Text style={styles.modalEpicDesc}>{epicDesc || ''}</Text>
 
             {onUnfeature && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.unfeaturedBtn, { borderColor: color + '40' }]}
                 onPress={onUnfeature}
                 activeOpacity={0.75}
@@ -147,7 +147,7 @@ export function FeaturedModal({ trophy, onClose, onUnfeature }) {
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity style={[styles.closeBtn, { borderColor: 'rgba(255,255,255,0.15)' }]} onPress={onClose} activeOpacity={0.75}>
+            <TouchableOpacity accessibilityRole="button" style={[styles.closeBtn, { borderColor: 'rgba(255,255,255,0.15)' }]} onPress={onClose} activeOpacity={0.75}>
               <Text style={styles.closeTxt}>Fermer</Text>
             </TouchableOpacity>
           </Pressable>

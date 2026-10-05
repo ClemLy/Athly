@@ -156,10 +156,12 @@ NavigationContainer
         SavedWorkoutsProvider
           CustomExercisesProvider
             QuestProvider
-              AuthStack (non connecté)
-              ou BottomTabs (connecté), avec en overlay :
-                BirthdayCelebration, LevelUpCelebration,
-                ActivityFeedModal, WeightReminderCheck, LobbyInviteCheck
+              Pile racine unique (Root)
+                non connecté : Auth, Register, EmailVerification, ForgotPassword
+                connecté : Main = WorkoutInProgressProvider + BottomTabs, avec en overlay :
+                  BirthdayCelebration, LevelUpCelebration,
+                  ActivityFeedModal, WeightReminderCheck, LobbyInviteCheck
+                toujours : Legal (pages légales), NotFound (404)
 ```
 
 ### Finalisation d'une séance
@@ -245,7 +247,10 @@ front/
   App.js                   Composant racine, wrapping des providers
   app.json                 Configuration Expo, y compris la PWA
   eas.json                 Profils de build EAS
-  web/index.html            Shell HTML pour le build web
+  public/                   Copié tel quel dans le build web : index.html (coquille
+                            HTML, couleurs système, écran de démarrage), manifeste PWA,
+                            icônes, service worker, robots.txt
+  vercel.json               Déploiement Vercel : build, redirections, en-têtes de sécurité
 
   assets/
 
@@ -318,8 +323,9 @@ front/
       majorExercises.js         Exercices de référence pour les classements
 
     navigation/
-      index.js                AppNavigator : bascule Auth ou App, providers globaux
-      AuthStack.js
+      index.js                AppNavigator : pile racine (Auth ou App, Legal, 404), providers globaux
+      linking.js               URLs web de chaque écran (retour navigateur, rechargement, 404)
+      transitions.js           Transitions d'écran (glissement, fondu si animations réduites)
       BottomTabs.js            5 onglets
       WorkoutStack.js
       ProfileStack.js
@@ -335,12 +341,15 @@ front/
 ## Navigation
 
 ```
-AppNavigator (racine)
-  Non connecté : AuthStack
-    Auth (LoginScreen)
-    Register
-    EmailVerification
-    ForgotPassword
+AppNavigator (racine, une seule pile)
+  Non connecté
+    Auth (LoginScreen)         /connexion
+    Register                   /inscription
+    EmailVerification          /confirmation-email
+    ForgotPassword             /mot-de-passe-oublie
+  Toujours disponibles
+    Legal                      /legal/confidentialite, /legal/conditions, /legal/mentions-legales
+    NotFound                   toute autre adresse
 
   Connecté : BottomTabs, 5 onglets
     Accueil          HomeScreen

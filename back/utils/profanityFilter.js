@@ -46,19 +46,53 @@ const BANNED_WORDS = [
 
 const LEET_MAP = { 0: 'o', 1: 'i', 3: 'e', 4: 'a', 5: 's', 7: 't', '@': 'a', '$': 's' };
 
-function normalize(text) {
-  let s = String(text || '').toLowerCase();
+// Termes sans ambiguïté : détectés même collés à d'autres lettres
+// ("SuperConnard69", "fuckyou").
+const ALWAYS_SUBSTRING = new Set([
+  'fuck', 'merde', 'putain', 'salope', 'connard', 'connasse', 'encule', 'enculer',
+  'enculee', 'nigger', 'nigga', 'batard', 'motherfucker',
+]);
+
+// Termes courts ou contenus dans des mots/prénoms courants : détectés
+// UNIQUEMENT comme mot isolé, sinon "Dominique"/"Véronique" (nique),
+// "Conner" (conne), "Computer" (pute), "Tarek" (taré) ou "AliceRgpd" (pd)
+// seraient refusés à tort.
+const TOKEN_ONLY = new Set(['chatte', 'retard', 'bounty', 'debile', 'ordure']);
+
+function stripAccentsAndLeet(text) {
+  let s = String(text || '');
   s = s.replace(/[013457@$]/g, (ch) => LEET_MAP[ch] ?? ch);
-  s = s.normalize('NFD').replace(/[̀-ͯ]/g, ''); // accents
-  s = s.replace(/[^a-z]/g, ''); // ne garde que les lettres — colle les mots séparés par espace/underscore
+  s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // accents
   return s;
 }
 
+function normalize(text) {
+  // ne garde que les lettres : colle les mots séparés par espace/underscore
+  return stripAccentsAndLeet(text).toLowerCase().replace(/[^a-z]/g, '');
+}
+
+// Découpe en mots : séparateurs non-lettres ET frontières camelCase ("SuperConnard" → super, connard)
+function tokenize(text) {
+  return stripAccentsAndLeet(text)
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .filter(Boolean);
+}
+
+const NORMALIZED_WORDS = [...new Set(BANNED_WORDS.map(normalize))].filter(Boolean);
+
 /** True si `text` contient un mot de la liste noire (après normalisation). */
 function containsProfanity(text) {
-  const normalized = normalize(text);
-  if (!normalized) return false;
-  return BANNED_WORDS.some((word) => normalized.includes(normalize(word)));
+  const collapsed = normalize(text);
+  if (!collapsed) return false;
+  const tokens = new Set(tokenize(text));
+
+  return NORMALIZED_WORDS.some((word) => {
+    const substringAllowed = ALWAYS_SUBSTRING.has(word) || (word.length >= 6 && !TOKEN_ONLY.has(word));
+    if (substringAllowed) return collapsed.includes(word);
+    return tokens.has(word);
+  });
 }
 
 module.exports = { containsProfanity, normalize };

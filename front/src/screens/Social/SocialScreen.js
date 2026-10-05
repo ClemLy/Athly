@@ -1,8 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
-  StatusBar, ActivityIndicator, Animated, RefreshControl,
-} from 'react-native';
+  StatusBar, ActivityIndicator, Animated, RefreshControl, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '../../constants/theme';
@@ -24,6 +23,9 @@ import { getFriendshipTitle } from '../../data/friendshipTitles';
 import ExercisePickerModal from '../../components/social/ExercisePickerModal';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
+import { getErrorMessage } from '../../utils/errorMessages';
+import { plural } from '../../utils/format';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Podium / classements : positions 1-3 affichées en médaille colorée plutôt
 // qu'en emoji 🥇🥈🥉.
@@ -46,6 +48,9 @@ const SEGMENTS = [
 // groupe de streak avec bouton Secouer. Chaque segment a ses entrées animées.
 
 export default function SocialScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const compactSegments = width < 360;
   const { showToast } = useToast();
   const { user, refetch: refetchUser } = useUser();
   const { addBonusXp } = useWorkoutLogs();
@@ -119,7 +124,7 @@ export default function SocialScreen({ navigation }) {
       setGroupInvites(groupRes.invites ?? []);
     } catch (error) {
       if (!error.isSessionExpired) {
-        showToast('Impossible de charger le social. Vérifie ta connexion.', 'error');
+        showToast('Tes amis n\'ont pas pu être chargés. Vérifie ta connexion puis tire l\'écran vers le bas pour réessayer.', 'error');
       }
     } finally {
       setLoading(false);
@@ -164,7 +169,7 @@ export default function SocialScreen({ navigation }) {
         setSearchError('Aucun athlète ne correspond à ce tag.');
       }
     } catch (error) {
-      setSearchError(error?.data?.message || 'Recherche impossible.');
+      setSearchError(getErrorMessage(error, 'Recherche impossible.'));
     } finally {
       setSearching(false);
     }
@@ -178,7 +183,7 @@ export default function SocialScreen({ navigation }) {
       loadAll();
     } catch (error) {
       if (error.isSessionExpired) return;
-      showToast(error.data?.message || 'Action impossible.', 'error');
+      showToast(getErrorMessage(error, 'L\'action n\'a pas abouti. Réessaie dans un instant.'), 'error');
     }
   };
 
@@ -186,7 +191,7 @@ export default function SocialScreen({ navigation }) {
     <View style={styles.root}>
       <StatusBar barStyle="light-content" />
 
-      <Text style={styles.title}>Social</Text>
+      <Text style={[styles.title, { paddingTop: insets.top + 16 }]} accessibilityRole="header">Social</Text>
 
       {/* ── Segments ── */}
       <View
@@ -194,6 +199,7 @@ export default function SocialScreen({ navigation }) {
         onLayout={onSegmentsLayout}
         collapsable={false}
         style={styles.segmentRow}
+        accessibilityRole="tablist"
       >
         {SEGMENTS.map((s) => {
           const active = segment === s.key;
@@ -206,9 +212,14 @@ export default function SocialScreen({ navigation }) {
               style={[styles.segmentBtn, active && styles.segmentBtnActive]}
               onPress={() => setSegment(s.key)}
               activeOpacity={0.8}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={badge != null ? `${s.label}, ${badge} en attente` : s.label}
             >
-              <Ionicons name={active ? s.icon : `${s.icon}-outline`} size={15} color={active ? '#fff' : Colors.textMuted} />
-              <Text style={[styles.segmentTxt, active && styles.segmentTxtActive]}>{s.label}</Text>
+              {!compactSegments && (
+                <Ionicons name={active ? s.icon : `${s.icon}-outline`} size={15} color={active ? '#fff' : Colors.textMuted} />
+              )}
+              <Text style={[styles.segmentTxt, active && styles.segmentTxtActive]} numberOfLines={1}>{s.label}</Text>
               {badge != null && (
                 <View style={styles.badge}><Text style={styles.badgeTxt}>{badge}</Text></View>
               )}
@@ -269,13 +280,13 @@ export default function SocialScreen({ navigation }) {
                     }
                     if (res.bloodSangUnlocked) setBloodSangUnlockedVisible(true);
                   } else if (res.alreadyValidated) {
-                    showToast('Déjà validée aujourd\'hui', 'success');
+                    showToast('La streak du groupe est déjà validée aujourd\'hui.', 'success');
                   } else {
-                    showToast('Tous les membres n\'ont pas encore validé leur séance.', 'error');
+                    showToast('Il manque encore la séance de certains membres pour valider la journée.', 'info');
                   }
                   loadAll();
                 } catch (error) {
-                  if (!error.isSessionExpired) showToast(error.data?.message || 'Erreur.', 'error');
+                  if (!error.isSessionExpired) showToast(getErrorMessage(error, 'La validation de la streak n\'a pas abouti. Réessaie dans un instant.'), 'error');
                 }
               }}
               onLeaveGroup={() => setLeaveConfirmVisible(true)}
@@ -290,13 +301,13 @@ export default function SocialScreen({ navigation }) {
         visible={leaveConfirmVisible}
         icon="exit-outline"
         title="Quitter le groupe"
-        body="Êtes-vous sûr de vouloir quitter le groupe ? Cette action est irréversible et tu perdras l'accès à la streak collective."
+        body="Tu perdras l'accès à la streak collective de ce groupe. Pour revenir, un membre devra t'inviter à nouveau."
         confirmLabel="Quitter le groupe"
         cancelLabel="Annuler"
         destructive
         onConfirm={() => {
           setLeaveConfirmVisible(false);
-          doAction(() => leaveGroup(), 'Vous avez quitté le groupe.');
+          doAction(() => leaveGroup(), 'Tu as quitté le groupe.');
         }}
         onCancel={() => setLeaveConfirmVisible(false)}
       />
@@ -321,7 +332,7 @@ export default function SocialScreen({ navigation }) {
         visible={bloodSangUnlockedVisible}
         icon="color-palette"
         title="Couleur Unique débloquée !"
-        body="Votre groupe a validé 30 jours de streak à 5 membres. La couleur de cadre « Rouge Sang » vous attend dans votre inventaire - direction le Sac pour la réclamer."
+        body="Ton groupe a tenu 30 jours de streak à 5. La couleur de cadre « Rouge Sang » t'attend dans ton inventaire : va la réclamer."
         confirmLabel="Voir mon inventaire"
         cancelLabel="Plus tard"
         onConfirm={() => {
@@ -372,7 +383,7 @@ function FriendsSegment({
   return (
     <>
       {/* ── Point d'entrée unique pour ajouter un ami (Section III) ── */}
-      <TouchableOpacity style={styles.addFriendBtn} onPress={onOpenAddFriend} activeOpacity={0.85}>
+      <TouchableOpacity accessibilityRole="button" style={styles.addFriendBtn} onPress={onOpenAddFriend} activeOpacity={0.85}>
         <Ionicons name="person-add" size={17} color="#fff" style={{ marginRight: 8 }} />
         <Text style={styles.addFriendBtnTxt}>Ajouter un nouvel ami</Text>
       </TouchableOpacity>
@@ -384,8 +395,8 @@ function FriendsSegment({
           {pending.map((req, i) => (
             <AnimatedRow key={req._id} index={i}>
               <UserRow user={req.requester}>
-                <SmallBtn label="" icon="checkmark" color={Colors.valid} onPress={() => onAccept(req._id)} />
-                <SmallBtn label="" icon="close" color={Colors.error} onPress={() => onDecline(req._id)} />
+                <SmallBtn label="" icon="checkmark" color={Colors.valid} onPress={() => onAccept(req._id)} accessibilityLabel={`Accepter la demande de ${req.requester?.pseudo ?? 'cet athlète'}`} />
+                <SmallBtn label="" icon="close" color={Colors.error} onPress={() => onDecline(req._id)} accessibilityLabel={`Refuser la demande de ${req.requester?.pseudo ?? 'cet athlète'}`} />
               </UserRow>
             </AnimatedRow>
           ))}
@@ -403,7 +414,7 @@ function FriendsSegment({
                   <Ionicons name="time-outline" size={12} color={Colors.textMuted} />
                   <Text style={styles.sentTag}>En attente</Text>
                 </View>
-                <SmallBtn label="" icon="close" color={Colors.error} onPress={() => onCancelSent(req._id)} />
+                <SmallBtn label="" icon="close" color={Colors.error} onPress={() => onCancelSent(req._id)} accessibilityLabel={`Annuler la demande envoyée à ${req.recipient?.pseudo ?? 'cet athlète'}`} />
               </UserRow>
             </AnimatedRow>
           ))}
@@ -415,17 +426,19 @@ function FriendsSegment({
       {friends.length === 0 ? (
         <View style={styles.emptyBox}>
           <Ionicons name="people-outline" size={34} color={Colors.textMuted} style={{ marginBottom: 10 }} />
-          <Text style={styles.emptyTxt}>Pas encore d'amis.{'\n'}Cherche un pseudo ci-dessus pour commencer !</Text>
+          <Text style={styles.emptyTxt}>Pas encore d'amis.{'\n'}Ajoute un ami avec son tag (Pseudo#1234) pour progresser ensemble.</Text>
         </View>
       ) : friends.map((f, i) => (
         <AnimatedRow key={f.user._id} index={i}>
-          <TouchableOpacity activeOpacity={0.75} onPress={() => onOpenProfile(f.user, f.friendshipLevel)}>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Voir le profil de ${f.user.pseudo}`} activeOpacity={0.75} onPress={() => onOpenProfile(f.user, f.friendshipLevel)}>
             <UserRow user={f.user} subtitle={getFriendshipTitle(f.friendshipLevel).label}>
               <FriendshipHearts level={f.friendshipLevel ?? 1} />
               <TouchableOpacity
                 onPress={() => onRemoveFriend(f.friendshipId, f.user.pseudo)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
                 style={{ marginLeft: 6 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Retirer ${f.user.pseudo} de tes amis`}
               >
                 <Ionicons name="person-remove-outline" size={17} color={Colors.textMuted} />
               </TouchableOpacity>
@@ -449,7 +462,7 @@ function LeaderboardSegment({ leaderboard }) {
     <>
       {/* ── Bascule XP / Records ── */}
       <View style={styles.modeRow}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.modeBtn, mode === 'xp' && styles.modeBtnActive]}
           onPress={() => setMode('xp')}
           activeOpacity={0.8}
@@ -457,7 +470,7 @@ function LeaderboardSegment({ leaderboard }) {
           <Ionicons name="flash" size={13} color={mode === 'xp' ? '#fff' : Colors.textMuted} />
           <Text style={[styles.modeTxt, mode === 'xp' && styles.modeTxtActive]}>XP</Text>
         </TouchableOpacity>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.modeBtn, mode === 'records' && styles.modeBtnActive]}
           onPress={() => setMode('records')}
           activeOpacity={0.8}
@@ -507,7 +520,7 @@ function XpLeaderboard({ leaderboard }) {
             <AnimatedRow key={entry.user._id} index={i}>
               <View style={[styles.boardRow, entry.isMe && styles.boardRowMe]}>
                 <Text style={[styles.boardPos, styles.boardPosTxt]}>#{entry.position}</Text>
-                <Text style={[styles.boardPseudo, entry.isMe && { color: Colors.primary }]}>
+                <Text style={[styles.boardPseudo, entry.isMe && { color: Colors.primary }]} numberOfLines={1}>
                   {entry.user.pseudo}{entry.isMe ? ' (moi)' : ''}
                 </Text>
                 <Text style={styles.boardXp}>{entry.user.xp} XP</Text>
@@ -542,7 +555,7 @@ function RecordsLeaderboard() {
     <>
       {/* ── Suggestions rapides + accès au catalogue complet (~100+ exercices) ── */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.exoChipRow}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.exoChip, styles.exoChipMore]}
           onPress={() => setPickerVisible(true)}
           activeOpacity={0.8}
@@ -553,7 +566,7 @@ function RecordsLeaderboard() {
         {MAJOR_EXERCISES.map((exo) => {
           const active = exo.name === exercise;
           return (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               key={exo.name}
               style={[styles.exoChip, active && styles.exoChipActive]}
               onPress={() => setExercise(exo.name)}
@@ -589,7 +602,7 @@ function RecordsLeaderboard() {
                 ? <MedalBadge position={entry.position} size={17} />
                 : <Text style={styles.boardPosTxt}>#{entry.position}</Text>}
             </View>
-            <Text style={[styles.boardPseudo, entry.isMe && { color: Colors.primary }]}>
+            <Text style={[styles.boardPseudo, entry.isMe && { color: Colors.primary }]} numberOfLines={1}>
               {entry.user.pseudo}{entry.isMe ? ' (moi)' : ''}
             </Text>
             <Text style={styles.boardKg}>{entry.maxPoids} kg</Text>
@@ -681,7 +694,7 @@ function GroupSegment({ group, myId, invites, friends, onInvite, onRespond, onSh
               {friends.map((f) => {
                 const selected = selectedIds.includes(f.user._id);
                 return (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={f.user._id}
                     style={[styles.selectRow, selected && styles.selectRowActive]}
                     onPress={() => toggle(f.user._id)}
@@ -692,12 +705,12 @@ function GroupSegment({ group, myId, invites, friends, onInvite, onRespond, onSh
                       size={20}
                       color={selected ? Colors.primary : Colors.borderDim}
                     />
-                    <Text style={styles.selectPseudo}>{f.user.pseudo}</Text>
+                    <Text style={styles.selectPseudo} numberOfLines={1}>{f.user.pseudo}</Text>
                     <Text style={styles.selectLevel}>Nv. {f.user.level}</Text>
                   </TouchableOpacity>
                 );
               })}
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.ctaBtn, (selectedIds.length === 0 || selectedIds.length > 4) && { opacity: 0.4 }]}
                 disabled={selectedIds.length === 0 || selectedIds.length > 4}
                 onPress={() => { onInvite(selectedIds, groupName.trim() || undefined); setSelectedIds([]); setGroupName(''); }}
@@ -754,7 +767,7 @@ function GroupCard({ group, myId, onShake, onCheckStreak, onLeaveGroup }) {
         <View style={{ flex: 1 }}>
           <Text style={styles.groupName}>{group.name || 'Groupe de Streak'}</Text>
           <Text style={styles.groupStreak}>
-            Streak : <Text style={{ color: Colors.primary, fontWeight: '800' }}>{group.currentStreak ?? 0} jours</Text>
+            Streak : <Text style={{ color: Colors.primary, fontWeight: '800' }}>{plural(group.currentStreak ?? 0, 'jour')}</Text>
           </Text>
         </View>
       </View>
@@ -781,16 +794,16 @@ function GroupCard({ group, myId, onShake, onCheckStreak, onLeaveGroup }) {
         </View>
         <View style={styles.multiplierRow}>
           <Ionicons name="people" size={13} color={Colors.textMuted} />
-          <Text style={styles.multiplierLabel}>Taille du groupe ({memberCount} membres)</Text>
+          <Text style={styles.multiplierLabel}>Taille du groupe ({plural(memberCount, 'membre')})</Text>
           <Text style={styles.multiplierValue}>×{xpBonus.sizeMultiplier.toFixed(2)}</Text>
         </View>
         <View style={styles.multiplierRow}>
           <Ionicons name="calendar" size={13} color={Colors.textMuted} />
-          <Text style={styles.multiplierLabel}>Régularité ({group.currentStreak ?? 0}j de streak)</Text>
+          <Text style={styles.multiplierLabel}>Régularité ({plural(group.currentStreak ?? 0, 'jour')} de streak)</Text>
           <Text style={styles.multiplierValue}>×{xpBonus.regularityMultiplier.toFixed(2)}</Text>
         </View>
 
-        <TouchableOpacity style={styles.scaleToggle} onPress={() => setShowScale((v) => !v)} activeOpacity={0.75}>
+        <TouchableOpacity accessibilityRole="button" style={styles.scaleToggle} onPress={() => setShowScale((v) => !v)} activeOpacity={0.75}>
           <Text style={styles.scaleToggleTxt}>{showScale ? 'Masquer le barème' : 'Voir le barème complet'}</Text>
           <Ionicons name={showScale ? 'chevron-up' : 'chevron-down'} size={13} color={Colors.gold} />
         </TouchableOpacity>
@@ -826,7 +839,7 @@ function GroupCard({ group, myId, onShake, onCheckStreak, onLeaveGroup }) {
         return (
           <UserRow key={m._id} user={m}>
             {!isMe && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.shakeBtn, alreadyShaken && styles.shakeBtnDisabled]}
                 onPress={() => onShake(group._id, m._id, m.pseudo)}
                 activeOpacity={alreadyShaken ? 1 : 0.8}
@@ -842,12 +855,12 @@ function GroupCard({ group, myId, onShake, onCheckStreak, onLeaveGroup }) {
         );
       })}
 
-      <TouchableOpacity style={styles.ctaBtn} onPress={() => onCheckStreak(group._id)} activeOpacity={0.85}>
+      <TouchableOpacity accessibilityRole="button" style={styles.ctaBtn} onPress={() => onCheckStreak(group._id)} activeOpacity={0.85}>
         <Ionicons name="flash" size={16} color="#fff" style={{ marginRight: 7 }} />
         <Text style={styles.ctaTxt}>Valider la streak du jour</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.leaveBtn} onPress={() => onLeaveGroup(group._id)} activeOpacity={0.75}>
+      <TouchableOpacity accessibilityRole="button" style={styles.leaveBtn} onPress={() => onLeaveGroup(group._id)} activeOpacity={0.75}>
         <Ionicons name="exit-outline" size={15} color={Colors.error} style={{ marginRight: 6 }} />
         <Text style={styles.leaveBtnTxt}>Quitter le groupe</Text>
       </TouchableOpacity>
@@ -899,12 +912,12 @@ function UserRow({ user, subtitle, children }) {
         )}
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.userPseudo}>{user?.pseudo ?? '-'}</Text>
-        <Text style={styles.userMeta}>
+        <Text style={styles.userPseudo} numberOfLines={1}>{user?.pseudo ?? '-'}</Text>
+        <Text style={styles.userMeta} numberOfLines={1}>
           Nv. {user?.level ?? 1} · {user?.rank ?? 'Novice'}
           {weather ? ` · ${weather.label}` : ''}
         </Text>
-        {subtitle ? <Text style={styles.userFriendshipTitle}>{subtitle}</Text> : null}
+        {subtitle ? <Text style={styles.userFriendshipTitle} numberOfLines={1}>{subtitle}</Text> : null}
       </View>
       <View style={styles.userActions}>{children}</View>
     </View>
@@ -927,12 +940,15 @@ function FriendshipHearts({ level }) {
   );
 }
 
-function SmallBtn({ label, icon, color, onPress }) {
+function SmallBtn({ label, icon, color, onPress, accessibilityLabel }) {
   return (
     <TouchableOpacity
       style={[styles.smallBtn, { backgroundColor: `${color}1A`, borderColor: `${color}55` }]}
       onPress={onPress}
       activeOpacity={0.8}
+      hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || label}
     >
       <Ionicons name={icon} size={14} color={color} />
       {label ? <Text style={[styles.smallBtnTxt, { color }]}>{label}</Text> : null}
@@ -946,7 +962,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.bgAbyss },
   title: {
     color: Colors.textPrimary, fontSize: 26, fontWeight: '800',
-    letterSpacing: -0.5, paddingHorizontal: 16, paddingTop: 58, paddingBottom: 14,
+    letterSpacing: -0.5, paddingHorizontal: 16, paddingBottom: 14,
   },
   loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   content: { paddingHorizontal: 16 },

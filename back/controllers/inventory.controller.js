@@ -132,11 +132,11 @@ exports.openChest = async (req, res, next) => {
     if (!afterConsume) {
       // Diagnostic du refus pour renvoyer l'erreur historique appropriée.
       const user = await User.findById(req.user.id).select('level inventory');
-      if (!user) return next(createError('Utilisateur introuvable.', 404));
+      if (!user) return next(createError('Ce compte est introuvable.', 404));
       if (user.level < MIN_LEVEL_FOR_CHEST) {
-        return next(createError("Fonctionnalité bloquée jusqu'au niveau 11.", 403));
+        return next(createError("Les coffres se débloquent au niveau 11. Continue à t'entraîner.", 403));
       }
-      return next(createError('Aucun coffre disponible dans votre inventaire.', 400));
+      return next(createError("Tu n'as pas de coffre à ouvrir pour le moment.", 400));
     }
 
     const drawnItem = drawChestItem();
@@ -210,11 +210,13 @@ exports.openChest = async (req, res, next) => {
 exports.claimUniqueItem = async (req, res, next) => {
   try {
     const { itemType } = req.body;
-    const spec = CLAIMABLE_COSMETICS[itemType];
+    const spec = typeof itemType === 'string' && Object.prototype.hasOwnProperty.call(CLAIMABLE_COSMETICS, itemType)
+      ? CLAIMABLE_COSMETICS[itemType]
+      : null;
 
-    if (!itemType || !spec) {
+    if (!spec) {
       return next(createError(
-        `itemType invalide. Valeurs acceptées : ${Object.keys(CLAIMABLE_COSMETICS).join(', ')}.`,
+        "Cet objet ne peut pas être réclamé.",
         400,
       ));
     }
@@ -222,8 +224,8 @@ exports.claimUniqueItem = async (req, res, next) => {
     const consumed = await consumeItemAtomic(req.user.id, itemType);
     if (!consumed) {
       const exists = await User.exists({ _id: req.user.id });
-      if (!exists) return next(createError('Utilisateur introuvable.', 404));
-      return next(createError('Vous ne possédez pas cet objet à réclamer.', 400));
+      if (!exists) return next(createError('Ce compte est introuvable.', 404));
+      return next(createError("Tu ne possèdes pas cet objet.", 400));
     }
 
     const update = { $addToSet: { unlockedCosmetics: spec.cosmetic } };
@@ -270,9 +272,9 @@ exports.useItem = async (req, res, next) => {
   try {
     const { itemType } = req.body;
 
-    if (!itemType || !VALID_USE_ITEMS.includes(itemType)) {
+    if (typeof itemType !== 'string' || !VALID_USE_ITEMS.includes(itemType)) {
       return next(createError(
-        `itemType invalide. Valeurs acceptées : ${VALID_USE_ITEMS.join(', ')}.`,
+        "Cet objet ne peut pas être utilisé.",
         400,
       ));
     }
@@ -282,13 +284,13 @@ exports.useItem = async (req, res, next) => {
 
     if (!consumed) {
       const exists = await User.exists({ _id: req.user.id });
-      if (!exists) return next(createError('Utilisateur introuvable.', 404));
-      return next(createError('Vous ne possédez pas cet objet.', 400));
+      if (!exists) return next(createError('Ce compte est introuvable.', 404));
+      return next(createError("Tu ne possèdes pas cet objet.", 400));
     }
 
     // Effet 100% atomique côté DB (xp/level/rank/streakGels) — voir ITEM_EFFECTS.
     const user = await ITEM_EFFECTS[itemType](req.user.id);
-    if (!user) return next(createError('Utilisateur introuvable.', 404));
+    if (!user) return next(createError('Ce compte est introuvable.', 404));
 
     const finalUser = await purgeEmptyEntries(req.user.id);
 

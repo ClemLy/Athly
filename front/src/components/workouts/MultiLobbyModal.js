@@ -34,7 +34,7 @@ function BonusTableModal({ visible, memberCount, onClose }) {
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={styles.tableCard}>
-          <TouchableOpacity style={styles.closeIcon} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button" style={styles.closeIcon} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Ionicons name="close" size={20} color={Colors.textMuted} />
           </TouchableOpacity>
 
@@ -43,7 +43,7 @@ function BonusTableModal({ visible, memberCount, onClose }) {
           </View>
           <Text style={styles.title}>Bonus XP de groupe</Text>
           <Text style={styles.body}>
-            Plus vous êtes nombreux, plus le bonus grimpe. Assembler un groupe de 5 est difficile - ça se mérite !
+            Plus vous êtes nombreux, plus le bonus grimpe. Réunir 5 personnes, ça se mérite.
           </Text>
 
           <View style={styles.tableRows}>
@@ -186,7 +186,7 @@ export default function MultiLobbyModal({ visible, existingLobbyId, onClose, onR
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
-          <TouchableOpacity style={styles.closeIcon} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button" style={styles.closeIcon} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Ionicons name="close" size={20} color={Colors.textMuted} />
           </TouchableOpacity>
 
@@ -220,13 +220,13 @@ export default function MultiLobbyModal({ visible, existingLobbyId, onClose, onR
                 })}
               </View>
 
-              <TouchableOpacity style={styles.bonusChip} onPress={() => setBonusTableVisible(true)} activeOpacity={0.8}>
+              <TouchableOpacity accessibilityRole="button" style={styles.bonusChip} onPress={() => setBonusTableVisible(true)} activeOpacity={0.8}>
                 <Ionicons name="flash" size={15} color="#fff" style={{ marginRight: 8 }} />
                 <Text style={styles.bonusChipTxt}>Bonus de groupe : +{Math.round(bonusPercent * 100)}% XP</Text>
                 <Ionicons name="information-circle-outline" size={15} color="#fff" style={{ marginLeft: 8 }} />
               </TouchableOpacity>
 
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.inviteToggle}
                 onPress={() => setInvitePanelOpen((v) => !v)}
                 activeOpacity={0.8}
@@ -251,7 +251,7 @@ export default function MultiLobbyModal({ visible, existingLobbyId, onClose, onR
                         const onCooldown = elapsedMs < INVITE_COOLDOWN_MS;
                         const remainingSec = onCooldown ? Math.ceil((INVITE_COOLDOWN_MS - elapsedMs) / 1000) : 0;
                         return (
-                          <TouchableOpacity
+                          <TouchableOpacity accessibilityRole="button"
                             style={styles.friendRow}
                             onPress={() => handleInvite(item.user._id)}
                             activeOpacity={0.75}
@@ -273,7 +273,7 @@ export default function MultiLobbyModal({ visible, existingLobbyId, onClose, onR
                 </View>
               )}
 
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[
                   styles.readyBtn,
                   isReady && styles.unreadyBtn,
