@@ -84,7 +84,7 @@ describe('Système d\'Amis Athly — V2', () => {
 
       expect(res.statusCode).toBe(422);
       expect(res.body.success).toBe(false);
-      expect(res.body.message).toMatch(/vous-même/i);
+      expect(res.body.message).toMatch(/toi-même/i);
     });
 
     it('❌ Impossible d\'envoyer une demande si une relation pending existe déjà', async () => {

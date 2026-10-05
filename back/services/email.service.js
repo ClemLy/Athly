@@ -26,7 +26,7 @@ const transporter = nodemailer.createTransport({
 
 transporter.verify((err) => {
   if (err) {
-    console.error("❌ [SMTP] Connexion échouée :", {
+    console.error("[SMTP] Connexion échouée :", {
       code:         err.code,
       command:      err.command,
       response:     err.response,
@@ -74,8 +74,8 @@ function baseTemplate(title, bodyHtml) {
           <tr>
             <td align="center" style="padding-top:28px;">
               <p style="margin:0;font-size:12px;color:#4A4F5C;line-height:1.6;">
-                Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.<br/>
-                © 2026 Athly - Tous droits réservés.
+                Si tu n'es pas à l'origine de cette demande, ignore simplement cet email.<br/>
+                Athly, application de sport gamifiée.
               </p>
             </td>
           </tr>
@@ -94,17 +94,12 @@ function verificationTemplate(code) {
   ).join("");
 
   const body = `
-    <!-- Icône -->
-    <div style="padding:36px 36px 0;text-align:center;">
-      <div style="display:inline-block;background:rgba(254,116,57,0.1);border:1px solid rgba(254,116,57,0.2);border-radius:20px;width:72px;height:72px;line-height:72px;text-align:center;font-size:30px;">✉️</div>
-    </div>
-
     <!-- Titre -->
-    <div style="padding:20px 36px 0;text-align:center;">
-      <h1 style="margin:0;font-size:24px;font-weight:700;color:#FFFFFF;letter-spacing:-0.5px;">Vérifiez votre email</h1>
+    <div style="padding:36px 36px 0;text-align:center;">
+      <h1 style="margin:0;font-size:24px;font-weight:700;color:#FFFFFF;letter-spacing:-0.5px;">Confirme ton adresse email</h1>
       <p style="margin:10px 0 0;font-size:15px;color:#9AA0AE;line-height:1.6;">
-        Utilisez le code ci-dessous pour activer votre compte&nbsp;Athly.<br/>
-        Il expire dans <strong style="color:#FFFFFF;">10 minutes</strong>.
+        Entre ce code dans l'application pour activer ton compte&nbsp;Athly.<br/>
+        Il expire dans <strong style="color:#FFFFFF;">10&nbsp;minutes</strong>.
       </p>
     </div>
 
@@ -117,11 +112,11 @@ function verificationTemplate(code) {
     <!-- Avertissement -->
     <div style="padding:20px 36px 32px;text-align:center;border-top:1px solid #2A2A39;">
       <p style="margin:0;font-size:13px;color:#6D7382;">
-        Ce code est à usage unique et valable 10 minutes.
+        Ce code ne fonctionne qu'une fois. Ne le partage avec personne.
       </p>
     </div>`;
 
-  return baseTemplate("Vérification de votre compte Athly", body);
+  return baseTemplate("Confirme ton adresse email", body);
 }
 
 function resetPasswordTemplate(code) {
@@ -130,17 +125,12 @@ function resetPasswordTemplate(code) {
   ).join("");
 
   const body = `
-    <!-- Icône -->
-    <div style="padding:36px 36px 0;text-align:center;">
-      <div style="display:inline-block;background:rgba(110,106,240,0.1);border:1px solid rgba(110,106,240,0.2);border-radius:20px;width:72px;height:72px;line-height:72px;text-align:center;font-size:30px;">🔑</div>
-    </div>
-
     <!-- Titre -->
-    <div style="padding:20px 36px 0;text-align:center;">
-      <h1 style="margin:0;font-size:24px;font-weight:700;color:#FFFFFF;letter-spacing:-0.5px;">Réinitialisation du mot de passe</h1>
+    <div style="padding:36px 36px 0;text-align:center;">
+      <h1 style="margin:0;font-size:24px;font-weight:700;color:#FFFFFF;letter-spacing:-0.5px;">Nouveau mot de passe</h1>
       <p style="margin:10px 0 0;font-size:15px;color:#9AA0AE;line-height:1.6;">
-        Utilisez ce code pour définir un nouveau mot de passe.<br/>
-        Il expire dans <strong style="color:#FFFFFF;">15 minutes</strong>.
+        Entre ce code dans l'application pour choisir un nouveau mot de passe.<br/>
+        Il expire dans <strong style="color:#FFFFFF;">15&nbsp;minutes</strong>.
       </p>
     </div>
 
@@ -153,23 +143,24 @@ function resetPasswordTemplate(code) {
     <!-- Sécurité -->
     <div style="padding:20px 36px 32px;text-align:center;border-top:1px solid #2A2A39;">
       <p style="margin:0;font-size:13px;color:#6D7382;">
-        Si vous n'avez pas demandé cette réinitialisation, ignorez cet email.<br/>
-        Votre mot de passe actuel reste inchangé.
+        Tu n'as rien demandé&nbsp;? Ignore cet email, ton mot de passe actuel reste inchangé.
       </p>
     </div>`;
 
-  return baseTemplate("Réinitialisation de votre mot de passe Athly", body);
+  return baseTemplate("Ton code pour changer de mot de passe", body);
 }
 
 // ── Fonction interne d'envoi avec logs détaillés ─────────────────────────────
 
-async function _send(to, subject, html, label) {
+async function _send(to, subject, html, text, label) {
   try {
     const info = await transporter.sendMail({
       from: FROM,
       to,
       subject,
       html,
+      // Version texte : lisible partout et mieux notée par les filtres anti-spam
+      text,
       attachments: [{
         filename: 'logo-orange.png',
         path:     LOGO_PATH,
@@ -178,7 +169,7 @@ async function _send(to, subject, html, label) {
     });
     return info;
   } catch (err) {
-    console.error(`❌ [SMTP] Échec "${label}" pour ${to} :`, {
+    console.error(`[SMTP] Échec "${label}" :`, {
       code:         err.code,        // ex: EAUTH, ECONNECTION, ETIMEDOUT
       command:      err.command,     // ex: AUTH, MAIL FROM
       response:     err.response,    // message brut du serveur SMTP
@@ -194,8 +185,9 @@ async function _send(to, subject, html, label) {
 async function sendVerificationEmail(email, code) {
   return _send(
     email,
-    "Votre code de vérification Athly",
+    `${code} est ton code Athly`,
     verificationTemplate(code),
+    `Ton code pour confirmer ton adresse email : ${code}\n\nEntre-le dans l'application Athly. Il expire dans 10 minutes.\n\nSi tu n'es pas à l'origine de cette demande, ignore simplement cet email.`,
     "Email de vérification"
   );
 }
@@ -203,8 +195,9 @@ async function sendVerificationEmail(email, code) {
 async function sendResetPasswordEmail(email, code) {
   return _send(
     email,
-    "Réinitialisation de votre mot de passe Athly",
+    `${code} est ton code pour changer de mot de passe`,
     resetPasswordTemplate(code),
+    `Ton code pour choisir un nouveau mot de passe : ${code}\n\nEntre-le dans l'application Athly. Il expire dans 15 minutes.\n\nTu n'as rien demandé ? Ignore cet email, ton mot de passe actuel reste inchangé.`,
     "Email de réinitialisation"
   );
 }

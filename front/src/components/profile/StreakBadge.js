@@ -6,6 +6,7 @@ import {
 
 const SCROLL_MAX_H = Math.round(Dimensions.get('window').height * 0.38);
 import { Ionicons } from '@expo/vector-icons';
+import { pluralWord } from '../../utils/format';
 import { getStreakMultiplier, STREAK_MILESTONES } from '../../services';
 import { Colors } from '../../constants/theme';
 
@@ -40,7 +41,7 @@ function StreakBonusModal({ visible, streak, onClose }) {
               <Ionicons name="flame" size={22} color={Colors.primary} />
               <Text style={ms.headerTitle}>Régularité & Multiplicateurs</Text>
             </View>
-            <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
+            <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button" onPress={onClose} activeOpacity={0.7}>
               <Ionicons name="close" size={22} color={Colors.textMuted} />
             </TouchableOpacity>
           </View>
@@ -140,7 +141,7 @@ export default function StreakBadge({ streak = 0, compact = false }) {
   if (compact) {
     return (
       <>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           activeOpacity={0.75}
           onPress={openModal}
           style={[styles.compact, { borderColor: flameColor + '40', backgroundColor: flameColor + '12' }]}
@@ -160,7 +161,7 @@ export default function StreakBadge({ streak = 0, compact = false }) {
 
   return (
     <>
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         activeOpacity={0.8}
         onPress={openModal}
         style={[styles.badge, { borderColor: flameColor + '40', backgroundColor: flameColor + '10' }]}
@@ -171,7 +172,7 @@ export default function StreakBadge({ streak = 0, compact = false }) {
         <View style={styles.info}>
           <View style={styles.row}>
             <Text style={[styles.streakNum, { color: flameColor }]}>{streak}</Text>
-            <Text style={[styles.streakUnit, { color: flameColor }]}> jours</Text>
+            <Text style={[styles.streakUnit, { color: flameColor }]}> {pluralWord(streak, 'jour')}</Text>
             {multiplier > 1 && (
               <View style={[styles.multChip, { backgroundColor: flameColor + '25', borderColor: flameColor + '50' }]}>
                 <Text style={[styles.multText, { color: flameColor }]}>×{multiplier}</Text>

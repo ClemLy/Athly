@@ -94,7 +94,7 @@ export const TUTORIAL_CHAPTERS = [
       {
         key: 'workout_anticheat',
         title: 'Séances Sérieuses Uniquement',
-        body: "Athly récompense l'effort réel : une séance de moins de 5 minutes ne rapporte aucun XP. Tu peux quand même l'enregistrer - mais seules les séances complètes comptent pour ta streak.",
+        body: "Athly récompense l'effort réel : une séance de moins de 5 minutes ne rapporte aucun XP. Tu peux quand même l'enregistrer, mais seules les séances complètes comptent pour ta streak.",
         targetKey: null, position: 'center', scrollY: null,
       },
       {
@@ -124,7 +124,7 @@ export const TUTORIAL_CHAPTERS = [
       {
         key: 'profile_herocard',
         title: 'Carte de Niveau',
-        body: "La barre de progression indique ta position entre le niveau actuel et le suivant. Ton rang évolue : Novice → Initié → Athlète → Warrior →…",
+        body: "La barre de progression indique ta position entre le niveau actuel et le suivant. Ton rang évolue au fil des niveaux : Novice, Initié, Athlète, Compétiteur, Warrior, et bien plus.",
         targetKey: 'profile_herocard', position: 'bottom', scrollY: 0,
       },
       {
@@ -250,7 +250,7 @@ export const TUTORIAL_CHAPTERS = [
       {
         key: 'social_group',
         title: 'Groupes de Streak & Météo',
-        body: "Formez un groupe (5 max) : si TOUS validez votre journée, la streak collective grimpe. La Météo des séances montre en direct qui est Prêt, Actif ou a Validé.",
+        body: "Forme un groupe de 5 amis maximum : si tout le monde valide sa journée, la streak collective grimpe. La Météo des séances montre en direct qui est Prêt, Actif ou a Validé.",
         targetKey: null, position: 'center', scrollY: null,
       },
       {
@@ -354,7 +354,7 @@ export const TUTORIAL_CHAPTERS = [
       {
         key: 'settings_done',
         title: 'Tu es prêt, Athlète !',
-        body: "Tu maîtrises désormais Athly. Lance-toi - chaque set te rapproche du sommet. Bonne chance !",
+        body: "Tu connais maintenant tout Athly. À toi de jouer : chaque série te rapproche du niveau suivant.",
         targetKey: null, position: 'center', scrollY: null,
         isLast: true,
       },

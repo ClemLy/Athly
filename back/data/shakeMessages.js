@@ -7,7 +7,7 @@
 // évoluer, jamais deux copies qui divergent.
 const SHAKE_TROLL_MESSAGES = [
   "Ah donc tu comptes nous abandonner comme ça ? Ok.",
-  "Tu vas briser la streak de l'équipe... tout le monde attend après toi. 👁️",
+  "Tu vas briser la streak de l'équipe... tout le monde attend après toi.",
   "On sait que tu es en ligne. On voit tout.",
   "Ta séance ne va pas se faire toute seule, curieusement.",
   "Le groupe compte sur toi. Ou pas, si tu préfères tout gâcher.",

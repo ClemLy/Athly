@@ -1,269 +1,38 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, TouchableOpacity,
   KeyboardAvoidingView, Platform, ActivityIndicator,
-  StatusBar, ScrollView, Modal,
+  StatusBar, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '../../constants/theme';
 import AuthInput from '../../components/inputs/AuthInput';
+import OTPCodeInput from '../../components/inputs/OTPCodeInput';
+import PasswordGuide, { isPasswordValid, PASSWORD_RULES_MESSAGE } from '../../components/inputs/PasswordGuide';
 import { NotificationBanner } from '../../components/common';
 import { forgotPassword, resetPassword } from '../../services';
 import { useToast } from '../../context/ToastContext';
+import { getErrorMessage } from '../../utils/errorMessages';
 
-const EMAIL_RE   = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const HAS_UPPER  = /[A-Z]/;
-const HAS_DIGIT  = /[0-9]/;
-const CODE_LENGTH = 6;
-const MIN_PWD     = 6;
-
-// ─── Calcul de force ──────────────────────────────────────────────────────────
-function getStrength(pwd) {
-  if (!pwd) return 0;
-  let s = 0;
-  if (pwd.length >= 8)     s++;
-  if (HAS_UPPER.test(pwd)) s++;
-  if (HAS_DIGIT.test(pwd)) s++;
-  return s;
-}
-
-// ─── Barre de force ───────────────────────────────────────────────────────────
-function StrengthBar({ password }) {
-  const score = getStrength(password);
-  if (!password) return null;
-  const color = score === 3 ? Colors.success : score === 2 ? '#FFA500' : Colors.error;
-  const label = score === 3 ? 'Fort' : score === 2 ? 'Moyen' : 'Faible';
-  return (
-    <View style={sb.wrap}>
-      <View style={sb.row}>
-        {[0, 1, 2].map(i => (
-          <View
-            key={i}
-            style={[
-              sb.seg,
-              i < 2 && { marginRight: 6 },
-              { backgroundColor: i < score ? color : 'rgba(255,255,255,0.08)' },
-            ]}
-          />
-        ))}
-      </View>
-      <Text style={[sb.lbl, { color }]}>{label}</Text>
-    </View>
-  );
-}
-
-const sb = StyleSheet.create({
-  wrap: { marginTop: 6, marginBottom: 12 },
-  row:  { flexDirection: 'row' },
-  seg:  { flex: 1, height: 3, borderRadius: 2 },
-  lbl:  { fontSize: 11, fontWeight: '600', marginTop: 5 },
-});
-
-// ─── Saisie OTP ───────────────────────────────────────────────────────────────
-function OTPInput({ value, onChange, disabled }) {
-  const inputRefs = useRef([]);
-
-  const handleChange = (text, index) => {
-    const digit = text.replace(/[^0-9]/g, '').slice(-1);
-    const chars = value.split('');
-    chars[index] = digit;
-    onChange(chars.join(''));
-    if (digit && index < CODE_LENGTH - 1) inputRefs.current[index + 1]?.focus();
-  };
-
-  const handleKeyPress = ({ nativeEvent: { key } }, index) => {
-    if (key === 'Backspace') {
-      const chars = value.split('');
-      if (!value[index] && index > 0) {
-        chars[index - 1] = '';
-        onChange(chars.join(''));
-        inputRefs.current[index - 1]?.focus();
-      } else {
-        chars[index] = '';
-        onChange(chars.join(''));
-      }
-    }
-  };
-
-  return (
-    <View style={otp.row}>
-      {Array.from({ length: CODE_LENGTH }).map((_, i) => (
-        <TextInput
-          key={i}
-          ref={el => { inputRefs.current[i] = el; }}
-          style={[otp.box, i < CODE_LENGTH - 1 && { marginRight: 10 }, !!value[i] && otp.boxFilled]}
-          value={value[i] || ''}
-          onChangeText={(text) => handleChange(text, i)}
-          onKeyPress={(e) => handleKeyPress(e, i)}
-          keyboardType="number-pad"
-          keyboardAppearance="dark"
-          maxLength={2}
-          selectTextOnFocus
-          editable={!disabled}
-          textAlign="center"
-        />
-      ))}
-    </View>
-  );
-}
-
-const otp = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'center', marginVertical: 24 },
-  box: {
-    width: 46, height: 56, borderRadius: 12,
-    backgroundColor: 'rgba(22, 22, 31, 0.8)',
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
-    color: Colors.textPrimary, fontSize: 20, fontWeight: '700',
-  },
-  boxFilled: { borderColor: Colors.primary },
-});
-
-// ─── Popup "Mot de passe simple" ─────────────────────────────────────────────
-function WeakPasswordModal({ visible, onImprove, onSave, loading }) {
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      onRequestClose={onImprove}
-    >
-      <View style={wm.backdrop}>
-        <View style={wm.card}>
-
-          <View style={wm.iconWrap}>
-            <Ionicons name="warning-outline" size={28} color={Colors.warningAmber} />
-          </View>
-
-          <Text style={wm.title}>Mot de passe simple</Text>
-          <Text style={wm.body}>
-            Votre mot de passe est facile à deviner. Pour la sécurité de vos
-            entraînements, nous vous conseillons d'ajouter des chiffres ou des majuscules.
-          </Text>
-
-          {/* Bouton principal : Améliorer */}
-          <TouchableOpacity
-            style={wm.improveBtn}
-            onPress={onImprove}
-            activeOpacity={0.82}
-          >
-            <Ionicons name="shield-checkmark-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
-            <Text style={wm.improveTxt}>Améliorer mon mot de passe</Text>
-          </TouchableOpacity>
-
-          {/* Bouton secondaire : Enregistrer quand même */}
-          <TouchableOpacity
-            style={wm.saveBtn}
-            onPress={onSave}
-            disabled={loading}
-            activeOpacity={0.75}
-          >
-            {loading
-              ? <ActivityIndicator size="small" color={Colors.textMuted} />
-              : <Text style={wm.saveTxt}>Enregistrer quand même</Text>
-            }
-          </TouchableOpacity>
-
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-const wm = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.78)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  card: {
-    width: '100%',
-    backgroundColor: Colors.bgDeep2,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.25)',
-    padding: 28,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.6,
-    shadowRadius: 32,
-    elevation: 20,
-  },
-  iconWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
-    backgroundColor: 'rgba(245,158,11,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.25)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 18,
-  },
-  title: {
-    color: Colors.textPrimary,
-    fontSize: 19,
-    fontWeight: '800',
-    letterSpacing: -0.3,
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  body: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 21,
-    textAlign: 'center',
-    marginBottom: 26,
-  },
-  improveBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    height: 50,
-    borderRadius: 13,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    marginBottom: 10,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  improveTxt: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  saveBtn: {
-    width: '100%',
-    height: 44,
-    borderRadius: 13,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  saveTxt: {
-    color: Colors.textMuted,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-});
+const EMAIL_RE      = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const CODE_LENGTH   = 6;
+const RESEND_DELAY  = 60; // secondes, aligné sur l'anti-spam serveur
 
 // ─── Écran principal ──────────────────────────────────────────────────────────
-export default function ForgotPasswordScreen({ navigation }) {
+// Étape 1 : adresse email → envoi du code. Étape 2 : code + nouveau mot de passe.
+// Le serveur répond toujours la même chose (adresse connue ou non) : l'écran
+// le dit clairement et rappelle l'adresse saisie pour repérer une faute de frappe.
+export default function ForgotPasswordScreen({ navigation, route }) {
   const { showToast } = useToast();
   const [step, setStep] = useState(1);
 
   // Étape 1
-  const [email,        setEmail]        = useState('');
+  const [email,        setEmail]        = useState(route?.params?.email || '');
   const [emailErr,     setEmailErr]     = useState('');
   const [step1Loading, setStep1Loading] = useState(false);
+  const [step1Err,     setStep1Err]     = useState('');
 
   // Étape 2
   const [code,            setCode]            = useState('');
@@ -277,102 +46,96 @@ export default function ForgotPasswordScreen({ navigation }) {
   const [step2Loading,    setStep2Loading]    = useState(false);
   const [step2Err,        setStep2Err]        = useState('');
   const [step2ErrType,    setStep2ErrType]    = useState('error');
+  const [countdown,       setCountdown]       = useState(0);
+  const [resending,       setResending]       = useState(false);
 
-  const [weakModalVisible, setWeakModalVisible] = useState(false);
+  useEffect(() => {
+    if (countdown <= 0) return undefined;
+    const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [countdown]);
 
   // ── Étape 1 : envoi du code ────────────────────────────────────────────────
-  const handleSendCode = async () => {
-    if (!email)                { setEmailErr('Email requis');   return; }
-    if (!EMAIL_RE.test(email)) { setEmailErr('Email invalide'); return; }
+  const sendCode = useCallback(async () => {
+    const e = email.trim();
+    if (!e)                { setEmailErr('Entre l\'adresse email de ton compte.'); return false; }
+    if (!EMAIL_RE.test(e)) { setEmailErr('Cette adresse email n\'est pas valide. Exemple : nom@exemple.fr'); return false; }
     setEmailErr('');
+    setStep1Err('');
+    await forgotPassword(e);
+    setCountdown(RESEND_DELAY);
+    return true;
+  }, [email]);
 
+  const handleSendCode = async () => {
     try {
       setStep1Loading(true);
-      await forgotPassword(email);
-      showToast('Code de vérification envoyé !', 'success');
+      const sent = await sendCode();
+      if (!sent) return;
       setCode('');
       setNewPassword('');
       setConfirmPassword('');
+      setStep2Err('');
       setStep(2);
     } catch (error) {
-      const status = error?.status;
-      const code   = error?.data?.code;
-
-      if (status === 404 || code === 'EMAIL_NOT_FOUND') {
-        showToast("Cet e-mail n'est associé à aucun compte.", 'error');
-      } else if (status === 429) {
-        showToast('Trop de tentatives. Veuillez patienter avant de réessayer.', 'warning');
-      } else if (status >= 500) {
-        showToast("Erreur serveur. Réessayez dans un instant.", 'warning');
-      } else {
-        showToast("Impossible d'envoyer le code. Vérifiez l'e-mail saisi.", 'error');
-      }
+      setStep1Err(getErrorMessage(error, 'L\'envoi du code n\'a pas abouti. Réessaie dans un instant.'));
     } finally {
       setStep1Loading(false);
     }
   };
 
-  // ── Étape 2 : appel API réel ──────────────────────────────────────────────
-  const doReset = useCallback(async () => {
-    setWeakModalVisible(false);
+  const handleResend = async () => {
+    if (countdown > 0) return;
     try {
-      setStep2Loading(true);
+      setResending(true);
       setStep2Err('');
-      await resetPassword(email, code, newPassword);
-      navigation.navigate('Auth');
-    } catch (err) {
-      const status = err?.status;
-      const msg    = err?.data?.message || '';
-      if (status === 429) {
-        setStep2ErrType('warning');
-        setStep2Err('Trop de tentatives. Veuillez patienter avant de réessayer.');
-      } else if (status >= 500) {
-        setStep2ErrType('info');
-        setStep2Err('Une erreur est survenue, notre équipe est sur le coup.');
-      } else if (msg.toLowerCase().includes('code')) {
-        setStep2ErrType('error');
-        setStep2Err('Code invalide ou expiré.');
-      } else {
-        setStep2ErrType('error');
-        setStep2Err('Une erreur est survenue. Réessayez.');
-      }
+      await sendCode();
+      showToast('Nouveau code envoyé. Seul le dernier code reçu fonctionne.', 'success');
+    } catch (error) {
+      setStep2ErrType('error');
+      setStep2Err(getErrorMessage(error, 'L\'envoi du code n\'a pas abouti. Réessaie dans un instant.'));
     } finally {
-      setStep2Loading(false);
+      setResending(false);
     }
-  }, [email, code, newPassword, navigation]);
+  };
 
-  // ── Étape 2 : validation + vérification de force ──────────────────────────
-  const handleReset = useCallback(() => {
+  // ── Étape 2 : validation puis réinitialisation ───────────────────────────
+  const handleReset = useCallback(async () => {
     let ok = true;
-
-    if (code.length < CODE_LENGTH) { setCodeErr('Code incomplet'); ok = false; }
+    if (code.length < CODE_LENGTH) { setCodeErr('Entre les 6 chiffres du code reçu par email.'); ok = false; }
     else setCodeErr('');
 
-    if (!newPassword)                       { setPwdErr('Mot de passe requis');           ok = false; }
-    else if (newPassword.length < MIN_PWD)  { setPwdErr(`${MIN_PWD} caractères minimum`); ok = false; }
+    if (!newPassword)                       { setPwdErr('Choisis un nouveau mot de passe.'); ok = false; }
+    else if (!isPasswordValid(newPassword)) { setPwdErr(PASSWORD_RULES_MESSAGE); ok = false; }
     else setPwdErr('');
 
-    if (!confirmPassword)                       { setConfirmErr('Confirmez le mot de passe');             ok = false; }
-    else if (newPassword !== confirmPassword)   { setConfirmErr('Les mots de passe ne correspondent pas'); ok = false; }
+    if (!confirmPassword)                     { setConfirmErr('Retape ton mot de passe pour le confirmer.'); ok = false; }
+    else if (newPassword !== confirmPassword) { setConfirmErr('Les deux mots de passe ne sont pas identiques.'); ok = false; }
     else setConfirmErr('');
 
     if (!ok) return;
 
-    const strength = getStrength(newPassword);
-    if (strength < 3) {
-      setWeakModalVisible(true);
-    } else {
-      doReset();
+    try {
+      setStep2Loading(true);
+      setStep2Err('');
+      await resetPassword(email.trim(), code, newPassword);
+      showToast('Mot de passe modifié. Connecte-toi avec le nouveau.', 'success');
+      navigation.navigate('Auth');
+    } catch (err) {
+      const errCode = err?.data?.code;
+      if (errCode === 'INVALID_CODE' || errCode === 'CODE_EXPIRED' || errCode === 'TOO_MANY_ATTEMPTS') {
+        setCodeErr(getErrorMessage(err, 'Ce code n\'est pas valide.'));
+        if (errCode !== 'INVALID_CODE') setCode('');
+        return;
+      }
+      setStep2ErrType(err?.status === 429 || err?.network ? 'warning' : 'error');
+      setStep2Err(getErrorMessage(err, 'La modification n\'a pas abouti. Réessaie dans un instant.'));
+    } finally {
+      setStep2Loading(false);
     }
-  }, [code, newPassword, confirmPassword, doReset]);
+  }, [code, newPassword, confirmPassword, email, navigation, showToast]);
 
-  // Formulaire valide dès 6 chars + code complet + passwords identiques
-  const isStep2Valid =
-    code.length === CODE_LENGTH &&
-    newPassword.length >= MIN_PWD &&
-    newPassword === confirmPassword;
-
-  const goBack = () => step === 2 ? setStep(1) : navigation.goBack();
+  const goBack = () => (step === 2 ? setStep(1) : navigation.goBack());
 
   return (
     <SafeAreaView style={s.safeArea} edges={['top', 'bottom']}>
@@ -383,13 +146,16 @@ export default function ForgotPasswordScreen({ navigation }) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <TouchableOpacity style={s.backBtn} onPress={goBack}>
-            <Ionicons name="arrow-back" size={22} color={Colors.textMuted} />
+          <TouchableOpacity
+            style={s.backBtn}
+            onPress={goBack}
+            accessibilityRole="button"
+            accessibilityLabel={step === 2 ? 'Modifier l\'adresse email' : 'Retour à la connexion'}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="arrow-back" size={22} color={Colors.textSecondary} />
           </TouchableOpacity>
 
-          {/* ══════════════════════════════════════════════════
-              ÉTAPE 1 - Saisie de l'email
-          ══════════════════════════════════════════════════ */}
           {step === 1 && (
             <>
               <View style={s.iconWrap}>
@@ -397,49 +163,51 @@ export default function ForgotPasswordScreen({ navigation }) {
               </View>
 
               <View style={s.titleBlock}>
-                <Text style={s.title}>Mot de passe oublié</Text>
+                <Text style={s.title} accessibilityRole="header">Mot de passe oublié</Text>
                 <Text style={s.tagline}>
-                  Entrez votre email pour recevoir un code de réinitialisation.
+                  Entre l'adresse email de ton compte : on t'envoie un code pour choisir un nouveau mot de passe.
                 </Text>
               </View>
 
               <AuthInput
                 label="Email"
                 icon="mail-outline"
-                placeholder="votre@email.com"
+                placeholder="nom@exemple.fr"
                 value={email}
-                onChangeText={(v) => { setEmail(v); if (emailErr) setEmailErr(''); }}
+                onChangeText={(v) => { setEmail(v); if (emailErr) setEmailErr(''); if (step1Err) setStep1Err(''); }}
                 onBlur={() => {
-                  if (email && !EMAIL_RE.test(email)) setEmailErr('Email invalide');
+                  const e = email.trim();
+                  if (e && !EMAIL_RE.test(e)) setEmailErr('Cette adresse email n\'est pas valide. Exemple : nom@exemple.fr');
                 }}
                 error={emailErr}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
+                inputMode="email"
+                enterKeyHint="send"
+                onSubmitEditing={handleSendCode}
               />
+
+              {step1Err ? <NotificationBanner message={step1Err} type="warning" /> : null}
 
               <TouchableOpacity
                 style={s.primaryBtn}
                 onPress={handleSendCode}
                 disabled={step1Loading}
                 activeOpacity={0.82}
+                accessibilityRole="button"
+                accessibilityState={{ busy: step1Loading, disabled: step1Loading }}
               >
                 {step1Loading
                   ? <ActivityIndicator color="#fff" />
-                  : <Text style={s.btnText}>Envoyer le code</Text>
+                  : <Text style={s.btnText}>Recevoir un code</Text>
                 }
               </TouchableOpacity>
-
-              <Text style={s.spamHint}>
-                Si vous ne recevez pas l'e-mail dans les 2 minutes, pensez à vérifier votre dossier{' '}
-                <Text style={s.spamHintBold}>Courriers indésirables (Spams)</Text>.
-              </Text>
             </>
           )}
 
-          {/* ══════════════════════════════════════════════════
-              ÉTAPE 2 - Code + Nouveau mot de passe
-          ══════════════════════════════════════════════════ */}
           {step === 2 && (
             <>
               <View style={s.iconWrap}>
@@ -447,36 +215,42 @@ export default function ForgotPasswordScreen({ navigation }) {
               </View>
 
               <View style={s.titleBlock}>
-                <Text style={s.title}>Nouveau mot de passe</Text>
+                <Text style={s.title} accessibilityRole="header">Nouveau mot de passe</Text>
                 <Text style={s.tagline}>
-                  Code envoyé à{' '}
-                  <Text style={s.emailHighlight}>{email}</Text>
+                  Si un compte existe pour{' '}
+                  <Text style={s.emailHighlight}>{email.trim()}</Text>
+                  , tu vas recevoir un code à 6 chiffres. Il est valable 15 minutes.
                 </Text>
               </View>
 
-              <Text style={s.spamHint}>
-                Si vous ne recevez pas l'e-mail dans les 2 minutes, pensez à vérifier votre dossier{' '}
-                <Text style={s.spamHintBold}>Courriers indésirables (Spams)</Text>.
-              </Text>
+              <View style={s.hintBox}>
+                <Ionicons name="information-circle-outline" size={16} color={Colors.textSecondary} />
+                <Text style={s.hintTxt}>
+                  Rien reçu après 2 minutes ? Regarde dans tes spams, ou vérifie l'adresse avec le bouton retour.
+                </Text>
+              </View>
 
-              <Text style={s.codeLabel}>CODE DE VÉRIFICATION</Text>
-              <OTPInput
+              <Text style={s.codeLabel}>Code reçu par email</Text>
+              <OTPCodeInput
                 value={code}
                 onChange={(v) => { setCode(v); if (codeErr) setCodeErr(''); }}
                 disabled={step2Loading}
+                hasError={!!codeErr}
               />
-              {codeErr ? <Text style={[s.errorText, { marginTop: -16 }]}>{codeErr}</Text> : null}
+              {codeErr ? (
+                <Text style={s.errorText} accessibilityRole="alert">{codeErr}</Text>
+              ) : null}
 
               <AuthInput
                 label="Nouveau mot de passe"
                 icon="lock-closed-outline"
-                placeholder="••••••••"
+                placeholder="8 caractères minimum"
                 value={newPassword}
                 onChangeText={(v) => {
                   setNewPassword(v);
-                  if (pwdErr && v.length >= MIN_PWD) setPwdErr('');
+                  if (pwdErr && isPasswordValid(v)) setPwdErr('');
                   if (confirmErr && confirmPassword) {
-                    setConfirmErr(v !== confirmPassword ? 'Les mots de passe ne correspondent pas' : '');
+                    setConfirmErr(v !== confirmPassword ? 'Les deux mots de passe ne sont pas identiques.' : '');
                   }
                 }}
                 isPassword
@@ -484,18 +258,20 @@ export default function ForgotPasswordScreen({ navigation }) {
                 showPassword={showNewPwd}
                 setShowPassword={setShowNewPwd}
                 error={pwdErr}
+                autoComplete="new-password"
+                textContentType="newPassword"
               />
-              <StrengthBar password={newPassword} />
+              <PasswordGuide password={newPassword} />
 
               <AuthInput
                 label="Confirmer le mot de passe"
                 icon="shield-checkmark-outline"
-                placeholder="••••••••"
+                placeholder="Retape ton mot de passe"
                 value={confirmPassword}
                 onChangeText={(v) => {
                   setConfirmPassword(v);
                   if (confirmErr) {
-                    setConfirmErr(v !== newPassword ? 'Les mots de passe ne correspondent pas' : '');
+                    setConfirmErr(v !== newPassword ? 'Les deux mots de passe ne sont pas identiques.' : '');
                   }
                 }}
                 isPassword
@@ -503,38 +279,48 @@ export default function ForgotPasswordScreen({ navigation }) {
                 showPassword={showConfirmPwd}
                 setShowPassword={setShowConfirmPwd}
                 error={confirmErr}
+                autoComplete="new-password"
+                textContentType="newPassword"
+                enterKeyHint="done"
+                onSubmitEditing={handleReset}
               />
 
               {step2Err ? <NotificationBanner message={step2Err} type={step2ErrType} /> : null}
 
               <TouchableOpacity
-                style={[s.primaryBtn, !isStep2Valid && s.btnDisabled]}
+                style={s.primaryBtn}
                 onPress={handleReset}
-                disabled={step2Loading || !isStep2Valid}
+                disabled={step2Loading}
                 activeOpacity={0.82}
+                accessibilityRole="button"
+                accessibilityState={{ busy: step2Loading, disabled: step2Loading }}
               >
                 {step2Loading
                   ? <ActivityIndicator color="#fff" />
-                  : <Text style={[s.btnText, !isStep2Valid && s.btnTextMuted]}>Réinitialiser</Text>
+                  : <Text style={s.btnText}>Changer mon mot de passe</Text>
                 }
               </TouchableOpacity>
 
-              <TouchableOpacity style={s.resendRow} onPress={() => setStep(1)}>
-                <Text style={s.resendText}>Renvoyer le code</Text>
+              <TouchableOpacity
+                style={s.resendRow}
+                onPress={handleResend}
+                disabled={countdown > 0 || resending}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: countdown > 0 || resending }}
+              >
+                {resending
+                  ? <ActivityIndicator size="small" color={Colors.primary} />
+                  : (
+                    <Text style={countdown > 0 ? s.resendDisabled : s.resendText}>
+                      {countdown > 0 ? `Renvoyer un code dans ${countdown} s` : 'Renvoyer un code'}
+                    </Text>
+                  )}
               </TouchableOpacity>
             </>
           )}
 
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* Popup "Mot de passe simple" — rendue hors du ScrollView pour couvrir tout l'écran */}
-      <WeakPasswordModal
-        visible={weakModalVisible}
-        onImprove={() => setWeakModalVisible(false)}
-        onSave={doReset}
-        loading={step2Loading}
-      />
     </SafeAreaView>
   );
 }
@@ -563,13 +349,21 @@ const s = StyleSheet.create({
 
   codeLabel: {
     color: Colors.textSecondary, fontSize: 12, fontWeight: '600',
-    letterSpacing: 0.8, textTransform: 'uppercase',
+    letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 8,
   },
 
   errorText: {
-    color: Colors.error, fontSize: 13, textAlign: 'center',
-    marginTop: 8, marginBottom: 4,
+    color: Colors.error, fontSize: 13, lineHeight: 18, textAlign: 'center',
+    marginTop: -12, marginBottom: 14,
   },
+
+  hintBox: {
+    flexDirection: 'row', gap: 8, alignItems: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+    padding: 12, marginTop: -12, marginBottom: 12,
+  },
+  hintTxt: { flex: 1, color: Colors.textSecondary, fontSize: 13, lineHeight: 19 },
 
   primaryBtn: {
     backgroundColor: Colors.primary, height: 56, borderRadius: 14,
@@ -577,16 +371,9 @@ const s = StyleSheet.create({
     shadowColor: Colors.primary, shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4, shadowRadius: 16, elevation: 8,
   },
-  btnDisabled:  { backgroundColor: 'rgba(255,255,255,0.08)', shadowOpacity: 0, elevation: 0 },
   btnText:      { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.4 },
-  btnTextMuted: { color: Colors.textMuted },
 
-  resendRow:  { alignItems: 'center', marginTop: 20, paddingVertical: 8 },
-  resendText: { color: Colors.primary, fontSize: 14, fontWeight: '600' },
-
-  spamHint: {
-    color: Colors.textMuted, fontSize: 12, lineHeight: 18,
-    marginTop: 14, marginBottom: 8,
-  },
-  spamHintBold: { color: Colors.textSecondary, fontWeight: '600' },
+  resendRow:      { alignItems: 'center', marginTop: 16, paddingVertical: 12, minHeight: 44, justifyContent: 'center' },
+  resendText:     { color: Colors.primary, fontSize: 14, fontWeight: '600' },
+  resendDisabled: { color: Colors.textMuted, fontSize: 14 },
 });

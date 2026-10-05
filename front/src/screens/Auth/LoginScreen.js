@@ -13,6 +13,7 @@ import { NotificationBanner } from '../../components/common';
 import { login, googleLogin } from '../../services';
 import { useAuth } from '../../context/AuthContext';
 import { useGoogleAuth } from '../../hooks';
+import { getErrorMessage } from '../../utils/errorMessages';
 
 const LOGO_ORANGE = require('../../../assets/logo-orange.png');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -56,14 +57,8 @@ export default function LoginScreen({ navigation }) {
           await signIn(res.token, rememberMe);
         }
       } catch (error) {
-        const status = error?.status;
-        if (status >= 500) {
-          setErrType('info');
-          setGlobalErr('Une erreur est survenue, notre équipe est sur le coup.');
-        } else {
-          setErrType('error');
-          setGlobalErr('Connexion Google impossible. Réessaie.');
-        }
+        setErrType(error?.network ? 'warning' : 'error');
+        setGlobalErr(getErrorMessage(error, 'La connexion avec Google a échoué. Réessaie ou utilise ton email.'));
       } finally {
         setGoogleLoading(false);
       }
@@ -74,49 +69,39 @@ export default function LoginScreen({ navigation }) {
   const handleGoogleLogin = async () => {
     try { await promptAsync(); } catch (_) {
       setErrType('error');
-      setGlobalErr('Connexion Google impossible. Réessaie.');
+      setGlobalErr('La fenêtre de connexion Google ne s\'est pas ouverte. Réessaie ou utilise ton email.');
     }
   };
 
   const validateEmail = (val = email) => {
-    if (!val)                { setEmailErr('Email requis');   return false; }
-    if (!EMAIL_RE.test(val)) { setEmailErr('Email invalide'); return false; }
+    if (!val)                       { setEmailErr('Entre ton adresse email.'); return false; }
+    if (!EMAIL_RE.test(val.trim())) { setEmailErr('Cette adresse email n\'est pas valide. Exemple : nom@exemple.fr'); return false; }
     setEmailErr(''); return true;
   };
 
   const handleLogin = async () => {
     if (!validateEmail() || !password) {
-      if (!password) { setErrType('error'); setGlobalErr('Veuillez entrer votre mot de passe.'); }
+      if (!password) { setErrType('error'); setGlobalErr('Entre ton mot de passe.'); }
       return;
     }
     try {
       setLoading(true);
       setGlobalErr('');
-      const res = await login(email, password);
-      if (res?.token) {
-        await signIn(res.token, rememberMe);
-      } else {
-        throw new Error('no_token');
-      }
+      const res = await login(email.trim(), password);
+      if (!res?.token) throw new Error('no_token');
+      await signIn(res.token, rememberMe);
     } catch (error) {
       const status = error?.status;
-      const code   = error?.data?.code;
-      if (status === 403 || code === 'EMAIL_NOT_VERIFIED') {
-        navigation.navigate('EmailVerification', { email, fromLogin: true });
+      if (status === 403 && error?.data?.code === 'EMAIL_NOT_VERIFIED') {
+        navigation.navigate('EmailVerification', { email: email.trim(), fromLogin: true });
         return;
       }
-      if (status === 429) {
-        setErrType('warning');
-        setGlobalErr('Trop de tentatives. Veuillez patienter avant de réessayer.');
-        return;
-      }
-      if (status >= 500) {
-        setErrType('info');
-        setGlobalErr('Une erreur est survenue, notre équipe est sur le coup.');
-        return;
-      }
-      setErrType('error');
-      setGlobalErr('Email ou mot de passe incorrect.');
+      // Un serveur injoignable ne doit JAMAIS être présenté comme un mauvais
+      // mot de passe : seul un 401 signifie "identifiants incorrects".
+      setErrType(status === 429 || error?.network ? 'warning' : 'error');
+      setGlobalErr(status === 401
+        ? 'Email ou mot de passe incorrect.'
+        : getErrorMessage(error, 'La connexion n\'a pas abouti. Réessaie dans un instant.'));
     } finally {
       setLoading(false);
     }
@@ -138,20 +123,24 @@ export default function LoginScreen({ navigation }) {
 
           <View style={s.titleBlock}>
             <Text style={s.brand}>Bienvenue</Text>
-            <Text style={s.tagline}>Connectez-vous pour continuer</Text>
+            <Text style={s.tagline}>Connecte-toi pour retrouver ta progression</Text>
           </View>
 
           <AuthInput
             label="Email"
             icon="mail-outline"
-            placeholder="votre@email.com"
+            placeholder="nom@exemple.fr"
             value={email}
-            onChangeText={(v) => { setEmail(v); if (emailErr) validateEmail(v); }}
-            onBlur={() => validateEmail()}
+            onChangeText={(v) => { setEmail(v); if (emailErr) validateEmail(v); if (globalErr) setGlobalErr(''); }}
+            onBlur={() => { if (email) validateEmail(); }}
             error={emailErr}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            autoComplete="email"
+            textContentType="emailAddress"
+            inputMode="email"
+            enterKeyHint="next"
           />
 
           <AuthInput
@@ -164,6 +153,10 @@ export default function LoginScreen({ navigation }) {
             secureTextEntry={!showPassword}
             showPassword={showPassword}
             setShowPassword={setShowPassword}
+            autoComplete="current-password"
+            textContentType="password"
+            enterKeyHint="go"
+            onSubmitEditing={handleLogin}
           />
 
           {/* Rester connecté + Mot de passe oublié */}
@@ -172,6 +165,9 @@ export default function LoginScreen({ navigation }) {
               style={s.rememberRow}
               onPress={() => setRememberMe(v => !v)}
               activeOpacity={0.75}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: rememberMe }}
+              hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
             >
               <View style={[s.checkbox, rememberMe && s.checkboxActive]}>
                 {rememberMe && <Ionicons name="checkmark" size={11} color="#fff" />}
@@ -179,7 +175,11 @@ export default function LoginScreen({ navigation }) {
               <Text style={s.rememberLabel}>Rester connecté</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('ForgotPassword', { email: email.trim() })}
+              accessibilityRole="link"
+              hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+            >
               <Text style={s.forgotLink}>Mot de passe oublié ?</Text>
             </TouchableOpacity>
           </View>
@@ -191,15 +191,20 @@ export default function LoginScreen({ navigation }) {
             onPress={handleLogin}
             disabled={loading}
             activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityLabel="Se connecter"
+            accessibilityState={{ busy: loading, disabled: loading }}
           >
             {loading ? <FadeLoader /> : <Text style={s.btnText}>Se connecter</Text>}
           </TouchableOpacity>
 
-          <View style={s.divider}>
-            <View style={s.dividerLine} />
-            <Text style={s.dividerText}>ou</Text>
-            <View style={s.dividerLine} />
-          </View>
+          {googleConfigured && (
+            <View style={s.divider}>
+              <View style={s.dividerLine} />
+              <Text style={s.dividerText}>ou</Text>
+              <View style={s.dividerLine} />
+            </View>
+          )}
 
           {googleConfigured && (
             <TouchableOpacity
@@ -207,6 +212,8 @@ export default function LoginScreen({ navigation }) {
               onPress={handleGoogleLogin}
               disabled={googleLoading || !googleRequest}
               activeOpacity={0.82}
+              accessibilityRole="button"
+              accessibilityLabel="Continuer avec Google"
             >
               {googleLoading
                 ? <ActivityIndicator color={Colors.textPrimary} />
@@ -221,8 +228,12 @@ export default function LoginScreen({ navigation }) {
 
           <View style={s.switchRow}>
             <Text style={s.switchLabel}>Pas encore de compte ? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-              <Text style={s.linkBold}>S'inscrire</Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Register')}
+              accessibilityRole="link"
+              hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+            >
+              <Text style={s.linkBold}>Créer un compte</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -290,7 +301,7 @@ const s = StyleSheet.create({
   },
   googleBtnText: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
 
-  switchRow: { flexDirection: 'row', justifyContent: 'center' },
+  switchRow: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', marginTop: 8 },
   switchLabel: { color: Colors.textMuted, fontSize: 14 },
   linkBold: { color: Colors.primary, fontWeight: '700', fontSize: 14 },
 });

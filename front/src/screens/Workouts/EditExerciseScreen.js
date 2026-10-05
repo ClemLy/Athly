@@ -19,6 +19,7 @@ import MuscleHierarchyPicker from '../../components/workouts/MuscleHierarchyPick
 import { useCustomExercises } from '../../context/CustomExercisesContext';
 import { ConfirmModal } from '../../components/common';
 import { InfoModal } from '../../components/common';
+import { getErrorMessage } from '../../utils/errorMessages';
 
 // Form add/edit d'un exercice perso. Aligné sur la structure du catalogue (sous-muscles
 // précis), donc directement compatible avec le Builder et l'algo de tri.
@@ -93,7 +94,7 @@ export default function EditExerciseScreen({ route, navigation }) {
       }
       if (navigation) navigation.goBack();
     } catch (e) {
-      setInfoModal({ title: 'Erreur', body: e && e.message ? e.message : 'Sauvegarde impossible' });
+      setInfoModal({ title: 'Enregistrement impossible', body: getErrorMessage(e, 'Tes modifications n\'ont pas pu être enregistrées. Réessaie dans un instant.') });
     } finally {
       setSaving(false);
     }
@@ -110,18 +111,18 @@ export default function EditExerciseScreen({ route, navigation }) {
       await remove(exerciseId);
       if (navigation) navigation.goBack();
     } catch (e) {
-      setInfoModal({ title: 'Erreur', body: e && e.message ? e.message : 'Suppression impossible' });
+      setInfoModal({ title: 'Suppression impossible', body: getErrorMessage(e, 'L\'exercice n\'a pas pu être supprimé. Réessaie dans un instant.') });
     }
   }, [exerciseId, remove, navigation]);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.header}>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button"
             onPress={() => navigation && navigation.goBack()}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
@@ -230,7 +231,7 @@ export default function EditExerciseScreen({ route, navigation }) {
             />
           </Field>
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
             onPress={handleSave}
             disabled={saving}
@@ -246,7 +247,7 @@ export default function EditExerciseScreen({ route, navigation }) {
           </TouchableOpacity>
 
           {mode === 'edit' ? (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.deleteBtn}
               onPress={handleDelete}
               activeOpacity={0.85}

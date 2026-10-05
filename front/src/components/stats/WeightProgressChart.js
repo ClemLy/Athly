@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
-import { View, Text, Dimensions, Platform, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
+import { useChartWidth } from '../../hooks/useChartWidth';
 
 // ─── WeightProgressChart ──────────────────────────────────────────────────────
 // Double courbe (Section VI) : poids réel (ligne pleine) + objectif (ligne
@@ -19,9 +20,7 @@ function formatDate(d) {
 }
 
 export default function WeightProgressChart({ history = [], goal = null, height = 200 }) {
-  const rawW = Dimensions.get('window').width;
-  const screenW = Platform.OS === 'web' ? Math.min(430, rawW) : rawW;
-  const chartW = Math.max(220, screenW - 72);
+  const chartW = useChartWidth(72, 220);
 
   const { labels, weights, hasData, currentWeight } = useMemo(() => {
     const arr = (Array.isArray(history) ? history : []).filter((p) => p && Number(p.weight) > 0);

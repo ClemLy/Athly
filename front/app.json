@@ -6,7 +6,7 @@
     "scheme": "athly",
     "orientation": "portrait",
     "icon": "./assets/favicon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/favicon.png",
       "resizeMode": "contain",
@@ -27,15 +27,16 @@
       "bundler": "metro",
       "favicon": "./assets/favicon.png",
       "icon": "./assets/favicon.png",
-      "name": "Athly — Mobile Fitness Gamification",
+      "name": "Athly",
       "shortName": "Athly",
-      "description": "Application de fitness gamifiée — XP, streaks, quêtes quotidiennes",
-      "backgroundColor": "#080910",
-      "themeColor": "#8B5CF6",
+      "description": "Suis tes séances de musculation, gagne de l'XP, débloque des trophées et progresse avec tes amis.",
+      "backgroundColor": "#0D1018",
+      "themeColor": "#0D1018",
       "display": "standalone",
       "orientation": "portrait",
       "startUrl": "/",
-      "lang": "fr"
+      "lang": "fr",
+      "output": "single"
     },
     "plugins": [
       "expo-secure-store",
@@ -46,6 +47,8 @@
         "projectId": "77fe42fb-95cc-4e79-a150-84228c79e672"
       }
     },
-    "owner": "clemly"
+    "owner": "clemly",
+    "backgroundColor": "#0D1018",
+    "description": "Suis tes séances de musculation, gagne de l'XP, débloque des trophées et progresse avec tes amis."
   }
 }

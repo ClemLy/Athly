@@ -130,9 +130,9 @@ export default function HeroLevelCard({
       <View style={styles.nameRow}>
         <Text style={styles.name} numberOfLines={1}>{name || 'Athlète'}</Text>
         {hasShimmer && (
-          <Animated.Text style={[styles.shimmerBadge, { color: rank.color, opacity: shimmerAnim }]}>
-            {' '}✦
-          </Animated.Text>
+          <Animated.View style={[styles.shimmerBadge, { opacity: shimmerAnim }]}>
+            <Ionicons name="sparkles" size={16} color={rank.color} />
+          </Animated.View>
         )}
       </View>
 
@@ -281,8 +281,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   shimmerBadge: {
-    fontSize: 20,
-    fontWeight: '900',
+    marginLeft: 6,
   },
   titleBadge: {
     flexDirection: 'row',

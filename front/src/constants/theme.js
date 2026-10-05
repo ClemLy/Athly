@@ -23,13 +23,13 @@ export const Colors = {
   // ── Texte ──────────────────────────────────────────────────────────────────
   textPrimary:   '#FFFFFF',
   textSecondary: '#9AA0AE',
-  textMuted:     '#6D7382',
+  textMuted:     '#7E8494',   // ≥ 4.5:1 sur toutes les cartes (WCAG AA)
   textDim:       '#8B95A3',   // labels de colonnes, sous-textes très atténués
 
   // ── Accents principaux ─────────────────────────────────────────────────────
   primary:         '#FE7439',   // CTA orange Athly
   muscle:          '#FF6B35',   // variante muscle
-  secondaryAccent: '#6E6AF0',   // violet niveaux / badges
+  secondaryAccent: '#7B77F3',   // violet niveaux / badges (≥ 4.5:1 sur les cartes)
 
   // ── Accents rang & gamification ────────────────────────────────────────────
   gold:         '#FFD700',   // rang God / trophées spéciaux / tutorial
@@ -57,7 +57,7 @@ export const Colors = {
   destructive: '#EF4444',   // actions destructrices (Supprimer…), accent rouge des modales
 
   // ── Utilitaires ────────────────────────────────────────────────────────────
-  chevron: '#888888',
+  chevron: '#8A8F9C',
   modal:   '#1E1E29',
 };
 

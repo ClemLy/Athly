@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, MUSCLE_GROUP_COLORS } from '../../constants/theme';
+import { plural } from '../../utils/format';
 
 // Carte "hero" affichée sur la page d'accueil pour utilisateur actif.
 // Présente la séance recommandée (algorithme : muscle le moins travaillé).
@@ -35,13 +36,13 @@ export default function HeroSessionCard({
 
         <View style={styles.metaRow}>
           <Ionicons name="barbell-outline" size={13} color={Colors.textMuted} />
-          <Text style={styles.meta}>{exerciseCount} exercices</Text>
+          <Text style={styles.meta}>{plural(exerciseCount, 'exercice')}</Text>
           <View style={styles.metaDot} />
           <Ionicons name="time-outline" size={13} color={Colors.textMuted} />
           <Text style={styles.meta}>~{durationMin} min</Text>
         </View>
 
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={styles.cta}
           onPress={onStart}
           activeOpacity={0.85}

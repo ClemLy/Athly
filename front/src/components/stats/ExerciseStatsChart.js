@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
-import { View, Text, Dimensions, Platform, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { Colors } from '../../constants/theme';
+import { useChartWidth } from '../../hooks/useChartWidth';
 
 // Graphique de progression d'un exercice : poids max par session.
 // Stratégie pour les "trous" : on n'utilise PAS la date comme axe X, mais l'index
@@ -19,9 +20,7 @@ function formatDate(iso) {
 }
 
 export default function ExerciseStatsChart({ points = [], metric = 'maxWeight', height = 200 }) {
-  const rawW = Dimensions.get('window').width;
-  const screenW = Platform.OS === 'web' ? Math.min(430, rawW) : rawW;
-  const chartW = Math.max(220, screenW - 72);
+  const chartW = useChartWidth(72, 220);
 
   const { labels, data, hasData } = useMemo(() => {
     const arr = (Array.isArray(points) ? points : []).filter((p) => p && Number(p[metric]) > 0);

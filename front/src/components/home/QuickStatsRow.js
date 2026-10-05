@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
+import { formatWeight, pluralWord } from '../../utils/format';
 
 // Trois KPIs compacts sur la home : Séances, Volume, Streak.
 // Affichage uniquement quand l'utilisateur a au moins 1 log (sinon EmptyHomeState).
@@ -25,13 +26,13 @@ export default function QuickStatsRow({ sessions = 0, volume = 0, streak = 0 }) 
         icon="barbell"
         label="Volume"
         sub="cette semaine"
-        value={`${Math.round(volume).toLocaleString('fr-FR')} kg`}
+        value={formatWeight(volume)}
         accent={Colors.primary}
       />
       <Stat
         icon="flame"
         label="Streak"
-        sub={streak === 1 ? 'jour' : 'jours'}
+        sub={pluralWord(streak, 'jour')}
         value={streak}
         accent={Colors.primary}
         highlight={streak >= 3}
@@ -42,7 +43,11 @@ export default function QuickStatsRow({ sessions = 0, volume = 0, streak = 0 }) 
 
 function Stat({ icon, label, sub, value, accent, highlight = false }) {
   return (
-    <View style={[styles.card, highlight && styles.cardHighlight]}>
+    <View
+      style={[styles.card, highlight && styles.cardHighlight]}
+      accessible
+      accessibilityLabel={`${label} ${sub} : ${value}`}
+    >
       <View style={[styles.iconWrap, { backgroundColor: 'rgba(0,0,0,0)' }]}>
         <Ionicons name={icon} size={16} color={accent} />
       </View>
@@ -83,13 +88,13 @@ const styles = StyleSheet.create({
   },
   label: {
     color: Colors.textPrimary,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     marginTop: 4,
   },
   sub: {
     color: Colors.textMuted,
-    fontSize: 10,
+    fontSize: 11,
     marginTop: 1,
   },
 });

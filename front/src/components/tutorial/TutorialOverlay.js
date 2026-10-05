@@ -199,7 +199,7 @@ export default function TutorialOverlay({ navigation }) {
     dismiss();
   };
 
-  const nextLabel = isEndCard  ? 'Terminer le tutoriel ✓'
+  const nextLabel = isEndCard  ? 'Terminer le tutoriel'
     : isLastStep ? 'Chapitre suivant'
     : 'Suivant';
 
@@ -229,7 +229,7 @@ export default function TutorialOverlay({ navigation }) {
 
       {/* Tap outside spotlight → avance (sauf si actionRequired) */}
       {hasSpot && !isAction && (
-        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={handleNext} />
+        <TouchableOpacity accessible={false} style={StyleSheet.absoluteFill} activeOpacity={1} onPress={handleNext} />
       )}
 
       {/* ── Tooltip ── */}
@@ -258,10 +258,10 @@ export default function TutorialOverlay({ navigation }) {
             </View>
           ) : (
             <View style={styles.btnRow}>
-              <TouchableOpacity style={styles.skipBtn} onPress={handleSkip} activeOpacity={0.75}>
+              <TouchableOpacity accessibilityRole="button" style={styles.skipBtn} onPress={handleSkip} activeOpacity={0.75}>
                 <Text style={styles.skipTxt}>Passer</Text>
               </TouchableOpacity>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.nextBtn, { backgroundColor: Colors.secondaryAccent }]}
                 onPress={handleNext}
                 activeOpacity={0.82}
@@ -277,7 +277,7 @@ export default function TutorialOverlay({ navigation }) {
 
         {/* Bouton Passer toujours accessible même en actionRequired */}
         {isAction && (
-          <TouchableOpacity style={styles.skipBtnBottom} onPress={handleSkip} activeOpacity={0.7}>
+          <TouchableOpacity accessibilityRole="button" style={styles.skipBtnBottom} onPress={handleSkip} activeOpacity={0.7}>
             <Text style={styles.skipTxt}>Passer le tutoriel</Text>
           </TouchableOpacity>
         )}

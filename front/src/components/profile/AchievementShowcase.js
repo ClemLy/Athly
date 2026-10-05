@@ -166,7 +166,7 @@ export default function AchievementShowcase({ achievements = [], stats }) {
         </View>
       )}
 
-      <TouchableOpacity style={styles.detailBtn} onPress={() => setDetailOpen(true)} activeOpacity={0.8}>
+      <TouchableOpacity accessibilityRole="button" style={styles.detailBtn} onPress={() => setDetailOpen(true)} activeOpacity={0.8}>
         <Ionicons name="grid" size={15} color={Colors.gold} />
         <Text style={styles.detailBtnText}>Voir le détail</Text>
         <Ionicons name="chevron-forward" size={15} color={Colors.gold} />
@@ -174,11 +174,11 @@ export default function AchievementShowcase({ achievements = [], stats }) {
 
       {detailOpen && (
         <Modal visible transparent animationType="fade" onRequestClose={() => setDetailOpen(false)}>
-          <Pressable style={styles.overlay} onPress={() => setDetailOpen(false)}>
-            <Pressable style={styles.sheet} onPress={() => {}}>
+          <Pressable accessible={false} style={styles.overlay} onPress={() => setDetailOpen(false)}>
+            <Pressable accessibilityRole="button" style={styles.sheet} onPress={() => {}}>
               <View style={styles.sheetHeader}>
                 <Text style={styles.sheetTitle}>Trophées {stats ? `· ${stats.unlocked}/${stats.total}` : ''}</Text>
-                <TouchableOpacity onPress={() => setDetailOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button" onPress={() => setDetailOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                   <Ionicons name="close" size={22} color={Colors.textMuted} />
                 </TouchableOpacity>
               </View>
@@ -210,7 +210,7 @@ export default function AchievementShowcase({ achievements = [], stats }) {
 function AchievementBadge({ achievement, onPress }) {
   const { unlocked, color, icon, label } = achievement;
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       style={styles.badge}
       onPress={unlocked ? onPress : undefined}
       activeOpacity={unlocked ? 0.8 : 1}

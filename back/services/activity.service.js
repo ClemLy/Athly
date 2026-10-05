@@ -1,5 +1,6 @@
 'use strict';
 
+const mongoose      = require('mongoose');
 const ActivityEvent = require('../models/ActivityEvent');
 const StreakGroup   = require('../models/StreakGroup');
 
@@ -7,10 +8,10 @@ const StreakGroup   = require('../models/StreakGroup');
 // "Taquineries & High-Fives"). Clé stable stockée en DB, libellé affiché
 // uniquement côté service pour rester la seule source de vérité.
 const REACTION_META = {
-  bravo:   { emoji: '💪', label: 'Bien joué mec !' },
-  respect: { emoji: '🔥', label: 'Respect !' },
-  boo:     { emoji: '👎', label: 'Bouuuuuh !' },
-  jealous: { emoji: '👀', label: 'Jalouser' },
+  bravo:   { label: 'Bien joué !' },
+  respect: { label: 'Respect !' },
+  boo:     { label: 'Bouuuh !' },
+  jealous: { label: 'Jaloux' },
 };
 
 /**
@@ -25,7 +26,7 @@ async function recordActivityEvent(actorId, type, message, payload = {}) {
 
     return await ActivityEvent.create({ group: group._id, actor: actorId, type, message, payload });
   } catch (err) {
-    console.warn(`⚠️ [ACTIVITY] Échec de création d'événement (${type}) :`, err.message);
+    console.warn(`[ACTIVITY] Échec de création d'événement (${type}) :`, err.message);
     return null;
   }
 }
@@ -56,18 +57,28 @@ async function getUnseenFeedForUser(userId, since) {
  * l'événement n'existe pas ou si on réagit à son propre événement.
  */
 async function reactToEvent(eventId, reactorId, emoji) {
-  if (!REACTION_META[emoji]) {
+  if (!Object.prototype.hasOwnProperty.call(REACTION_META, emoji)) {
     const err = new Error('Réaction invalide.');
     err.statusCode = 400;
     throw err;
   }
 
-  const event = await ActivityEvent.findById(eventId);
-  if (!event) {
-    const err = new Error('Événement introuvable.');
+  const notFound = () => {
+    const err = new Error("Cet événement n'est plus disponible.");
     err.statusCode = 404;
-    throw err;
-  }
+    return err;
+  };
+
+  if (!mongoose.Types.ObjectId.isValid(eventId)) throw notFound();
+
+  const event = await ActivityEvent.findById(eventId);
+  if (!event) throw notFound();
+
+  // Seuls les membres du groupe de l'événement peuvent réagir (et donc
+  // déclencher une notification push chez son auteur). Même réponse 404
+  // qu'un événement inexistant : ne confirme pas l'existence à un tiers.
+  const isMember = await StreakGroup.exists({ _id: event.group, members: reactorId });
+  if (!isMember) throw notFound();
 
   event.reactions = event.reactions.filter((r) => String(r.user) !== String(reactorId));
   event.reactions.push({ user: reactorId, emoji });

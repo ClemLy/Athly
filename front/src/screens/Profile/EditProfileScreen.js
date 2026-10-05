@@ -15,6 +15,7 @@ import { useUser } from '../../context/UserContext';
 import { useToast } from '../../context/ToastContext';
 import { setBirthdate } from '../../services';
 import BirthdatePicker from '../../components/profile/BirthdatePicker';
+import { getErrorMessage } from '../../utils/errorMessages';
 
 // ─── EditProfileScreen ────────────────────────────────────────────────────────
 // Pas de header custom : on configure navigation.setOptions via useLayoutEffect.
@@ -38,7 +39,6 @@ export default function EditProfileScreen({ navigation }) {
   const { showToast } = useToast();
   const [formData, setFormData] = useState({
     name:          user?.name          || '',
-    bio:           user?.bio           || '',
     poids:         user?.poids?.toString()      || '',
     taille:        user?.taille?.toString()     || '',
     poidsCible:    user?.poidsCible?.toString() || '',
@@ -53,7 +53,6 @@ export default function EditProfileScreen({ navigation }) {
     if (!user) return;
     setFormData({
       name:          user.name          || '',
-      bio:           user.bio           || '',
       poids:         user.poids?.toString()      || '',
       taille:        user.taille?.toString()     || '',
       poidsCible:    user.poidsCible?.toString() || '',
@@ -68,17 +67,35 @@ export default function EditProfileScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [errors,  setErrors]  = useState({});
 
-  const set = useCallback((key, val) => setFormData((p) => ({ ...p, [key]: val })), []);
+  const set = useCallback((key, val) => {
+    setFormData((p) => ({ ...p, [key]: val }));
+    // L'erreur d'un champ disparaît dès qu'on le corrige
+    setErrors((e) => (e[key] ? { ...e, [key]: undefined } : e));
+  }, []);
 
   // Use a ref so the header button always calls the latest handleUpdate
   const handleUpdateRef = useRef(null);
 
   const handleUpdate = useCallback(async () => {
-    // Frontend validation — only name is required, bio is always optional
+    // Validation locale (mêmes règles que le serveur) avant envoi
     const nameVal = formData.name.trim();
     const errs = {};
-    if (!nameVal) errs.name = 'Le pseudo est requis.';
+    if (!nameVal) errs.name = 'Le pseudo est obligatoire.';
     else if (nameVal.length < 2) errs.name = 'Le pseudo doit faire au moins 2 caractères.';
+    else if (nameVal.length > 30) errs.name = 'Le pseudo ne peut pas dépasser 30 caractères.';
+
+    // Bornes identiques au serveur (back/validators/user.validator.js)
+    const num = (v) => parseFloat(String(v || '').replace(',', '.'));
+    const checkRange = (key, label, min, max) => {
+      if (!formData[key]) return;
+      const n = num(formData[key]);
+      if (Number.isNaN(n)) errs[key] = `${label} doit être un nombre.`;
+      else if (n < min || n > max) errs[key] = `${label} doit être compris entre ${min} et ${max}.`;
+    };
+    checkRange('poids', 'Le poids', 30, 250);
+    checkRange('poidsCible', 'Le poids cible', 30, 250);
+    checkRange('taille', 'La taille', 100, 250);
+    checkRange('rythme', 'Le nombre de séances', 1, 7);
 
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
@@ -110,29 +127,21 @@ export default function EditProfileScreen({ navigation }) {
       const res = await updateMyProfile(payload);
       if (res.success) {
         refetchUser(); // met à jour le UserContext → ProfileScreen + SettingsScreen sync instantané
-        showToast('Profil mis à jour avec succès !', 'success');
+        showToast('Profil mis à jour.', 'success');
         navigation.goBack();
       }
     } catch (error) {
       // La 401 (JWT expiré) est gérée par l'intercepteur Axios → pas de toast ici.
       if (error.isSessionExpired) return;
 
-      if (error.status === 400 && error.data?.details) {
-        const fieldErrors = {};
-        const details = error.data.details;
-        if (Array.isArray(details)) {
-          details.forEach((d) => {
-            const field = d.path?.[0] || d.context?.key;
-            if (field) fieldErrors[field] = d.message || 'Champ invalide';
-          });
-        }
-        if (Object.keys(fieldErrors).length > 0) {
-          setErrors(fieldErrors);
-          return;
-        }
+      // Erreurs de validation rattachées à leur champ (voir back/middleware/validate.middleware.js)
+      const fields = error.data?.fields;
+      if (error.status === 400 && fields && Object.keys(fields).length > 0) {
+        setErrors(fields);
+        showToast('Corrige les champs signalés en rouge.', 'error');
+        return;
       }
-      const msg = error.data?.message || error.message || 'Erreur réseau. Réessaie dans un instant.';
-      showToast(msg, 'error');
+      showToast(getErrorMessage(error, 'La mise à jour du profil n\'a pas abouti. Réessaie dans un instant.'), 'error');
     } finally {
       setLoading(false);
     }
@@ -150,23 +159,23 @@ export default function EditProfileScreen({ navigation }) {
       showToast('Date de naissance enregistrée. Ton coffre est dans ton inventaire !', 'success');
     } catch (error) {
       if (error.isSessionExpired) throw error;
-      const msg = error.data?.message || error.message || 'Erreur réseau. Réessaie dans un instant.';
-      showToast(msg, 'error');
+      showToast(getErrorMessage(error, 'La date n\'a pas pu être enregistrée. Réessaie dans un instant.'), 'error');
       throw error;
     }
   }, [refetchUser, showToast]);
 
-  // Configure native header with "Sauver" button — re-runs when loading changes
+  // Bouton "Enregistrer" dans l'en-tête, recréé quand l'état de chargement change
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
+          accessibilityLabel="Enregistrer le profil"
           onPress={() => handleUpdateRef.current()}
           disabled={loading}
           style={[styles.headerSaveBtn, loading && { opacity: 0.45 }]}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Text style={styles.headerSaveTxt}>{loading ? '…' : 'Sauver'}</Text>
+          <Text style={styles.headerSaveTxt}>{loading ? 'Envoi…' : 'Enregistrer'}</Text>
         </TouchableOpacity>
       ),
     });
@@ -187,7 +196,7 @@ export default function EditProfileScreen({ navigation }) {
         {/* ═══ IDENTITÉ ══════════════════════════════════════════════════════ */}
         <SectionLabel label="Identité" />
         <SettingsGroup>
-          <SettingsRow label="Pseudo" last={false} error={errors.name}>
+          <SettingsRow label="Pseudo" last error={errors.name}>
             <TextInput
               style={[styles.inlineInput, errors.name && styles.inlineInputError]}
               value={formData.name}
@@ -196,19 +205,6 @@ export default function EditProfileScreen({ navigation }) {
               placeholderTextColor={Colors.textMuted}
               selectionColor={Colors.primary}
               returnKeyType="done"
-            />
-          </SettingsRow>
-          <SettingsRow label="Bio" last>
-            <TextInput
-              style={[styles.inlineInput, styles.inlineInputMulti]}
-              value={formData.bio}
-              onChangeText={(v) => set('bio', v)}
-              placeholder="Quelques mots sur toi…"
-              placeholderTextColor={Colors.textMuted}
-              selectionColor={Colors.primary}
-              multiline
-              returnKeyType="done"
-              blurOnSubmit
             />
           </SettingsRow>
         </SettingsGroup>
@@ -223,7 +219,7 @@ export default function EditProfileScreen({ navigation }) {
               ))}
             </View>
           </SettingsRow>
-          <SettingsRow label="Poids actuel (kg)" last={false}>
+          <SettingsRow label="Poids actuel (kg)" last={false} error={errors.poids}>
             <TextInput
               style={styles.inlineInput}
               value={formData.poids}
@@ -234,7 +230,7 @@ export default function EditProfileScreen({ navigation }) {
               keyboardType="decimal-pad"
             />
           </SettingsRow>
-          <SettingsRow label="Poids cible (kg)" last={false}>
+          <SettingsRow label="Poids cible (kg)" last={false} error={errors.poidsCible}>
             <TextInput
               style={styles.inlineInput}
               value={formData.poidsCible}
@@ -245,7 +241,7 @@ export default function EditProfileScreen({ navigation }) {
               keyboardType="decimal-pad"
             />
           </SettingsRow>
-          <SettingsRow label="Taille (cm)" last={false}>
+          <SettingsRow label="Taille (cm)" last={false} error={errors.taille}>
             <TextInput
               style={styles.inlineInput}
               value={formData.taille}
@@ -267,21 +263,21 @@ export default function EditProfileScreen({ navigation }) {
         {/* ═══ PROGRAMME ═════════════════════════════════════════════════════ */}
         <SectionLabel label="Programme" />
         <SettingsGroup>
-          <SettingsRow label="Niveau sportif" last={false}>
+          <SettingsRow label="Niveau sportif" last={false} stacked>
             <View style={styles.chipRow}>
               {SELECTIONS.niveau.map((n) => (
                 <MiniChip key={n} label={n} selected={formData.niveauSportif === n} onPress={() => set('niveauSportif', n)} />
               ))}
             </View>
           </SettingsRow>
-          <SettingsRow label="Objectif" last={false}>
+          <SettingsRow label="Objectif" last={false} stacked>
             <View style={styles.chipRow}>
               {SELECTIONS.objectif.map((o) => (
                 <MiniChip key={o} label={o} selected={formData.objectif === o} onPress={() => set('objectif', o)} />
               ))}
             </View>
           </SettingsRow>
-          <SettingsRow label="Séances / semaine" last>
+          <SettingsRow label="Séances / semaine" last error={errors.rythme}>
             <TextInput
               style={styles.inlineInput}
               value={formData.rythme}
@@ -295,7 +291,7 @@ export default function EditProfileScreen({ navigation }) {
         </SettingsGroup>
 
         {/* ─── Save bottom button ─── */}
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.saveBtn, loading && { opacity: 0.5 }]}
           onPress={handleUpdate}
           disabled={loading}
@@ -320,21 +316,24 @@ function SettingsGroup({ children }) {
   return <View style={styles.group}>{children}</View>;
 }
 
-function SettingsRow({ label, children, last, error }) {
+// stacked : libellé au-dessus, choix en dessous (pour les listes de puces,
+// qui ne tiennent pas à côté du libellé sur un petit écran)
+function SettingsRow({ label, children, last, error, stacked }) {
   return (
-    <View style={[styles.row, !last && styles.rowSep, error && styles.rowError]}>
-      <View style={styles.rowLabelWrap}>
+    <View style={[styles.row, stacked && styles.rowStacked, !last && styles.rowSep, error && styles.rowError]}>
+      <View style={[styles.rowLabelWrap, stacked && styles.rowLabelStacked]}>
         <Text style={styles.rowLabel}>{label}</Text>
-        {error ? <Text style={styles.rowErrMsg}>{error}</Text> : null}
+        {error ? <Text style={styles.rowErrMsg} accessibilityRole="alert">{error}</Text> : null}
       </View>
-      <View style={styles.rowRight}>{children}</View>
+      <View style={stacked ? styles.rowBelow : styles.rowRight}>{children}</View>
     </View>
   );
 }
 
 function MiniChip({ label, selected, onPress }) {
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="radio"
+      accessibilityState={{ selected, checked: selected }}
       onPress={onPress}
       style={[styles.chip, selected && styles.chipSel]}
       activeOpacity={0.8}
@@ -402,10 +401,14 @@ const styles = StyleSheet.create({
   },
   rowErrMsg: {
     color: Colors.error,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
+    lineHeight: 16,
     marginTop: 3,
   },
+  rowStacked: { flexDirection: 'column', alignItems: 'stretch' },
+  rowLabelStacked: { marginRight: 0, marginBottom: 10 },
+  rowBelow: { alignSelf: 'stretch' },
   rowRight: {
     flex: 1,
     alignItems: 'flex-end',
@@ -414,7 +417,7 @@ const styles = StyleSheet.create({
   // ── Inline text inputs ───────────────────────────────────────────────────────
   inlineInput: {
     color: Colors.textPrimary,
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '500',
     textAlign: 'right',
     padding: 0,
@@ -430,17 +433,19 @@ const styles = StyleSheet.create({
   },
 
   // ── Mini chips ───────────────────────────────────────────────────────────────
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 36,
+    justifyContent: 'center',
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: GRP_BORDER,
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
   chipSel:    { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  chipTxt:    { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' },
+  chipTxt:    { color: Colors.textSecondary, fontSize: 13, fontWeight: '600' },
   chipTxtSel: { color: '#fff' },
 
   // ── Bottom save button ───────────────────────────────────────────────────────

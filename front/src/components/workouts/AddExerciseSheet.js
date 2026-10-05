@@ -62,7 +62,7 @@ export default function AddExerciseSheet({ visible, mode = 'add', onClose, onSel
     const secondary = secondaryMusclesLabels(item);
     const equipment = primaryEquipmentLabel(item);
     return (
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         style={styles.item}
         onPress={() => handleSelect(item)}
         activeOpacity={0.85}
@@ -99,8 +99,8 @@ export default function AddExerciseSheet({ visible, mode = 'add', onClose, onSel
       animationType="slide"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation && e.stopPropagation()}>
+      <Pressable accessible={false} style={styles.backdrop} onPress={onClose}>
+        <Pressable accessibilityRole="button" style={styles.sheet} onPress={(e) => e.stopPropagation && e.stopPropagation()}>
           <View style={styles.handle} />
           <Text style={styles.title}>
             {mode === 'replace' ? 'Remplacer par' : 'Ajouter un exercice'}

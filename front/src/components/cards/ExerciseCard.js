@@ -56,7 +56,7 @@ function ExerciseCard({
       if (can) await Linking.openURL(videoUrl);
       else setInfoModal({ title: 'Lien invalide', body: "Impossible d'ouvrir cette vidéo." });
     } catch (e) {
-      setInfoModal({ title: 'Erreur', body: "Impossible d'ouvrir la vidéo." });
+      setInfoModal({ title: 'Vidéo indisponible', body: "La vidéo n'a pas pu s'ouvrir. Vérifie ta connexion puis réessaie." });
     }
   }, [videoUrl]);
 
@@ -76,7 +76,7 @@ function ExerciseCard({
   ];
 
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       style={[styles.card, inSuperset && styles.cardInSuperset]}
       onPress={onPress}
       onLongPress={showActions}
@@ -106,7 +106,7 @@ function ExerciseCard({
 
         <View style={styles.actionArea}>
           {videoUrl ? (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityLabel="Démarrer" accessibilityRole="button"
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               onPress={openVideo}
               style={styles.playBtn}

@@ -48,7 +48,7 @@ Les 5 points clés d'un bon squat :
 
 2. Descends jusqu'aux cuisses parallèles au sol minimum. Plus profond = plus de fessiers, moins de contrainte sur les genoux.
 
-3. Garde le dos neutre - ni trop arqué, ni trop rond. Imagine une barre de fer sur ta colonne.
+3. Garde le dos neutre : ni trop arqué, ni trop rond. Imagine une barre de fer sur ta colonne.
 
 4. Pousse le sol vers le bas au retour, comme si tu voulais écarter le plancher avec tes pieds. Ça active les fessiers et stabilise les genoux.
 
@@ -58,11 +58,11 @@ Erreur la plus commune : les genoux qui rentrent vers l'intérieur. Si c'est ton
   },
   {
     title: 'Manger après l\'effort : ce qui compte vraiment',
-    content: `La "fenêtre anabolique" - cette idée qu'il faut absolument manger dans les 30 minutes après l'effort - est largement exagérée. Si tu as bien mangé 2-3h avant ta séance, cette fenêtre s'étend à 4-6h après l'entraînement.
+    content: `La "fenêtre anabolique", cette idée qu'il faut absolument manger dans les 30 minutes après l'effort, est largement exagérée. Si tu as bien mangé 2-3h avant ta séance, cette fenêtre s'étend à 4-6h après l'entraînement.
 
 Ce qui compte vraiment après l'effort :
 
-Protéines : 20 à 40g pour relancer la synthèse protéique. Ton corps n'utilise pas plus de 40g à la fois - inutile d'en avaler 80g.
+Protéines : 20 à 40g pour relancer la synthèse protéique. Ton corps n'utilise pas plus de 40g à la fois : inutile d'en avaler 80g.
 
 Glucides : après un effort intense, ton stock de glycogène est épuisé. 1 à 1.5g par kg de poids corporel aide à le reconstituer rapidement (riz, patate douce, fruits).
 
@@ -123,7 +123,7 @@ export default function RecoveryRitualsCard() {
 
       <View style={styles.ritualsGrid}>
         {RITUAL_TYPES.map((ritual) => (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             key={ritual.id}
             style={[styles.ritualBtn, { borderColor: ritual.color + '35' }]}
             onPress={() => openRitual(ritual)}
@@ -187,7 +187,7 @@ function RitualModal({ visible, ritual, onComplete, onClose }) {
       <Animated.View style={[styles.modalOverlay, { opacity: opacityAnim }]}>
         <Animated.View style={[styles.modalCard, { borderColor: ritual.color + '35', transform: [{ scale: scaleAnim }] }]}>
           <View style={styles.modalHeader}>
-            <TouchableOpacity style={styles.modalCloseBtn} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button" style={styles.modalCloseBtn} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Ionicons name="close" size={20} color={Colors.textMuted} />
             </TouchableOpacity>
           </View>
@@ -250,7 +250,7 @@ function CountdownTimer({ color, durationSeconds, xpAmount = 20, onComplete }) {
       </View>
 
       {done ? (
-        <TouchableOpacity style={[styles.validateBtn, { backgroundColor: Colors.valid }]} onPress={onComplete} activeOpacity={0.85}>
+        <TouchableOpacity accessibilityRole="button" style={[styles.validateBtn, { backgroundColor: Colors.valid }]} onPress={onComplete} activeOpacity={0.85}>
           <Ionicons name="checkmark" size={18} color="#fff" style={{ marginRight: 8 }} />
           <Text style={styles.validateBtnText}>Terminer · +{xpAmount} XP</Text>
         </TouchableOpacity>
@@ -260,7 +260,7 @@ function CountdownTimer({ color, durationSeconds, xpAmount = 20, onComplete }) {
           <Text style={[styles.runningText, { color }]}>En cours…</Text>
         </View>
       ) : (
-        <TouchableOpacity style={[styles.startBtn, { backgroundColor: color + '18', borderColor: color + '50' }]} onPress={start} activeOpacity={0.82}>
+        <TouchableOpacity accessibilityRole="button" style={[styles.startBtn, { backgroundColor: color + '18', borderColor: color + '50' }]} onPress={start} activeOpacity={0.82}>
           <Ionicons name="play" size={16} color={color} style={{ marginRight: 8 }} />
           <Text style={[styles.startBtnText, { color }]}>Démarrer</Text>
         </TouchableOpacity>
@@ -362,12 +362,12 @@ function BreathingTimer({ color, durationSeconds, xpAmount = 20, onComplete }) {
       </View>
 
       {done ? (
-        <TouchableOpacity style={[styles.validateBtn, { backgroundColor: Colors.valid }]} onPress={onComplete} activeOpacity={0.85}>
+        <TouchableOpacity accessibilityRole="button" style={[styles.validateBtn, { backgroundColor: Colors.valid }]} onPress={onComplete} activeOpacity={0.85}>
           <Ionicons name="checkmark" size={18} color="#fff" style={{ marginRight: 8 }} />
           <Text style={styles.validateBtnText}>Terminer · +{xpAmount} XP</Text>
         </TouchableOpacity>
       ) : !started ? (
-        <TouchableOpacity style={[styles.startBtn, { backgroundColor: color + '18', borderColor: color + '50' }]} onPress={start} activeOpacity={0.82}>
+        <TouchableOpacity accessibilityRole="button" style={[styles.startBtn, { backgroundColor: color + '18', borderColor: color + '50' }]} onPress={start} activeOpacity={0.82}>
           <Ionicons name="play" size={16} color={color} style={{ marginRight: 8 }} />
           <Text style={[styles.startBtnText, { color }]}>Démarrer</Text>
         </TouchableOpacity>
@@ -450,12 +450,12 @@ function FoamRollingTimer({ color, durationSeconds, xpAmount = 20, onComplete })
       )}
 
       {done ? (
-        <TouchableOpacity style={[styles.validateBtn, { backgroundColor: Colors.valid }]} onPress={onComplete} activeOpacity={0.85}>
+        <TouchableOpacity accessibilityRole="button" style={[styles.validateBtn, { backgroundColor: Colors.valid }]} onPress={onComplete} activeOpacity={0.85}>
           <Ionicons name="checkmark" size={18} color="#fff" style={{ marginRight: 8 }} />
           <Text style={styles.validateBtnText}>Terminer · +{xpAmount} XP</Text>
         </TouchableOpacity>
       ) : !started ? (
-        <TouchableOpacity style={[styles.startBtn, { backgroundColor: color + '18', borderColor: color + '50' }]} onPress={start} activeOpacity={0.82}>
+        <TouchableOpacity accessibilityRole="button" style={[styles.startBtn, { backgroundColor: color + '18', borderColor: color + '50' }]} onPress={start} activeOpacity={0.82}>
           <Ionicons name="play" size={16} color={color} style={{ marginRight: 8 }} />
           <Text style={[styles.startBtnText, { color }]}>Démarrer</Text>
         </TouchableOpacity>
@@ -504,7 +504,7 @@ function FocusReader({ color, durationSeconds, xpAmount = 20, onComplete }) {
       </View>
 
       {done ? (
-        <TouchableOpacity style={[styles.validateBtn, { backgroundColor: Colors.valid }]} onPress={onComplete} activeOpacity={0.85}>
+        <TouchableOpacity accessibilityRole="button" style={[styles.validateBtn, { backgroundColor: Colors.valid }]} onPress={onComplete} activeOpacity={0.85}>
           <Ionicons name="checkmark" size={18} color="#fff" style={{ marginRight: 8 }} />
           <Text style={styles.validateBtnText}>Terminer · +{xpAmount} XP</Text>
         </TouchableOpacity>

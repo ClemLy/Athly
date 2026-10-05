@@ -1,7 +1,8 @@
 import React from 'react';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createStackNavigator } from '@react-navigation/stack';
 
-import { WorkoutInProgressProvider } from '../context/WorkoutInProgressContext';
+import { Colors } from '../constants/theme';
+import { screenTransition } from './transitions';
 
 import WorkoutListScreen from '../screens/Workouts/WorkoutListScreen';
 import WorkoutScreen from '../screens/Workouts/WorkoutScreen';
@@ -12,11 +13,17 @@ import CustomExercisesScreen from '../screens/Workouts/CustomExercisesScreen';
 import EditExerciseScreen from '../screens/Workouts/EditExerciseScreen';
 import ExerciseStatsScreen from '../screens/Workouts/ExerciseStatsScreen';
 
-const Stack = createNativeStackNavigator();
+const Stack = createStackNavigator();
 
 function StackNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        cardStyle: { backgroundColor: Colors.background },
+        ...screenTransition,
+      }}
+    >
       <Stack.Screen name="WorkoutList" component={WorkoutListScreen} />
       <Stack.Screen name="WorkoutBuilder" component={WorkoutBuilderScreen} />
       <Stack.Screen name="ManualWorkoutCreator" component={ManualWorkoutCreatorScreen} />
@@ -29,10 +36,8 @@ function StackNavigator() {
   );
 }
 
+// Le WorkoutInProgressProvider est monté plus haut (navigation/index.js) :
+// l'accueil doit pouvoir proposer de reprendre une séance interrompue.
 export default function WorkoutStack() {
-  return (
-    <WorkoutInProgressProvider>
-      <StackNavigator />
-    </WorkoutInProgressProvider>
-  );
+  return <StackNavigator />;
 }

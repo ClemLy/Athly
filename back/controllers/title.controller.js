@@ -263,7 +263,7 @@ async function computeProgress(user) {
 exports.getMyTitles = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id);
-    if (!user) return next(createError('Utilisateur introuvable.', 404));
+    if (!user) return next(createError('Ce compte est introuvable.', 404));
 
     const unlockedSet = new Set(user.unlockedTitles);
     const progressById = await computeProgress(user);
@@ -296,18 +296,18 @@ exports.equipTitle = async (req, res, next) => {
       const user = await User.findByIdAndUpdate(
         req.user.id,
         { $set: { equippedTitle: null } },
-        { new: true },
+        { returnDocument: 'after' },
       ).select('equippedTitle');
-      if (!user) return next(createError('Utilisateur introuvable.', 404));
+      if (!user) return next(createError('Ce compte est introuvable.', 404));
       return res.status(200).json({ success: true, equippedTitle: user.equippedTitle });
     }
 
     if (!TITLE_CATALOG[titleId]) {
-      return next(createError('Titre inconnu.', 400));
+      return next(createError("Ce titre n'existe pas.", 400));
     }
 
     const user = await User.findById(req.user.id);
-    if (!user) return next(createError('Utilisateur introuvable.', 404));
+    if (!user) return next(createError('Ce compte est introuvable.', 404));
 
     if (!user.unlockedTitles.includes(titleId)) {
       return next(createError("Ce titre n'est pas encore débloqué.", 403));

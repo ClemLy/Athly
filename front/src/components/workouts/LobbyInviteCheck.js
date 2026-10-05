@@ -24,7 +24,7 @@ export default function LobbyInviteCheck() {
     joiningRef.current = true;
     try { await joinLobby(lobbyId); } catch (_) {}
     joiningRef.current = false;
-    navigate('Séances', { screen: 'WorkoutList', params: { pendingLobbyId: lobbyId } });
+    navigate('Main', { screen: 'Séances', params: { screen: 'WorkoutList', params: { pendingLobbyId: lobbyId } } });
   }, []);
 
   useEffect(() => {

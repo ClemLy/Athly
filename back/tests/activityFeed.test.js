@@ -189,6 +189,31 @@ describe("Flux d'activité « Taquineries & High-Fives » — Section IV", () =>
       expect(reactRes.statusCode).toBe(400);
     });
 
+    it("❌ 404 si l'utilisateur ne fait pas partie du groupe de l'événement (pas de push forgé)", async () => {
+      const outsider = await createAndLoginUser('IntrusActivity', 'intrus.activity@athly.fr');
+
+      const workoutRes = await request(app)
+        .post('/api/workouts')
+        .set('Authorization', `Bearer ${alice.token}`)
+        .send({ titre: 'Séance', categorie: 'Push' });
+
+      await request(app)
+        .post('/api/exercises/')
+        .set('Authorization', `Bearer ${alice.token}`)
+        .send({ workout: workoutRes.body.workout._id, exerciceNom: 'Dips', series: [{ repetitions: 8, poids: 30 }] });
+
+      const event = await ActivityEvent.findOne({ type: 'pr_broken', 'payload.exercise': 'Dips' });
+
+      const reactRes = await request(app)
+        .post(`/api/activity/${event._id}/react`)
+        .set('Authorization', `Bearer ${outsider.token}`)
+        .send({ emoji: 'boo' });
+
+      expect(reactRes.statusCode).toBe(404);
+      const fresh = await ActivityEvent.findById(event._id);
+      expect(fresh.reactions.length).toBe(0);
+    });
+
     it("❌ Refusé avec 401 sans token", async () => {
       const res = await request(app).get('/api/activity/feed');
       expect(res.statusCode).toBe(401);

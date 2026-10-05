@@ -45,7 +45,7 @@ const allowedOrigins = (process.env.CORS_ORIGINS || "")
   .filter(Boolean);
 
 if (allowedOrigins.length === 0 && config.nodeEnv === "production") {
-  console.warn("⚠️  CORS_ORIGINS non définie : CORS permissif en production.");
+  console.warn("[CORS] CORS_ORIGINS non définie : CORS permissif en production.");
 }
 
 app.use(cors(
@@ -53,15 +53,22 @@ app.use(cors(
     ? {
         origin: (origin, callback) => {
           if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-          return callback(new Error("Origine non autorisée par la politique CORS."));
+          const err = new Error("Origine non autorisée par la politique CORS.");
+          err.code = "CORS_FORBIDDEN";
+          return callback(err);
         },
+        // Le front n'utilise que l'en-tête Authorization (pas de cookie) :
+        // inutile d'autoriser l'envoi de credentials cross-origin.
+        credentials: false,
+        maxAge: 600,
       }
     : {}
 ));
 
 // --- Parsing avec limite de payload (anti-DoS par gros body) ---
-app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+// 512 ko suffisent largement à la plus grosse séance (50 exercices x 50 séries).
+// Pas de parseur urlencoded : l'API ne reçoit que du JSON.
+app.use(express.json({ limit: "512kb" }));
 
 // --- Assainissement anti-injection NoSQL (après parsing, avant les routes) ---
 app.use(sanitizeMiddleware);
@@ -82,9 +89,9 @@ app.use("/api", (req, res, next) => {
 app.use("/api", globalLimiter);
 app.use("/api/auth", authLimiter);
 
-// Route de santé pour le CI/CD
+// Route de santé pour le CI/CD et le monitoring (n'expose aucune info interne)
 app.get("/health", (req, res) => {
-    res.status(200).json({ status: "OK", uptime: process.uptime() });
+  res.status(200).json({ status: "OK" });
 });
 
 // --- Routes ---

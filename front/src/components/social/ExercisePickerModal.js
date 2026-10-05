@@ -63,7 +63,7 @@ export default function ExercisePickerModal({ visible, value, onSelect, onClose 
 
           <View style={styles.header}>
             <Text style={styles.title}>Choisir un exercice</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button" onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Ionicons name="close" size={22} color={Colors.textMuted} />
             </TouchableOpacity>
           </View>
@@ -94,7 +94,7 @@ export default function ExercisePickerModal({ visible, value, onSelect, onClose 
                 {section.exercises.map((ex) => {
                   const active = ex.name === value;
                   return (
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       key={ex.name}
                       style={[styles.row, active && styles.rowActive]}
                       onPress={() => handleSelect(ex.name)}

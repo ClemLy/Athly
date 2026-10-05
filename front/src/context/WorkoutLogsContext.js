@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { AppState } from 'react-native';
 import { listLogs, addLog, removeLog, totalCumulativeXP, addRitualLog, addBonusXpLog } from '../services';
 import { syncXp, retryPendingXpSync } from '../services';
+import { getErrorMessage } from '../utils/errorMessages';
 
 // Context global pour l'historique des séances finalisées (logs).
 // Source de vérité unique pour StatsScreen, ExerciseStatsScreen, ProfileScreen.
@@ -24,7 +25,7 @@ export function WorkoutLogsProvider({ children }) {
       // local vers le backend, fire-and-forget — voir xpSync.service.js.
       syncXp(totalCumulativeXP(list));
     } catch (e) {
-      setError(e && e.message ? e.message : 'Erreur de chargement');
+      setError(getErrorMessage(e, 'Tes données n\'ont pas pu être chargées.'));
     } finally {
       setLoading(false);
     }

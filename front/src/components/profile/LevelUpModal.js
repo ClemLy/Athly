@@ -65,7 +65,7 @@ export default function LevelUpModal({ visible, level, rank, onClose }) {
             Continue comme ça : chaque séance, chaque objet, chaque effort compte.
           </Text>
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[styles.closeBtn, { backgroundColor: color, shadowColor: color }]}
             onPress={onClose}
             activeOpacity={0.85}

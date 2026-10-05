@@ -22,6 +22,7 @@ import {
 import AddExerciseSheet from '../../components/workouts/AddExerciseSheet';
 import { useSavedWorkouts } from '../../context/SavedWorkoutsContext';
 import InfoModal from '../../components/common/InfoModal';
+import { getErrorMessage } from '../../utils/errorMessages';
 
 // Construction manuelle d'une séance.
 // L'utilisateur :
@@ -58,7 +59,7 @@ function ExerciseRow({ exercise, index, onRemove, onSetsChange, onRepsChange }) 
           </Text>
           {equipment ? <Text style={styles.exoEquip}>{equipment}</Text> : null}
         </View>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button"
           onPress={() => onRemove(index)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           style={styles.exoRemove}
@@ -71,7 +72,7 @@ function ExerciseRow({ exercise, index, onRemove, onSetsChange, onRepsChange }) 
         <View style={styles.targetField}>
           <Text style={styles.targetLabel}>Sets</Text>
           <View style={styles.stepper}>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityLabel="Retirer" accessibilityRole="button"
               style={styles.stepperBtn}
               onPress={() => onSetsChange(index, Math.max(1, setsCount - 1))}
               activeOpacity={0.7}
@@ -79,7 +80,7 @@ function ExerciseRow({ exercise, index, onRemove, onSetsChange, onRepsChange }) 
               <Ionicons name="remove" size={18} color={Colors.textPrimary} />
             </TouchableOpacity>
             <Text style={styles.stepperValue}>{setsCount}</Text>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityLabel="Ajouter" accessibilityRole="button"
               style={styles.stepperBtn}
               onPress={() => onSetsChange(index, Math.min(20, setsCount + 1))}
               activeOpacity={0.7}
@@ -202,7 +203,7 @@ export default function ManualWorkoutCreatorScreen({ navigation, route }) {
         });
       }
     } catch (e) {
-      setInfoModal({ title: 'Erreur', body: e && e.message ? e.message : 'Sauvegarde impossible' });
+      setInfoModal({ title: 'Enregistrement impossible', body: getErrorMessage(e, 'Tes modifications n\'ont pas pu être enregistrées. Réessaie dans un instant.') });
     } finally {
       setSaving(false);
     }
@@ -215,13 +216,13 @@ export default function ManualWorkoutCreatorScreen({ navigation, route }) {
   }, [infoModal, navigation]);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.header}>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button"
             onPress={() => navigation && navigation.goBack()}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
@@ -278,7 +279,7 @@ export default function ManualWorkoutCreatorScreen({ navigation, route }) {
               ))
             )}
 
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.addBtn}
               onPress={() => setSheetVisible(true)}
               activeOpacity={0.85}
@@ -292,7 +293,7 @@ export default function ManualWorkoutCreatorScreen({ navigation, route }) {
         </ScrollView>
 
         <View style={styles.footer}>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[styles.saveBtn, (saving || exercises.length === 0 || !name.trim()) && styles.saveBtnDisabled]}
             onPress={handleSave}
             disabled={saving || exercises.length === 0 || !name.trim()}

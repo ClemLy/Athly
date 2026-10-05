@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Colors } from '../../constants/theme';
 
@@ -14,7 +14,7 @@ const CELL_GAP = 3;
 
 // Palette d'intensités : du foncé neutre au orange plein.
 const INTENSITY_COLOR = {
-  0: '#161622',   // pas de séance — gris très sombre, distinct du fond
+  0: 'rgba(255,255,255,0.06)',   // pas de séance : case discrète mais visible sur la carte
   1: '#4D2718',   // léger
   2: '#85391E',
   3: '#C44C24',
@@ -27,6 +27,7 @@ function monthLabelFor(dateKey) {
 }
 
 export default function ActivityHeatmap({ heatmap = null }) {
+  const scrollRef = useRef(null);
   const cols = (heatmap && Array.isArray(heatmap.cols)) ? heatmap.cols : [];
   const totalDays = heatmap && heatmap.totalDaysWithWorkout ? heatmap.totalDaysWithWorkout : 0;
 
@@ -74,10 +75,15 @@ export default function ActivityHeatmap({ heatmap = null }) {
         </View>
       </View>
 
+      {/* Ouverte sur les semaines les plus récentes (à droite) : c'est là
+          que se trouve l'activité, l'historique se consulte en glissant. */}
       <ScrollView
+        ref={scrollRef}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+        accessibilityLabel={`Calendrier d'activité sur 12 mois : ${totalDays} jour${totalDays > 1 ? 's' : ''} d'entraînement`}
       >
         <View>
           {/* Étiquettes mois */}

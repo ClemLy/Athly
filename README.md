@@ -205,7 +205,8 @@ Le profil `production` dans `front/eas.json` pointe vers l'API déployée. Pour 
 ```bash
 cd front
 npm run build:web
-# expo export --platform web, puis copie du service worker
+# expo export --platform web : le dossier public/ (index.html, manifeste,
+# icônes, service worker) est copié tel quel dans dist/
 ```
 
 ---
@@ -249,7 +250,16 @@ Le workflow GitHub Actions (`.github/workflows/ci.yml`) exécute deux jobs indé
 | Base de données | MongoDB Atlas M0 | Gratuit |
 | Emails | Brevo SMTP | Tier gratuit à 300 emails par jour |
 | Application mobile | EAS Build | APK Android via `eas build --profile production` |
-| PWA | Build statique | `npm run build:web`, à héberger sur tout service de fichiers statiques |
+| PWA | Vercel | Root Directory `front`, configuration lue dans `front/vercel.json` |
+
+### Mettre la PWA en ligne sur Vercel
+
+1. Importer le dépôt dans Vercel et choisir `front` comme **Root Directory**. Le reste (installation, build, dossier `dist`, en-têtes de sécurité, redirections) est déjà décrit dans `front/vercel.json`.
+2. Dans **Settings > Environment Variables**, définir `API_URL` (ex. `https://athly-api.onrender.com/api`), et si besoin `SUPPORT_EMAIL` et les Client IDs Google.
+3. Côté Render, définir `NODE_ENV=production` et `CORS_ORIGINS` avec le domaine Vercel (ex. `https://athly.vercel.app`).
+4. Si l'API change de domaine, l'ajouter à la directive `connect-src` de la politique de sécurité dans `front/vercel.json`, sinon le navigateur bloquera les appels.
+
+Sur ordinateur, la PWA affiche une page d'installation avec un QR code ; sur téléphone et tablette, l'application elle-même.
 
 ---
 

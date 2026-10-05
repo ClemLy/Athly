@@ -7,6 +7,7 @@ import TrophyRoomScreen   from '../screens/Profile/TrophyRoomScreen';
 import SettingsScreen     from '../screens/Profile/SettingsScreen';
 import InventoryScreen    from '../screens/Profile/InventoryScreen';
 import { Colors } from '../constants/theme';
+import { screenTransition } from './transitions';
 
 const Stack = createStackNavigator();
 
@@ -29,7 +30,12 @@ export default function ProfileStack() {
           color: Colors.textPrimary,
         },
         headerBackTitleVisible: false,
-        headerShadowVisible: false,      // React Navigation v6 flat header
+        headerBackTitle: 'Retour',
+        headerBackAccessibilityLabel: 'Retour',
+        headerShadowVisible: false,
+        headerTitleAlign: 'center',
+        cardStyle: { backgroundColor: HEADER_BG },
+        ...screenTransition,
       }}
     >
       {/* ProfileMain gère son propre inset + fond — on cache le header natif */}

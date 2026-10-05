@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
-import { View, Text, Dimensions, Platform, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { PieChart } from 'react-native-chart-kit';
 import { Colors, MUSCLE_GROUP_COLORS } from '../../constants/theme';
 import { findMuscleGroup } from '../../constants/exerciseFilters';
+import { useChartWidth } from '../../hooks/useChartWidth';
 
 // Pie chart de la distribution musculaire (volume par groupe).
 // `distribution` : objet { groupId: kg }
@@ -25,9 +26,7 @@ export default function MuscleDistributionPieChart({ distribution = {}, height =
       });
   }, [distribution]);
 
-  const rawW = Dimensions.get('window').width;
-  const screenW = Platform.OS === 'web' ? Math.min(430, rawW) : rawW;
-  const chartW = Math.max(200, screenW - 104);
+  const chartW = useChartWidth(72, 200);
 
   if (data.length === 0) {
     return (

@@ -1,6 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { getToken, removeToken, saveToken, setSessionOnly, getSessionOnly } from '../utils/authStorage';
 import { setSignOutCallback, purgeApiCache } from '../api/api';
+import { activateAccountScope, userIdFromToken } from '../services/accountScope.service';
 
 const AuthContext = createContext();
 
@@ -16,7 +17,11 @@ export const AuthProvider = ({ children }) => {
           await removeToken();
         } else {
           const token = await getToken();
-          if (token) setUserToken(token);
+          if (token) {
+            // Données locales du bon compte AVANT le premier rendu des écrans
+            await activateAccountScope(userIdFromToken(token));
+            setUserToken(token);
+          }
         }
       } catch {
         // storage error — proceed unauthenticated
@@ -29,6 +34,8 @@ export const AuthProvider = ({ children }) => {
 
   // rememberMe: true → token persists across restarts; false → session only
   const signIn = async (token, rememberMe = true) => {
+    // Bascule sur les données locales de ce compte (voir accountScope.service.js)
+    await activateAccountScope(userIdFromToken(token));
     await saveToken(token);
     await setSessionOnly(!rememberMe);
     setUserToken(token);

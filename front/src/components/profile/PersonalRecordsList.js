@@ -60,7 +60,7 @@ function RecordRow({ record, isLast, onPress }) {
   const tone = MUSCLE_GROUP_COLORS[record.group] || Colors.secondaryAccent;
   const disabled = !record.hasData;
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       style={[styles.row, isLast && styles.rowLast]}
       onPress={onPress}
       activeOpacity={disabled ? 1 : 0.85}

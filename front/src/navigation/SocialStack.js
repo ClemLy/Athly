@@ -2,13 +2,21 @@ import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import SocialScreen        from '../screens/Social/SocialScreen';
 import FriendProfileScreen from '../screens/Social/FriendProfileScreen';
+import { Colors } from '../constants/theme';
+import { screenTransition } from './transitions';
 
 const Stack = createStackNavigator();
 
 // Les deux écrans gèrent leur propre header (fond abyss + chevron custom)
 export default function SocialStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        cardStyle: { backgroundColor: Colors.bgAbyss },
+        ...screenTransition,
+      }}
+    >
       <Stack.Screen name="SocialHub"     component={SocialScreen} />
       <Stack.Screen name="FriendProfile" component={FriendProfileScreen} />
     </Stack.Navigator>

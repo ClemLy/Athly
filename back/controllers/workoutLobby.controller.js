@@ -55,6 +55,23 @@ async function autoProgressBots(lobby, targetStatus) {
   });
 }
 
+/**
+ * Un lobby n'est rejoignable que par un ami accepté d'au moins un membre
+ * actuel (c'est le cercle que `inviteToLobby` peut atteindre). Sans ce
+ * contrôle, n'importe quel compte connaissant l'identifiant d'un lobby
+ * pouvait s'y inviter seul et voir le pseudo de ses membres.
+ */
+async function canJoinLobby(lobby, userId) {
+  const memberIds = lobby.members.map((m) => m.user);
+  return Friendship.exists({
+    status: 'accepted',
+    $or: [
+      { requester: userId, recipient: { $in: memberIds } },
+      { recipient: userId, requester: { $in: memberIds } },
+    ],
+  });
+}
+
 function serializeLobby(lobby) {
   const plain = lobby.toObject();
   return {
@@ -106,14 +123,14 @@ exports.createLobby = async (req, res, next) => {
 exports.getLobby = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!isValidId(id)) return next(createError('id de lobby invalide.', 400));
+    if (!isValidId(id)) return next(createError("Cette séance Multi n'existe plus.", 400));
 
     const lobby = await WorkoutLobby.findById(id);
-    if (!lobby) return next(createError('Lobby introuvable.', 404));
+    if (!lobby) return next(createError("Cette séance Multi n'existe plus.", 404));
 
     const myId = req.user.id;
     if (!lobby.members.some((m) => m.user.toString() === myId)) {
-      return next(createError('Vous ne faites pas partie de ce lobby.', 403));
+      return next(createError("Tu ne fais pas partie de cette séance Multi.", 403));
     }
 
     await populateLobby(lobby);
@@ -141,20 +158,20 @@ exports.inviteToLobby = async (req, res, next) => {
     const { id } = req.params;
     const { friendId } = req.body;
 
-    if (!isValidId(id)) return next(createError('id de lobby invalide.', 400));
-    if (!friendId || !isValidId(friendId)) return next(createError('friendId manquant ou invalide.', 400));
+    if (!isValidId(id)) return next(createError("Cette séance Multi n'existe plus.", 400));
+    if (!friendId || !isValidId(friendId)) return next(createError("Choisis un ami à inviter.", 400));
 
     const lobby = await WorkoutLobby.findById(id);
-    if (!lobby) return next(createError('Lobby introuvable.', 404));
+    if (!lobby) return next(createError("Cette séance Multi n'existe plus.", 404));
 
     if (!lobby.members.some((m) => m.user.toString() === myId)) {
-      return next(createError('Vous ne faites pas partie de ce lobby.', 403));
+      return next(createError("Tu ne fais pas partie de cette séance Multi.", 403));
     }
     if (lobby.status !== 'waiting') {
-      return next(createError("Ce lobby n'accepte plus de nouveaux membres.", 422));
+      return next(createError("Cette séance Multi a déjà commencé.", 422));
     }
     if (lobby.memberCount >= MAX_MEMBERS) {
-      return next(createError('Le lobby est déjà complet (5 max).', 422));
+      return next(createError("Cette séance Multi est complète (5 participants maximum).", 422));
     }
 
     const isFriend = await Friendship.exists({
@@ -163,13 +180,13 @@ exports.inviteToLobby = async (req, res, next) => {
         { requester: friendId, recipient: myId, status: 'accepted' },
       ],
     });
-    if (!isFriend) return next(createError("Vous ne pouvez inviter qu'un ami accepté.", 403));
+    if (!isFriend) return next(createError("Tu ne peux inviter que tes amis.", 403));
 
     const [me, friend] = await Promise.all([
       User.findById(myId).select('pseudo'),
       User.findById(friendId).select('pseudo'),
     ]);
-    if (!friend) return next(createError('Utilisateur introuvable.', 404));
+    if (!friend) return next(createError('Ce compte est introuvable.', 404));
 
     await sendPushToUser(friendId, {
       title: 'Invitation Multi',
@@ -195,19 +212,22 @@ exports.joinLobby = async (req, res, next) => {
   try {
     const myId = req.user.id;
     const { id } = req.params;
-    if (!isValidId(id)) return next(createError('id de lobby invalide.', 400));
+    if (!isValidId(id)) return next(createError("Cette séance Multi n'existe plus.", 400));
 
     const lobby = await WorkoutLobby.findById(id);
-    if (!lobby) return next(createError('Lobby introuvable.', 404));
+    if (!lobby) return next(createError("Cette séance Multi n'existe plus.", 404));
 
     if (lobby.status !== 'waiting') {
-      return next(createError("Ce lobby n'accepte plus de nouveaux membres.", 422));
+      return next(createError("Cette séance Multi a déjà commencé.", 422));
     }
 
     const alreadyMember = lobby.members.some((m) => m.user.toString() === myId);
     if (!alreadyMember) {
+      if (!(await canJoinLobby(lobby, myId))) {
+        return next(createError("Cette séance Multi est réservée aux amis de ses participants.", 403));
+      }
       if (lobby.memberCount >= MAX_MEMBERS) {
-        return next(createError('Le lobby est déjà complet (5 max).', 422));
+        return next(createError("Cette séance Multi est complète (5 participants maximum).", 422));
       }
       lobby.members.push({ user: myId, status: 'waiting' });
       lobby.memberCount = lobby.members.length;
@@ -234,19 +254,22 @@ exports.readyLobby = async (req, res, next) => {
   try {
     const myId = req.user.id;
     const { id } = req.params;
-    if (!isValidId(id)) return next(createError('id de lobby invalide.', 400));
+    if (!isValidId(id)) return next(createError("Cette séance Multi n'existe plus.", 400));
 
     const lobby = await WorkoutLobby.findById(id);
-    if (!lobby) return next(createError('Lobby introuvable.', 404));
+    if (!lobby) return next(createError("Cette séance Multi n'existe plus.", 404));
 
     if (lobby.status !== 'waiting') {
-      return next(createError(`Impossible de se déclarer prêt : le lobby est au statut "${lobby.status}".`, 422));
+      return next(createError("Cette séance Multi a déjà commencé.", 422));
     }
 
     let member = lobby.members.find((m) => m.user.toString() === myId);
     if (!member) {
+      if (!(await canJoinLobby(lobby, myId))) {
+        return next(createError("Cette séance Multi est réservée aux amis de ses participants.", 403));
+      }
       if (lobby.memberCount >= MAX_MEMBERS) {
-        return next(createError('Le lobby est déjà complet (5 max).', 422));
+        return next(createError("Cette séance Multi est complète (5 participants maximum).", 422));
       }
       lobby.members.push({ user: myId, status: 'ready' });
       lobby.memberCount = lobby.members.length;
@@ -288,18 +311,18 @@ exports.unreadyLobby = async (req, res, next) => {
   try {
     const myId = req.user.id;
     const { id } = req.params;
-    if (!isValidId(id)) return next(createError('id de lobby invalide.', 400));
+    if (!isValidId(id)) return next(createError("Cette séance Multi n'existe plus.", 400));
 
     const lobby = await WorkoutLobby.findById(id);
-    if (!lobby) return next(createError('Lobby introuvable.', 404));
+    if (!lobby) return next(createError("Cette séance Multi n'existe plus.", 404));
 
     if (lobby.status !== 'waiting') {
-      return next(createError(`Impossible d'annuler : le lobby est au statut "${lobby.status}".`, 422));
+      return next(createError("Cette séance Multi a déjà commencé.", 422));
     }
 
     const member = lobby.members.find((m) => m.user.toString() === myId);
     if (!member) {
-      return next(createError('Vous ne faites pas partie de ce lobby.', 403));
+      return next(createError("Tu ne fais pas partie de cette séance Multi.", 403));
     }
 
     member.status = 'waiting';
@@ -326,36 +349,50 @@ exports.finishLobby = async (req, res, next) => {
   try {
     const myId = req.user.id;
     const { id } = req.params;
-    if (!isValidId(id)) return next(createError('id de lobby invalide.', 400));
+    if (!isValidId(id)) return next(createError("Cette séance Multi n'existe plus.", 400));
 
-    const lobby = await WorkoutLobby.findById(id);
-    if (!lobby) return next(createError('Lobby introuvable.', 404));
+    let lobby = await WorkoutLobby.findById(id);
+    if (!lobby) return next(createError("Cette séance Multi n'existe plus.", 404));
 
     if (lobby.status !== 'active') {
-      return next(createError(`Impossible de terminer : le lobby est au statut "${lobby.status}".`, 422));
+      return next(createError("Cette séance Multi n'est pas en cours.", 422));
     }
 
     const member = lobby.members.find((m) => m.user.toString() === myId);
     if (!member) {
-      return next(createError('Vous ne faites pas partie de ce lobby.', 403));
+      return next(createError("Tu ne fais pas partie de cette séance Multi.", 403));
     }
 
-    member.status = 'finished';
+    // Écriture atomique du statut du membre (positionnel) : deux membres qui
+    // terminent au même instant ne s'écrasent plus mutuellement (avant, le
+    // dernier save() pouvait laisser le lobby bloqué en 'active').
+    await WorkoutLobby.updateOne(
+      { _id: lobby._id, status: 'active', 'members.user': myId },
+      { $set: { 'members.$.status': 'finished' } },
+    );
 
     // Coéquipiers de test God Mode : ils terminent en même temps que vous.
-    await autoProgressBots(lobby, 'finished');
-
-    const allFinished = lobby.members.every((m) => m.status === 'finished');
-    if (allFinished) {
-      lobby.status = 'completed';
-      lobby.xpBonusPercent = computeMultiBonusPercent(lobby.memberCount);
+    const botIds = (await User.find({ _id: { $in: lobby.members.map((m) => m.user) }, isTestBot: true }).select('_id'))
+      .map((b) => b._id);
+    if (botIds.length > 0) {
+      await WorkoutLobby.updateOne(
+        { _id: lobby._id },
+        { $set: { 'members.$[bot].status': 'finished' } },
+        { arrayFilters: [{ 'bot.user': { $in: botIds } }] },
+      );
     }
 
-    // Persiste AVANT de vérifier les trophées : checkAndUnlockAchievements
-    // interroge WorkoutLobby en base (status: 'completed') — s'il tournait
-    // avant ce save(), il verrait encore l'ancien statut 'active' et ne
-    // débloquerait jamais rien.
-    await lobby.save();
+    // Clôture : un seul appel peut faire passer le lobby de 'active' à
+    // 'completed' (filtre conditionnel), donc les compteurs et trophées ne
+    // sont distribués qu'une fois. Persisté AVANT la vérification des trophées :
+    // checkAndUnlockAchievements interroge WorkoutLobby en base (status 'completed').
+    const closed = await WorkoutLobby.findOneAndUpdate(
+      { _id: lobby._id, status: 'active', members: { $not: { $elemMatch: { status: { $ne: 'finished' } } } } },
+      { $set: { status: 'completed', xpBonusPercent: computeMultiBonusPercent(lobby.memberCount) } },
+      { returnDocument: 'after' },
+    );
+    const allFinished = Boolean(closed);
+    lobby = closed || (await WorkoutLobby.findById(lobby._id));
 
     let newlyUnlockedByUser = {};
     let newlyUnlockedTitlesByUser = {};

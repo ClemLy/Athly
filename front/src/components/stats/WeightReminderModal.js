@@ -30,12 +30,12 @@ export default function WeightReminderModal({ visible, onEnter, onLater }) {
             Tiens, tu n'as pas encore entré ton poids cette semaine ! Rentre-le pour garder un suivi au top.
           </Text>
 
-          <TouchableOpacity style={styles.enterBtn} onPress={onEnter} activeOpacity={0.85}>
+          <TouchableOpacity accessibilityRole="button" style={styles.enterBtn} onPress={onEnter} activeOpacity={0.85}>
             <Ionicons name="scale-outline" size={16} color="#fff" style={{ marginRight: 8 }} />
             <Text style={styles.enterBtnTxt}>Entrer mon poids</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.laterBtn} onPress={onLater} activeOpacity={0.75}>
+          <TouchableOpacity accessibilityRole="button" style={styles.laterBtn} onPress={onLater} activeOpacity={0.75}>
             <Text style={styles.laterTxt}>Plus tard</Text>
           </TouchableOpacity>
         </View>

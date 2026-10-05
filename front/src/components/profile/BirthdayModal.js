@@ -66,7 +66,7 @@ export default function BirthdayModal({ visible, pseudo, rewarded, chestKeyAdded
               <Text style={styles.body}>
                 Toute l'équipe Athly te souhaite une excellente année. Un cadeau t'attend juste en dessous...
               </Text>
-              <TouchableOpacity style={styles.openBtn} onPress={handleOpenGift} activeOpacity={0.85}>
+              <TouchableOpacity accessibilityRole="button" style={styles.openBtn} onPress={handleOpenGift} activeOpacity={0.85}>
                 <Ionicons name="gift-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
                 <Text style={styles.openBtnTxt}>Ouvrir mon cadeau</Text>
               </TouchableOpacity>
@@ -96,7 +96,7 @@ export default function BirthdayModal({ visible, pseudo, rewarded, chestKeyAdded
                 </Animated.View>
               )}
 
-              <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.85}>
+              <TouchableOpacity accessibilityRole="button" style={styles.closeBtn} onPress={onClose} activeOpacity={0.85}>
                 <Text style={styles.closeBtnTxt}>Merci Athly !</Text>
               </TouchableOpacity>
             </>

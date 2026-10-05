@@ -26,7 +26,7 @@ export default function EmptyHomeState({ onStart, onBrowseTemplates }) {
         <Text style={styles.subtitle}>
           Lance ta première séance pour débloquer ton tableau de bord.
         </Text>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={styles.cta}
           onPress={onStart}
           activeOpacity={0.85}
@@ -52,7 +52,7 @@ export default function EmptyHomeState({ onStart, onBrowseTemplates }) {
       </View>
 
       {onBrowseTemplates ? (
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={styles.secondaryLink}
           onPress={onBrowseTemplates}
           activeOpacity={0.85}

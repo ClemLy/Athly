@@ -24,6 +24,8 @@ import { useToast } from '../../context/ToastContext';
 import { generateWorkout } from '../../data/exerciseCatalog';
 import InfoModal from '../../components/common/InfoModal';
 import SaveWorkoutPromptModal from '../../components/workouts/SaveWorkoutPromptModal';
+import { getErrorMessage } from '../../utils/errorMessages';
+import { plural } from '../../utils/format';
 
 const DURATIONS = [
   { id: 30, label: '30 min' },
@@ -134,15 +136,15 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
         await removeSavedWorkout(savedWorkoutId);
         setSavedWorkoutId(null);
         setEditingId(null);
-        showToast('Retirée de tes séances', 'success');
+        showToast('Séance retirée de ta liste.', 'success');
       } else {
         const item = await persistCurrentPreview();
         setSavedWorkoutId(item.id);
         setEditingId(item.id);
-        showToast('Séance sauvegardée', 'success');
+        showToast('Séance enregistrée.', 'success');
       }
     } catch (e) {
-      setInfoModal({ title: 'Erreur', body: e && e.message ? e.message : 'Action impossible' });
+      setInfoModal({ title: 'Action impossible', body: getErrorMessage(e, 'L\'opération n\'a pas abouti. Réessaie dans un instant.') });
     } finally {
       setSaving(false);
     }
@@ -159,7 +161,7 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
       // La séance se lance quand même : un échec de sauvegarde ne doit jamais
       // empêcher l'entraînement. On informe juste via un toast non bloquant
       // (l'utilisateur pourra retenter avec le bouton "Sauver" dédié).
-      showToast(e && e.message ? e.message : 'Sauvegarde impossible, séance lancée sans template.', 'error');
+      showToast(getErrorMessage(e, 'Le modèle n\'a pas pu être enregistré, mais ta séance est lancée.'), 'error');
     } finally {
       setSaving(false);
       setSavePromptVisible(false);
@@ -179,9 +181,9 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
   const totalSelectedCount = subMuscles.length;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button"
           onPress={() => navigation && navigation.goBack()}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
@@ -267,13 +269,13 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
               <Text style={styles.previewTitle}>Aperçu</Text>
               {preview ? (
                 <Text style={styles.previewCount}>
-                  {preview.exercises.length} exercices • ~{duration} min
+                  {plural(preview.exercises.length, 'exercice')} • ~{duration} min
                 </Text>
               ) : null}
             </View>
             {preview && preview.exercises.length > 0 ? (
               <View style={styles.previewActions}>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   onPress={onToggleSave}
                   style={[
                     styles.previewActionBtn,
@@ -290,10 +292,10 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
                     color={savedWorkoutId ? '#fff' : Colors.primary}
                   />
                   <Text style={[styles.previewActionText, savedWorkoutId && styles.previewActionTextSaved]}>
-                    {saving ? '...' : savedWorkoutId ? 'Sauvée' : 'Sauver'}
+                    {saving ? 'Envoi…' : savedWorkoutId ? 'Enregistrée' : 'Enregistrer'}
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   onPress={onRegenerate}
                   style={styles.previewActionBtn}
                   activeOpacity={0.85}
@@ -344,7 +346,7 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
       </ScrollView>
 
       <View style={styles.footer}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.launchBtn, (!preview || preview.exercises.length === 0) && styles.launchBtnDisabled]}
           onPress={onLaunch}
           disabled={!preview || preview.exercises.length === 0}

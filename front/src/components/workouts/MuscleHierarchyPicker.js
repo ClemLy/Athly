@@ -58,7 +58,7 @@ function GroupRow({ group, expanded, onToggleExpand, mode, selected, onChange, e
 
   return (
     <View style={[styles.groupCard, hasSelection && styles.groupCardActive]}>
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         style={styles.groupHeader}
         onPress={onToggleExpand}
         activeOpacity={0.85}
@@ -87,7 +87,7 @@ function GroupRow({ group, expanded, onToggleExpand, mode, selected, onChange, e
         <View style={styles.groupBody}>
           {showSelectAll && isMulti ? (
             <View style={styles.groupActions}>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.groupActionBtn}
                 onPress={allSelected ? clearAll : selectAll}
                 activeOpacity={0.8}

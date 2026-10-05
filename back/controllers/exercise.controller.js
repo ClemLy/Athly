@@ -11,7 +11,7 @@ exports.addRecord = async (req, res, next) => {
     
     res.status(201).json({ 
       success: true, 
-      message: "Performance enregistrée !", 
+      message: "Performance enregistrée.", 
       record 
     });
   } catch (error) {
@@ -77,7 +77,7 @@ exports.getExerciseLeaderboard = async (req, res, next) => {
     const exercise = typeof req.query.exercise === "string" ? req.query.exercise.trim() : "";
 
     if (exercise.length < 2) {
-      const err = new Error("Le paramètre 'exercise' est obligatoire (2 caractères minimum).");
+      const err = new Error("Choisis un exercice pour voir le classement.");
       err.statusCode = 400;
       return next(err);
     }

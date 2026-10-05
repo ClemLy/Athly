@@ -13,14 +13,14 @@ const ACHIEVEMENT_CATALOG = {
   BIRTHDAY_SET: {
     id:          'BIRTHDAY_SET',
     name:        "Né(e) pour Athly",
-    description: "Vous avez renseigné votre date de naissance.",
+    description: "Tu as renseigné ta date de naissance.",
     category:    'profile',
     hidden:      true,
   },
   BIRTHDAY_CELEBRATED: {
     id:          'BIRTHDAY_CELEBRATED',
     name:        'Fêter son anniversaire',
-    description: "Vous avez réclamé votre cadeau d'anniversaire sur Athly.",
+    description: "Tu as réclamé ton cadeau d'anniversaire sur Athly.",
     category:    'profile',
     hidden:      false,
   },
@@ -29,35 +29,35 @@ const ACHIEVEMENT_CATALOG = {
   FIRST_COMMON_ITEM: {
     id:          'FIRST_COMMON_ITEM',
     name:        'Premier Butin',
-    description: "Vous avez obtenu votre premier objet Commun.",
+    description: "Tu as obtenu ton premier objet Commun.",
     category:    'collection',
     hidden:      false,
   },
   FIRST_RARE_ITEM: {
     id:          'FIRST_RARE_ITEM',
     name:        'Chasseur de Raretés',
-    description: "Vous avez obtenu votre premier objet Rare.",
+    description: "Tu as obtenu ton premier objet Rare.",
     category:    'collection',
     hidden:      false,
   },
   FIRST_EPIC_ITEM: {
     id:          'FIRST_EPIC_ITEM',
     name:        'Touche Épique',
-    description: "Vous avez obtenu votre premier objet Épique.",
+    description: "Tu as obtenu ton premier objet Épique.",
     category:    'collection',
     hidden:      false,
   },
   FIRST_LEGENDARY_ITEM: {
     id:          'FIRST_LEGENDARY_ITEM',
     name:        'Légende Vivante',
-    description: "Vous avez obtenu votre premier objet Légendaire.",
+    description: "Tu as obtenu ton premier objet Légendaire.",
     category:    'collection',
     hidden:      false,
   },
   FIRST_UNIQUE_ITEM: {
     id:          'FIRST_UNIQUE_ITEM',
     name:        'ATHLY UNIQUE',
-    description: "Vous avez obtenu votre premier objet Unique.",
+    description: "Tu as obtenu ton premier objet Unique.",
     category:    'collection',
     hidden:      false,
   },
@@ -66,35 +66,35 @@ const ACHIEVEMENT_CATALOG = {
   CHEST_1: {
     id:          'CHEST_1',
     name:        'Premier Trésor',
-    description: 'Vous avez ouvert votre premier coffre.',
+    description: 'Tu as ouvert ton premier coffre.',
     category:    'collection',
     hidden:      false,
   },
   CHEST_10: {
     id:          'CHEST_10',
     name:        'Chasseur de Coffres',
-    description: 'Vous avez ouvert 10 coffres.',
+    description: 'Tu as ouvert 10 coffres.',
     category:    'collection',
     hidden:      false,
   },
   CHEST_50: {
     id:          'CHEST_50',
     name:        'Pilleur Aguerri',
-    description: 'Vous avez ouvert 50 coffres.',
+    description: 'Tu as ouvert 50 coffres.',
     category:    'collection',
     hidden:      false,
   },
   CHEST_100: {
     id:          'CHEST_100',
     name:        'Maître du Butin',
-    description: 'Vous avez ouvert 100 coffres.',
+    description: 'Tu as ouvert 100 coffres.',
     category:    'collection',
     hidden:      false,
   },
   CHEST_200: {
     id:          'CHEST_200',
     name:        'Seigneur des Coffres',
-    description: 'Vous avez ouvert 200 coffres.',
+    description: 'Tu as ouvert 200 coffres.',
     category:    'collection',
     hidden:      false,
   },
@@ -103,14 +103,14 @@ const ACHIEVEMENT_CATALOG = {
   FIRST_REFERRAL: {
     id:          'FIRST_REFERRAL',
     name:        'Recruteur Athly',
-    description: "Vous avez parrainé votre premier ami.",
+    description: "Tu as parrainé ton premier ami.",
     category:    'social',
     hidden:      false,
   },
   FRIENDSHIP_LEVEL_5: {
     id:          'FRIENDSHIP_LEVEL_5',
     name:        'Lien de Sang',
-    description: "Vous avez atteint le niveau d'amitié maximum (5) avec un ami.",
+    description: "Tu as atteint le niveau d'amitié maximum (5) avec un ami.",
     category:    'social',
     hidden:      false,
   },
@@ -119,28 +119,28 @@ const ACHIEVEMENT_CATALOG = {
   FIRST_MULTI_SESSION: {
     id:          'FIRST_MULTI_SESSION',
     name:        'Duo de Choc',
-    description: "Vous avez terminé votre première séance en Multi.",
+    description: "Tu as terminé ta première séance en Multi.",
     category:    'social',
     hidden:      false,
   },
   MULTI_SQUAD_FULL: {
     id:          'MULTI_SQUAD_FULL',
     name:        'Escouade Complète',
-    description: "Vous avez terminé une séance en Multi à 5 athlètes.",
+    description: "Tu as terminé une séance en Multi à 5 athlètes.",
     category:    'social',
     hidden:      false,
   },
   MULTI_SESSIONS_5: {
     id:          'MULTI_SESSIONS_5',
     name:        'Entraînement en Duo',
-    description: "Vous avez terminé 5 séances en mode Multi.",
+    description: "Tu as terminé 5 séances en mode Multi.",
     category:    'social',
     hidden:      false,
   },
   MULTI_SESSIONS_30: {
     id:          'MULTI_SESSIONS_30',
     name:        "Frères d'Armes",
-    description: "Vous avez terminé 30 séances en mode Multi.",
+    description: "Tu as terminé 30 séances en mode Multi.",
     category:    'social',
     hidden:      false,
   },
@@ -149,14 +149,14 @@ const ACHIEVEMENT_CATALOG = {
   TITLE_FIRST: {
     id:          'TITLE_FIRST',
     name:        'Nouvelle Identité',
-    description: "Vous avez débloqué votre premier titre.",
+    description: "Tu as débloqué ton premier titre.",
     category:    'social',
     hidden:      false,
   },
   TITLE_COLLECTOR_5: {
     id:          'TITLE_COLLECTOR_5',
     name:        'Homme aux Mille Visages',
-    description: "Vous avez débloqué 5 titres différents.",
+    description: "Tu as débloqué 5 titres différents.",
     category:    'social',
     hidden:      false,
   },
@@ -337,22 +337,22 @@ exports.setBirthdate = async (req, res, next) => {
     const myId        = req.user.id;
     const { birthdate } = req.body;
 
-    if (!birthdate) return next(createError('Le champ birthdate est obligatoire.', 400));
+    if (!birthdate) return next(createError("Indique ta date de naissance.", 400));
 
     const dateObj = new Date(birthdate);
     if (isNaN(dateObj.getTime())) {
-      return next(createError('Format de date invalide. Utilisez ISO 8601 (ex: 1995-03-15).', 400));
+      return next(createError("Cette date n'est pas valide.", 400));
     }
     if (dateObj >= new Date()) {
-      return next(createError("La date de naissance doit être dans le passé.", 400));
+      return next(createError("Ta date de naissance doit être dans le passé.", 400));
     }
 
     const user = await User.findById(myId);
-    if (!user) return next(createError('Utilisateur introuvable.', 404));
+    if (!user) return next(createError('Ce compte est introuvable.', 404));
 
     // ── Garde anti-triche ──────────────────────────────────────────────────
     if (user.isBirthdateSet) {
-      return next(createError("La date de naissance ne peut être modifiée qu'une seule fois.", 403));
+      return next(createError("Ta date de naissance est déjà enregistrée et ne peut plus être modifiée.", 403));
     }
 
     // Enregistrement
@@ -403,7 +403,7 @@ exports.setBirthdate = async (req, res, next) => {
 exports.checkBirthday = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id);
-    if (!user) return next(createError('Utilisateur introuvable.', 404));
+    if (!user) return next(createError('Ce compte est introuvable.', 404));
 
     if (!user.isBirthdateSet || !user.birthdate) {
       return res.status(200).json({ success: true, isBirthday: false, rewarded: false });
@@ -466,7 +466,7 @@ exports.getUserAchievements = async (req, res, next) => {
   try {
     const myId = req.user.id;
     const user = await User.findById(myId).select('achievements');
-    if (!user) return next(createError('Utilisateur introuvable.', 404));
+    if (!user) return next(createError('Ce compte est introuvable.', 404));
 
     // Index rapide : achievementId → unlockedAt
     const unlockedMap = new Map(
@@ -554,11 +554,11 @@ exports.syncLocalAchievements = async (req, res, next) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids)) {
-      return next(createError('ids doit être un tableau.', 400));
+      return next(createError("Synchronisation des trophées impossible. Réessaie plus tard.", 400));
     }
 
     const user = await User.findById(req.user.id).select('achievements');
-    if (!user) return next(createError('Utilisateur introuvable.', 404));
+    if (!user) return next(createError('Ce compte est introuvable.', 404));
 
     const alreadyUnlocked = new Set(user.achievements.map((a) => a.achievementId));
     const validIds  = ids.filter((id) => typeof id === 'string' && LOCAL_TROPHY_IDS.has(id));

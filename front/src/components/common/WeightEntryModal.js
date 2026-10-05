@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ActivityInd
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { logWeight } from '../../services/weight.service';
+import { getErrorMessage } from '../../utils/errorMessages';
 
 // ─── WeightEntryModal ─────────────────────────────────────────────────────────
 // Saisie rapide d'une pesée (Section VI) — modale custom partagée entre
@@ -26,7 +27,7 @@ export default function WeightEntryModal({ visible, onClose, onSaved }) {
   const handleSave = async () => {
     const weight = parseFloat(value.replace(',', '.'));
     if (!value || isNaN(weight) || weight < 20 || weight > 400) {
-      setError('Entre un poids valide (20–400 kg).');
+      setError('Entre un poids entre 20 et 400 kg.');
       return;
     }
     setSaving(true);
@@ -36,7 +37,7 @@ export default function WeightEntryModal({ visible, onClose, onSaved }) {
       onSaved?.(weight);
       onClose?.();
     } catch (e) {
-      setError(e?.data?.message || 'Impossible d\'enregistrer ta pesée.');
+      setError(getErrorMessage(e, 'Impossible d\'enregistrer ta pesée.'));
     } finally {
       setSaving(false);
     }
@@ -68,7 +69,7 @@ export default function WeightEntryModal({ visible, onClose, onSaved }) {
           </View>
           {!!error && <Text style={styles.error}>{error}</Text>}
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
             onPress={handleSave}
             disabled={saving}
@@ -79,7 +80,7 @@ export default function WeightEntryModal({ visible, onClose, onSaved }) {
               : <Text style={styles.saveBtnTxt}>Enregistrer</Text>}
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.cancelBtn} onPress={onClose} activeOpacity={0.75}>
+          <TouchableOpacity accessibilityRole="button" style={styles.cancelBtn} onPress={onClose} activeOpacity={0.75}>
             <Text style={styles.cancelTxt}>Annuler</Text>
           </TouchableOpacity>
         </View>

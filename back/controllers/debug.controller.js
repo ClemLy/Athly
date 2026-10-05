@@ -52,7 +52,7 @@ exports.syncLevel = async (req, res, next) => {
     const user = await User.findByIdAndUpdate(
       req.user.id,
       { $set: { level: target, xp, rank } },
-      { new: true },
+      { returnDocument: 'after' },
     ).select('level xp rank');
 
     if (!user) return next(createError('Utilisateur introuvable.', 404));
@@ -303,7 +303,7 @@ exports.simulateBirthday = async (req, res, next) => {
           lastBirthdayRewardedYear: now.getUTCFullYear(),
         },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!user) return next(createError('Utilisateur introuvable.', 404));
 
@@ -720,7 +720,7 @@ exports.simulateShakeSelf = async (req, res, next) => {
 
     const trollMessage = SHAKE_TROLL_MESSAGES[Math.floor(Math.random() * SHAKE_TROLL_MESSAGES.length)];
     const pushed = await sendPushToUser(req.user.id, {
-      title: 'Athly (Test) t\'a secoué ! 🚨',
+      title: 'Athly (Test) t\'a secoué !',
       body:  trollMessage,
       data:  { type: 'shake', test: true },
     });
@@ -829,6 +829,7 @@ exports.simulateLobbyInvite = async (req, res, next) => {
     const previousIds = previousBots.map((u) => u._id);
     if (previousIds.length > 0) {
       await WorkoutLobby.deleteMany({ 'members.user': { $in: previousIds } });
+      await Friendship.deleteMany({ $or: [{ requester: { $in: previousIds } }, { recipient: { $in: previousIds } }] });
       await User.deleteMany({ _id: { $in: previousIds } });
     }
 
@@ -843,6 +844,10 @@ exports.simulateLobbyInvite = async (req, res, next) => {
       xp:         xpForLevel(20),
       rank:       getRankForLevel(20),
     });
+
+    // Un lobby n'est rejoignable que par un ami d'un membre (voir canJoinLobby) :
+    // le coéquipier factice devient ami pour que l'invitation soit acceptable.
+    await Friendship.create({ requester: bot._id, recipient: myId, status: 'accepted' });
 
     const lobby = await WorkoutLobby.create({
       creatorId:   bot._id,

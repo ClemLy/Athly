@@ -19,7 +19,7 @@ import AvatarFrame from './AvatarFrame';
 const ShapeItem = React.memo(function ShapeItem({ shape, previewColor, selected, locked, onPress }) {
   const safeColor = previewColor !== 'none' ? previewColor : 'bronze';
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       style={[styles.item, selected && styles.itemSelected]}
       onPress={() => !locked && onPress(shape.id)}
       activeOpacity={locked ? 1 : 0.75}
@@ -49,7 +49,7 @@ const ShapeItem = React.memo(function ShapeItem({ shape, previewColor, selected,
 
 const ColorItem = React.memo(function ColorItem({ colorDef, selected, locked, onPress }) {
   return (
-    <TouchableOpacity
+    <TouchableOpacity accessibilityRole="button"
       style={[styles.item, selected && styles.itemSelected]}
       onPress={() => !locked && onPress(colorDef.id)}
       activeOpacity={locked ? 1 : 0.75}
@@ -250,7 +250,7 @@ export default function BorderPicker({
 
         <View style={styles.header}>
           <Text style={styles.title}>Personnalisation</Text>
-          <TouchableOpacity
+          <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button"
             onPress={onClose}
             style={styles.closeBtn}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}

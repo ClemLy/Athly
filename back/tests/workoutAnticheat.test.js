@@ -210,11 +210,11 @@ describe('Anti-cheat temporel — finalizeWorkout()', () => {
   });
 
   // ── Workout introuvable ───────────────────────────────────────────────────
-  it('workout introuvable → rejette avec une erreur', async () => {
+  it('workout introuvable → rejette avec une erreur 404', async () => {
     WorkoutModel.findOne.mockResolvedValue(null);
 
     await expect(
       workoutService.finalizeWorkout(FAKE_USER_ID, 'invalid_id', {}),
-    ).rejects.toThrow('Séance introuvable');
+    ).rejects.toMatchObject({ statusCode: 404, message: 'Cette séance est introuvable.' });
   });
 });

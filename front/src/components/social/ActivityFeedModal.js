@@ -89,7 +89,7 @@ export default function ActivityFeedModal() {
             ))}
           </ScrollView>
 
-          <TouchableOpacity style={styles.closeBtn} onPress={handleClose} activeOpacity={0.85}>
+          <TouchableOpacity accessibilityRole="button" style={styles.closeBtn} onPress={handleClose} activeOpacity={0.85}>
             <Text style={styles.closeBtnTxt}>C'est noté</Text>
           </TouchableOpacity>
         </View>
@@ -106,7 +106,7 @@ function ActivityEventRow({ event, reacted, onReact }) {
         {Object.entries(REACTION_META).map(([key, meta]) => {
           const isActive = reacted === key;
           return (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               key={key}
               style={[styles.reactionBtn, isActive && styles.reactionBtnActive]}
               onPress={() => onReact(key)}

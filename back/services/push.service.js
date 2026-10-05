@@ -52,7 +52,7 @@ async function sendPushToUser(userId, { title, body, data = {} }) {
     }]);
 
     if (ticket?.status === 'error') {
-      console.warn(`⚠️ [PUSH] Échec d'envoi à ${userId} :`, ticket.message, ticket.details);
+      console.warn(`[PUSH] Échec d'envoi à ${userId} :`, ticket.message, ticket.details);
       // Token périmé/désinstallé : on le retire pour ne plus retenter dans le vide.
       if (ticket.details?.error === 'DeviceNotRegistered') {
         await User.updateOne({ _id: userId }, { $set: { pushToken: null } });
@@ -62,7 +62,7 @@ async function sendPushToUser(userId, { title, body, data = {} }) {
 
     return true;
   } catch (err) {
-    console.warn(`⚠️ [PUSH] Erreur d'envoi à ${userId} :`, err.message);
+    console.warn(`[PUSH] Erreur d'envoi à ${userId} :`, err.message);
     return false;
   }
 }

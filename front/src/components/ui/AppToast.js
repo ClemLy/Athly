@@ -12,7 +12,7 @@ const TYPE_CONFIG = {
   success: { icon: 'checkmark-circle',   color: Colors.valid },
   error:   { icon: 'close-circle',        color: Colors.error },
   warning: { icon: 'warning',             color: Colors.warningAmber },
-  info:    { icon: 'information-circle',  color: '#4A9EFF' },
+  info:    { icon: 'information-circle',  color: Colors.secondaryAccent },
 };
 
 const SLIDE_OFFSET = -120; // part au-delà du bord supérieur
@@ -73,6 +73,8 @@ export default function AppToast({ message, type = 'info', duration = 3500, onHi
         { top: topOffset, transform: [{ translateY }], opacity },
       ]}
       pointerEvents="box-none"
+      accessibilityLiveRegion={type === 'error' ? 'assertive' : 'polite'}
+      accessibilityRole={type === 'error' ? 'alert' : 'status'}
     >
       <View style={[styles.toast, { borderColor: cfg.color + '40' }]}>
         {/* Barre accent gauche */}
@@ -85,13 +87,13 @@ export default function AppToast({ message, type = 'info', duration = 3500, onHi
         <Text style={styles.message} numberOfLines={3}>{message}</Text>
 
         {/* Bouton fermer */}
-        <TouchableOpacity
+        <TouchableOpacity accessibilityLabel="Fermer la notification" accessibilityRole="button"
           onPress={hide}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           activeOpacity={0.7}
           style={styles.closeBtn}
         >
-          <Ionicons name="close" size={16} color="rgba(255,255,255,0.4)" />
+          <Ionicons name="close" size={16} color={Colors.textMuted} />
         </TouchableOpacity>
       </View>
     </Animated.View>

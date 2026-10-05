@@ -1,0 +1,41 @@
+# =========================================================
+# OUTILS IA / AGENTS (skills, regles, reglages locaux)
+# =========================================================
+.claude/
+.agents/
+.cursor/
+.aider*
+skills-lock.json
+
+# Outillage local installe a la racine par les skills (Playwright)
+/node_modules/
+/package.json
+/package-lock.json
+/test-results/
+/playwright-report/
+
+# =========================================================
+# DEPENDANCES & BUILDS (filet de securite, chaque projet a aussi le sien)
+# =========================================================
+node_modules/
+.expo/
+dist/
+web-build/
+coverage/
+
+# =========================================================
+# SECRETS
+# =========================================================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# =========================================================
+# OS / IDE
+# =========================================================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

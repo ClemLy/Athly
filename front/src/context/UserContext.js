@@ -13,10 +13,12 @@ export function UserProvider({ children }) {
       const res = await API.get('/users/me');
       if (res?.data?.success) setUser(res.data.user);
     } catch (error) {
-      // 401 expiré : l'intercepteur Axios a déjà appelé signOut (isSessionExpired = true).
-      // Erreur réseau / timeout (Render cold-start) : on déclenche signOut manuellement
-      // pour éviter l'état silencieux "Athlète" sans chemin de récupération.
-      if (!error?.isSessionExpired) triggerSignOut();
+      // 401 (session expirée) : l'intercepteur Axios a déjà déconnecté.
+      // 404 : le compte n'existe plus (supprimé depuis un autre appareil).
+      // Toute autre erreur (réseau coupé, serveur qui démarre, erreur serveur)
+      // ne doit JAMAIS déconnecter : le profil sera rechargé au prochain
+      // affichage d'écran, et les données locales restent utilisables.
+      if (!error?.isSessionExpired && error?.status === 404) triggerSignOut();
     } finally {
       setLoading(false);
     }

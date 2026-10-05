@@ -28,6 +28,7 @@ import {
 } from '../../data/workoutTemplates';
 
 import EmptyHomeState from '../../components/home/EmptyHomeState';
+import ResumeWorkoutCard from '../../components/workouts/ResumeWorkoutCard';
 import HeroSessionCard from '../../components/home/HeroSessionCard';
 import QuickStatsRow from '../../components/home/QuickStatsRow';
 import StreakBadge from '../../components/profile/StreakBadge';
@@ -37,6 +38,7 @@ import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 import { useDevSettings } from '../../hooks';
 import { MOCK_TUTORIAL_LOGS } from '../../data/mockTutorialStats';
+import { formatWeight, plural } from '../../utils/format';
 
 // Écran d'accueil. Bascule entre EmptyHomeState (compte vierge) et état actif
 // (séance recommandée + stats semaine + récents) selon `logs.length`.
@@ -106,9 +108,11 @@ export default function HomeScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       if (!bootstrapped) return;
-      // Garde inter-appareils : ne pas auto-lancer si le backend confirme que
-      // le tutoriel a déjà été fait (même si le flag local n'est pas encore là).
-      if (user && user.hasCompletedOnboarding) return;
+      // Garde inter-appareils : attendre le profil serveur avant de décider.
+      // Sans ce garde, une connexion sur un nouvel appareil (ou un navigateur
+      // vidé) relançait le tutoriel avant que le profil n'arrive, même pour un
+      // compte qui l'a déjà terminé.
+      if (!user || user.hasCompletedOnboarding) return;
       if (!hasCompleted && activeChapterId === null) {
         const timer = setTimeout(() => startChapter('dashboard'), 600);
         return () => clearTimeout(timer);
@@ -167,9 +171,8 @@ export default function HomeScreen({ navigation }) {
     if (!recommendedTemplate) return;
     const workout = instantiateWorkout(recommendedTemplate);
     if (!workout) return;
-    // Pas besoin de loadWorkout ici : WorkoutScreen, à l'intérieur du WorkoutStack,
-    // détecte route.params.workout et appelle loadWorkout via son propre useEffect.
-    // (Le provider WorkoutInProgressContext est scopé au WorkoutStack.)
+    // Pas besoin de loadWorkout ici : WorkoutScreen détecte route.params.workout
+    // et appelle loadWorkout via son propre useEffect.
     if (navigation) {
       navigation.navigate('Séances', { screen: 'Workout', params: { workout } });
     }
@@ -186,11 +189,11 @@ export default function HomeScreen({ navigation }) {
   const isFirstTime = !loading && workoutLogs.length === 0 && !hasRitualToday;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       {isTutorialDashboard && (
         <View style={styles.mockBanner}>
           <Ionicons name="flask-outline" size={12} color={Colors.gold} />
-          <Text style={styles.mockBannerText}>Données de démonstration - disparaîtront à la fin du chapitre</Text>
+          <Text style={styles.mockBannerText}>Données de démonstration, elles disparaissent à la fin du chapitre</Text>
         </View>
       )}
       <ScrollView
@@ -209,7 +212,7 @@ export default function HomeScreen({ navigation }) {
           </View>
           {!isFirstTime && !loading ? (
             <View style={styles.headerRight} ref={levelChipRef} onLayout={onLevelChipLayout} collapsable={false}>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.levelChip}
                 onPress={goToStats}
                 activeOpacity={0.85}
@@ -221,6 +224,14 @@ export default function HomeScreen({ navigation }) {
             </View>
           ) : null}
         </View>
+
+        <ResumeWorkoutCard
+          style={styles.resumeCard}
+          onResume={({ lobbyId }) => navigation.navigate('Séances', {
+            screen: 'Workout',
+            params: lobbyId ? { lobbyId } : {},
+          })}
+        />
 
         <Animated.View style={{ opacity }}>
           {loading ? null : isFirstTime ? (
@@ -267,7 +278,7 @@ export default function HomeScreen({ navigation }) {
                 <View style={styles.section}>
                   <View style={styles.sectionHeaderRow}>
                     <Text style={styles.sectionTitle}>Récents</Text>
-                    <TouchableOpacity onPress={goToStats} activeOpacity={0.8}>
+                    <TouchableOpacity accessibilityRole="button" onPress={goToStats} activeOpacity={0.8}>
                       <Text style={styles.sectionLink}>Tout voir</Text>
                     </TouchableOpacity>
                   </View>
@@ -283,7 +294,7 @@ export default function HomeScreen({ navigation }) {
                 </View>
               ) : null}
 
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.secondaryCta}
                 onPress={goToTemplates}
                 activeOpacity={0.85}
@@ -324,7 +335,7 @@ function RecentLogRow({ log, isLast }) {
       <View style={styles.recentContent}>
         <Text style={styles.recentName} numberOfLines={1}>{log.name || 'Séance'}</Text>
         <Text style={styles.recentMeta}>
-          {dateLabel} • {Math.round(Number(log.totalVolume) || 0)} kg • {Number(log.setsCompleted) || 0} sets
+          {dateLabel} • {formatWeight(log.totalVolume)} • {plural(Number(log.setsCompleted) || 0, 'série')}
         </Text>
       </View>
       <Text style={styles.recentXP}>+{Math.round(Number(log.xpEarned) || 0)} XP</Text>
@@ -333,6 +344,7 @@ function RecentLogRow({ log, isLast }) {
 }
 
 const styles = StyleSheet.create({
+  resumeCard: { marginBottom: 16 },
   safe: { flex: 1, backgroundColor: Colors.backgroundDeep },
   mockBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 6,

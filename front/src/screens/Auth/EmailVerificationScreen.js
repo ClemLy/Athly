@@ -1,92 +1,21 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, TouchableOpacity,
   KeyboardAvoidingView, Platform, ActivityIndicator, StatusBar,
-  ScrollView, useWindowDimensions,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '../../constants/theme';
 import { NotificationBanner } from '../../components/common';
+import OTPCodeInput from '../../components/inputs/OTPCodeInput';
 import { verifyEmail, resendVerificationEmail } from '../../services';
 import { useAuth } from '../../context/AuthContext';
+import { getErrorMessage } from '../../utils/errorMessages';
 
-const CODE_LENGTH = 6;
-const BOX_GAP     = 8;
-const H_PAD       = 28 * 2; // paddingHorizontal × 2
-
-// ─── Saisie OTP : 6 cases indépendantes ──────────────────────────────────────
-function OTPInput({ value, onChange, disabled, boxW, boxH }) {
-  const inputRefs = useRef([]);
-
-  const handleChange = (text, index) => {
-    const digit = text.replace(/[^0-9]/g, '').slice(-1);
-    const chars = value.split('');
-    chars[index] = digit;
-    onChange(chars.join(''));
-    if (digit && index < CODE_LENGTH - 1) {
-      inputRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleKeyPress = ({ nativeEvent: { key } }, index) => {
-    if (key === 'Backspace') {
-      const chars = value.split('');
-      if (!value[index] && index > 0) {
-        chars[index - 1] = '';
-        onChange(chars.join(''));
-        inputRefs.current[index - 1]?.focus();
-      } else {
-        chars[index] = '';
-        onChange(chars.join(''));
-      }
-    }
-  };
-
-  return (
-    <View style={otp.row}>
-      {Array.from({ length: CODE_LENGTH }).map((_, i) => (
-        <TextInput
-          key={i}
-          ref={el => { inputRefs.current[i] = el; }}
-          style={[
-            otp.box,
-            { width: boxW, height: boxH, fontSize: Math.round(boxW * 0.48) },
-            i < CODE_LENGTH - 1 && { marginRight: BOX_GAP },
-            !!value[i] && otp.boxFilled,
-          ]}
-          value={value[i] || ''}
-          onChangeText={(text) => handleChange(text, i)}
-          onKeyPress={(e) => handleKeyPress(e, i)}
-          keyboardType="number-pad"
-          keyboardAppearance="dark"
-          maxLength={2}
-          selectTextOnFocus
-          editable={!disabled}
-          textAlign="center"
-        />
-      ))}
-    </View>
-  );
-}
-
-const otp = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginVertical: 28,
-  },
-  box: {
-    borderRadius: 14,
-    backgroundColor: 'rgba(22, 22, 31, 0.8)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.08)',
-    color: Colors.textPrimary,
-    fontWeight: '700',
-  },
-  boxFilled: { borderColor: Colors.primary },
-});
+const CODE_LENGTH  = 6;
+const RESEND_DELAY = 60; // secondes, aligné sur l'anti-spam serveur
 
 // ─── Écran ────────────────────────────────────────────────────────────────────
 export default function EmailVerificationScreen({ navigation, route }) {
@@ -94,29 +23,26 @@ export default function EmailVerificationScreen({ navigation, route }) {
   const fromLogin = route?.params?.fromLogin || false;
   const { signIn } = useAuth();
 
-  const { width: windowWidth } = useWindowDimensions();
-  const cappedW = Platform.OS === 'web' ? Math.min(430, windowWidth) : windowWidth;
-  const boxW = Math.floor((cappedW - H_PAD - BOX_GAP * (CODE_LENGTH - 1)) / CODE_LENGTH);
-  const boxH = Math.round(boxW * 1.26);
-
   const [code,      setCode]      = useState('');
   const [loading,   setLoading]   = useState(false);
   const [resending, setResending] = useState(false);
-  const [countdown, setCountdown] = useState(60);
+  const [countdown, setCountdown] = useState(RESEND_DELAY);
   const [error,     setError]     = useState('');
+  const [errType,   setErrType]   = useState('error');
   const [success,   setSuccess]   = useState('');
 
-  // Compte à rebours de 60 s dès l'arrivée sur l'écran
+  // Compte à rebours avant de pouvoir redemander un code
   useEffect(() => {
-    if (countdown <= 0) return;
-    const t = setTimeout(() => setCountdown(c => c - 1), 1000);
+    if (countdown <= 0) return undefined;
+    const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
     return () => clearTimeout(t);
   }, [countdown]);
 
-  const handleVerify = async () => {
-    const cleanCode = code.replace(/[^0-9]/g, '');
+  const handleVerify = async (submitted = code) => {
+    const cleanCode = submitted.replace(/[^0-9]/g, '');
     if (cleanCode.length < CODE_LENGTH) {
-      setError('Entrez les 6 chiffres du code.');
+      setErrType('error');
+      setError('Entre les 6 chiffres du code reçu par email.');
       return;
     }
     try {
@@ -128,8 +54,15 @@ export default function EmailVerificationScreen({ navigation, route }) {
       } else {
         navigation.navigate('Auth');
       }
-    } catch {
-      setError('Code invalide ou expiré. Réessayez.');
+    } catch (err) {
+      const errCode = err?.data?.code;
+      if (errCode === 'ALREADY_VERIFIED') {
+        navigation.navigate('Auth');
+        return;
+      }
+      if (errCode === 'CODE_EXPIRED' || errCode === 'TOO_MANY_ATTEMPTS') setCode('');
+      setErrType(err?.network ? 'warning' : 'error');
+      setError(getErrorMessage(err, 'La vérification n\'a pas abouti. Réessaie dans un instant.'));
     } finally {
       setLoading(false);
     }
@@ -142,17 +75,16 @@ export default function EmailVerificationScreen({ navigation, route }) {
       setError('');
       setSuccess('');
       await resendVerificationEmail(email);
-      setSuccess('Email renvoyé !');
-      setCountdown(60);
-      setTimeout(() => setSuccess(''), 3000);
-    } catch {
-      setError("Impossible d'envoyer l'email. Réessayez.");
+      setCode('');
+      setSuccess('Nouveau code envoyé. Seul le dernier code reçu fonctionne.');
+      setCountdown(RESEND_DELAY);
+    } catch (err) {
+      setErrType('warning');
+      setError(getErrorMessage(err, 'L\'envoi du code n\'a pas abouti. Réessaie dans un instant.'));
     } finally {
       setResending(false);
     }
   };
-
-  const isCodeComplete = code.replace(/[^0-9]/g, '').length === CODE_LENGTH;
 
   return (
     <SafeAreaView style={s.safeArea} edges={['top', 'bottom']}>
@@ -166,77 +98,76 @@ export default function EmailVerificationScreen({ navigation, route }) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Icône */}
           <View style={s.iconWrap}>
-            <Ionicons name="mail" size={34} color={Colors.primary} />
+            <Ionicons name="mail-unread-outline" size={34} color={Colors.primary} />
           </View>
 
-          {/* Titre */}
-          <Text style={s.title}>Vérifiez votre email</Text>
+          <Text style={s.title} accessibilityRole="header">Confirme ton email</Text>
           <Text style={s.subtitle}>
-            Un code à 6 chiffres a été envoyé à{'\n'}
+            Entre le code à 6 chiffres envoyé à{'\n'}
             <Text style={s.emailHighlight}>{email}</Text>
           </Text>
 
-          {/* Indice anti-spam */}
-          <Text style={s.spamHint}>
-            Si vous ne recevez pas l'e-mail dans les 2 minutes, pensez à vérifier votre dossier{' '}
-            <Text style={s.spamHintBold}>Courriers indésirables (Spams)</Text>.
-          </Text>
-
-          {/* Bannière compte non vérifié (redirigé depuis le login) */}
           {fromLogin && (
             <NotificationBanner
-              message="Votre compte n'est pas encore vérifié. Un code vous a été envoyé."
+              message="Ton compte n'est pas encore confirmé. Un code t'a été envoyé par email."
               type="info"
             />
           )}
 
-          {/* Saisie du code */}
-          <OTPInput
+          <OTPCodeInput
             value={code}
             onChange={(v) => { setCode(v); if (error) setError(''); }}
+            onComplete={(full) => handleVerify(full)}
             disabled={loading}
-            boxW={boxW}
-            boxH={boxH}
+            hasError={!!error && errType === 'error'}
+            autoFocus
           />
 
-          {/* Messages */}
-          {error   ? <Text style={s.errorText}>{error}</Text>     : null}
-          {success ? <Text style={s.successText}>{success}</Text> : null}
+          {error   ? <NotificationBanner message={error} type={errType} /> : null}
+          {success ? <NotificationBanner message={success} type="success" /> : null}
 
-          {/* Bouton Vérifier */}
           <TouchableOpacity
-            style={[s.primaryBtn, !isCodeComplete && s.btnDisabled]}
-            onPress={handleVerify}
-            disabled={loading || !isCodeComplete}
+            style={s.primaryBtn}
+            onPress={() => handleVerify()}
+            disabled={loading}
             activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityState={{ busy: loading, disabled: loading }}
           >
             {loading
               ? <ActivityIndicator color="#fff" />
-              : <Text style={[s.btnText, !isCodeComplete && s.btnTextMuted]}>Vérifier</Text>
+              : <Text style={s.btnText}>Confirmer</Text>
             }
           </TouchableOpacity>
 
-          {/* Renvoyer le mail */}
+          <Text style={s.spamHint}>
+            Rien reçu après 2 minutes ? Regarde dans tes spams avant de redemander un code.
+          </Text>
+
           <TouchableOpacity
             style={s.resendBtn}
             onPress={handleResend}
             disabled={countdown > 0 || resending}
             activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: countdown > 0 || resending }}
           >
             {resending ? (
               <ActivityIndicator size="small" color={Colors.primary} />
             ) : countdown > 0 ? (
-              <Text style={s.resendDisabled}>Renvoyer le mail ({countdown}s)</Text>
+              <Text style={s.resendDisabled}>Renvoyer un code dans {countdown} s</Text>
             ) : (
-              <Text style={s.resendActive}>Renvoyer le mail</Text>
+              <Text style={s.resendActive}>Renvoyer un code</Text>
             )}
           </TouchableOpacity>
 
-          {/* Changer d'email */}
-          <TouchableOpacity style={s.changeEmailBtn} onPress={() => navigation.navigate('Register')}>
-            <Text style={s.changeEmailText}>Utiliser un autre email</Text>
+          <TouchableOpacity
+            style={s.changeEmailBtn}
+            onPress={() => navigation.navigate('Register')}
+            accessibilityRole="link"
+          >
+            <Text style={s.changeEmailText}>Ce n'est pas ma bonne adresse</Text>
           </TouchableOpacity>
 
         </ScrollView>
@@ -272,30 +203,23 @@ const s = StyleSheet.create({
   },
   emailHighlight: { color: Colors.textPrimary, fontWeight: '600' },
 
-  errorText:   { color: Colors.error,   fontSize: 13, textAlign: 'center', marginBottom: 12 },
-  successText: { color: Colors.success, fontSize: 13, textAlign: 'center', marginBottom: 12 },
-
   primaryBtn: {
     width: '100%', backgroundColor: Colors.primary, height: 56, borderRadius: 14,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 16,
+    justifyContent: 'center', alignItems: 'center', marginTop: 16, marginBottom: 8,
     shadowColor: Colors.primary, shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4, shadowRadius: 16, elevation: 8,
   },
-  btnDisabled:  { backgroundColor: 'rgba(255,255,255,0.08)', shadowOpacity: 0, elevation: 0 },
   btnText:      { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.4 },
-  btnTextMuted: { color: Colors.textMuted },
 
-  resendBtn:      { paddingVertical: 14, alignItems: 'center' },
+  resendBtn:      { paddingVertical: 14, alignItems: 'center', minHeight: 48, justifyContent: 'center' },
   resendActive:   { color: Colors.primary, fontSize: 14, fontWeight: '600' },
   resendDisabled: { color: Colors.textMuted, fontSize: 14 },
 
-  changeEmailBtn:  { paddingVertical: 10, marginTop: 4 },
-  changeEmailText: { color: Colors.textMuted, fontSize: 13 },
+  changeEmailBtn:  { paddingVertical: 12, marginTop: 4 },
+  changeEmailText: { color: Colors.textSecondary, fontSize: 13.5, textDecorationLine: 'underline' },
 
   spamHint: {
-    color: Colors.textMuted, fontSize: 12, textAlign: 'center',
-    lineHeight: 18, marginTop: 16, marginBottom: 4,
-    paddingHorizontal: 8,
+    color: Colors.textMuted, fontSize: 13, textAlign: 'center',
+    lineHeight: 19, marginTop: 12, paddingHorizontal: 8,
   },
-  spamHintBold: { color: Colors.textSecondary, fontWeight: '600' },
 });

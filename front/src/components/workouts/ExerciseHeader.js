@@ -39,7 +39,7 @@ export default function ExerciseHeader({ timer = '0:00', videoUrl }) {
     try {
       await Linking.openURL(videoUrl);
     } catch (e) {
-      setInfoModal({ title: 'Erreur', body: "Impossible d'ouvrir la vidéo." });
+      setInfoModal({ title: 'Vidéo indisponible', body: "La vidéo n'a pas pu s'ouvrir. Vérifie ta connexion puis réessaie." });
     }
   };
 
@@ -56,7 +56,7 @@ export default function ExerciseHeader({ timer = '0:00', videoUrl }) {
       </View>
 
       <View style={styles.playWrap}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={styles.playBtn}
           onPress={onPlayPress}
           activeOpacity={0.8}

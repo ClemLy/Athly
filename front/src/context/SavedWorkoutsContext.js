@@ -5,6 +5,7 @@ import {
   updateSavedWorkout,
   removeSavedWorkout,
 } from '../services';
+import { getErrorMessage } from '../utils/errorMessages';
 
 // Context global pour les séances sauvegardées (favoris / réutilisables).
 // Chargement initial depuis AsyncStorage, mise à jour optimiste après chaque action.
@@ -23,7 +24,7 @@ export function SavedWorkoutsProvider({ children }) {
       const list = await listSavedWorkouts();
       setItems(list);
     } catch (e) {
-      setError(e && e.message ? e.message : 'Erreur de chargement');
+      setError(getErrorMessage(e, 'Tes données n\'ont pas pu être chargées.'));
     } finally {
       setLoading(false);
     }

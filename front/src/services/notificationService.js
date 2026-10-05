@@ -24,23 +24,23 @@ const DAILY_BATCH_SIZE = 21;
 const REFILL_THRESHOLD = 5;
 
 const MESSAGES_ORANGE = [
-  { title: "La streak t'attend 🔥", body: "Tu es à une séance d'une meilleure version de toi. Allez, lance-toi !" },
-  { title: "Tes muscles ont faim 💪", body: "Une séance. C'est tout ce qu'il faut. Tu peux le faire." },
-  { title: "L'heure d'Athly a sonné ⚡", body: "Les champions s'entraînent même quand ils n'en ont pas envie. Toi aussi." },
-  { title: "Ta streak te parle 🏆", body: "Tu te souviens de ta fierté d'hier ? Refais ça aujourd'hui." },
-  { title: "Go, champion 🚀", body: "La douleur d'aujourd'hui, c'est la force de demain. Lance une séance !" },
-  { title: "Niveau suivant en vue 🎯", body: "Une séance = de l'XP = un rang de plus. L'équation est simple." },
-  { title: "On t'attend en salle 🏋️", body: "Chaque jour d'entraînement est une promesse tenue à toi-même." },
+  { title: "Ta streak t'attend", body: "Une séance aujourd'hui et elle continue de grimper." },
+  { title: "Tes muscles ont faim", body: "Une séance. C'est tout ce qu'il faut. Tu peux le faire." },
+  { title: "C'est l'heure", body: "Pas besoin d'envie pour s'entraîner, juste de commencer. Lance ta séance." },
+  { title: "Refais comme hier", body: "Tu te souviens de ta fierté après ta dernière séance ? Remets ça." },
+  { title: "Une séance de plus", body: "Chaque séance compte pour ton prochain niveau. Lance-toi." },
+  { title: "Niveau suivant en vue", body: "Une séance, c'est de l'XP. De l'XP, c'est un rang de plus." },
+  { title: "On t'attend en salle", body: "Chaque jour d'entraînement est une promesse tenue à toi-même." },
 ];
 
 const MESSAGES_VIOLET = [
-  { title: "Tu dors encore ? 👀", body: "Ton streak meurt dans quelques heures. Juste pour info." },
+  { title: "Tu dors encore ?", body: "Ta streak s'arrête dans quelques heures. Juste pour info." },
   { title: "Intéressant...", body: "Tu avais le temps de scroller, mais pas de squatter. Logique." },
-  { title: "Tes muscles ont appelé 😤", body: "Ils ont raccroché. Déçus. C'était ton moment." },
+  { title: "Tes muscles ont appelé", body: "Ils ont raccroché. Déçus. C'était ton moment." },
   { title: "La streak de tes rivaux...", body: "Elle, elle n'a pas pris de jour de repos. Coïncidence ?" },
-  { title: "On dirait quelqu'un qui abandonne", body: "Athly ne juge pas. Athly observe. Athly se souvient. 🙄" },
+  { title: "On dirait quelqu'un qui abandonne", body: "Athly ne juge pas. Athly observe. Athly se souvient." },
   { title: "Statistiquement parlant...", body: "Tu regretteras de ne pas t'être entraîné aujourd'hui. Simple constat." },
-  { title: "Le canapé a gagné ? 🛋️", body: "Demain, revanche. Mais il reste ce soir." },
+  { title: "Le canapé a gagné ?", body: "Demain, revanche. Mais il reste encore ce soir." },
 ];
 
 // expo-notifications n'existe pas sur web — on n'enregistre le handler que sur mobile
@@ -267,8 +267,8 @@ async function fireImmediate({ title, body, channelId, data }) {
 
 export async function notifyBirthday(firstName) {
   return fireImmediate({
-    title: `🎂 Joyeux Anniversaire ${firstName} !`,
-    body: 'Ton coffre et ton trophée t\'attendent !',
+    title: `Joyeux anniversaire ${firstName} !`,
+    body: 'Un coffre et un trophée t\'attendent dans l\'app.',
     channelId: CHANNEL_BIRTHDAY_ID,
     data: { type: 'birthday' },
   });
@@ -276,7 +276,7 @@ export async function notifyBirthday(firstName) {
 
 export async function notifyChestAvailable() {
   return fireImmediate({
-    title: '📦 Nouvel effort récompensé !',
+    title: 'Effort récompensé',
     body: 'Un coffre est prêt à être ouvert.',
     channelId: CHANNEL_EVENTS_ID,
     data: { type: 'chest_available' },
@@ -285,8 +285,8 @@ export async function notifyChestAvailable() {
 
 export async function notifyFriendInvite(pseudo) {
   return fireImmediate({
-    title: '⚡ Nouvelle invitation',
-    body: `${pseudo} veut devenir ton ami sur Athly. Accepte l'invitation !`,
+    title: 'Nouvelle demande d\'ami',
+    body: `${pseudo} veut devenir ton ami sur Athly.`,
     channelId: CHANNEL_EVENTS_ID,
     data: { type: 'friend_invite', pseudo },
   });
@@ -294,8 +294,8 @@ export async function notifyFriendInvite(pseudo) {
 
 export async function notifyShake(pseudo) {
   return fireImmediate({
-    title: '🚨 BOUGE-TOI !',
-    body: `${pseudo} t'a secoué. Ne casse pas la Streak du groupe !`,
+    title: 'Bouge-toi !',
+    body: `${pseudo} t'a secoué. Ne casse pas la streak du groupe.`,
     channelId: CHANNEL_EVENTS_ID,
     data: { type: 'shake', pseudo },
   });

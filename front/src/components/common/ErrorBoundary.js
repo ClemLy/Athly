@@ -43,11 +43,11 @@ export default class ErrorBoundary extends React.Component {
         <View style={styles.iconWrap}>
           <Ionicons name="warning-outline" size={40} color={Colors.error} />
         </View>
-        <Text style={styles.title}>Oups, une erreur est survenue</Text>
+        <Text style={styles.title}>L'application a rencontré un problème</Text>
         <Text style={styles.body}>
-          Pas de panique - tes données sont en sécurité.{'\n'}Réessaie, ça devrait repartir.
+          Tes séances et ta progression sont bien enregistrées. Recharge l'app pour reprendre là où tu en étais.
         </Text>
-        <TouchableOpacity style={styles.btn} onPress={this.handleRetry} activeOpacity={0.85}>
+        <TouchableOpacity accessibilityRole="button" style={styles.btn} onPress={this.handleRetry} activeOpacity={0.85}>
           <Text style={styles.btnTxt}>Recharger l'application</Text>
         </TouchableOpacity>
       </View>

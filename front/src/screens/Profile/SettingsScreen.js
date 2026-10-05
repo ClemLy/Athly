@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  StatusBar, Switch, TextInput, ActivityIndicator, Modal, Share,
-} from 'react-native';
+  StatusBar, Switch, TextInput, ActivityIndicator, Modal, Share, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../../constants/theme';
@@ -45,6 +44,10 @@ import {
   simulateGroup, simulateActivityEvent, simulateStreakBreak, simulateShakeSelf,
   simulateSearchableFriend, simulateLobbyInvite, giveAllTitles,
 } from '../../services';
+import { getErrorMessage } from '../../utils/errorMessages';
+import { DEV_TOOLS_ENABLED } from '../../constants/devTools';
+import { expo as expoConfig } from '../../../app.json';
+import { clearAccountScope } from '../../services/accountScope.service';
 
 const UNIT_WEIGHT_KEY   = 'athly:unit:weight:v1';
 const UNIT_DIST_KEY     = 'athly:unit:distance:v1';
@@ -196,7 +199,7 @@ export default function SettingsScreen({ navigation }) {
   };
 
   const handleVersionTap = useCallback(async () => {
-    if (devVisible) return;
+    if (devVisible || !DEV_TOOLS_ENABLED) return;
     const next = tapCount + 1;
     setTapCount(next);
     if (next >= DEV_TAP_TARGET) {
@@ -212,26 +215,38 @@ export default function SettingsScreen({ navigation }) {
 
   const handleShareReferral = useCallback(async () => {
     if (!user?.referralCode) return;
-    try {
-      await Share.share({
-        message: `Rejoins-moi sur Athly ! Utilise mon code de parrainage ${user.referralCode} à l'inscription : on gagne chacun un Gel de Streak et un Coupon de Niveau.`,
-      });
-    } catch (_) {
-      // Partage annulé ou indisponible : rien à faire
+    const message = `Rejoins-moi sur Athly ! Utilise mon code de parrainage ${user.referralCode} à l'inscription : on gagne chacun un Gel de Streak et un Coupon de Niveau.`;
+
+    // Navigateur sans partage natif (ordinateur, certains Android) : copie du
+    // code dans le presse-papiers, avec confirmation, plutôt qu'un bouton muet.
+    if (Platform.OS === 'web' && !(typeof navigator !== 'undefined' && navigator.share)) {
+      try {
+        await navigator.clipboard.writeText(message);
+        showToast(`Code ${user.referralCode} copié. Colle-le dans un message à ton ami.`, 'success');
+      } catch (_) {
+        showToast(`Ton code de parrainage : ${user.referralCode}`, 'info', 6000);
+      }
+      return;
     }
-  }, [user?.referralCode]);
+
+    try {
+      await Share.share({ message });
+    } catch (_) {
+      // Partage annulé par l'utilisateur : rien à faire
+    }
+  }, [user?.referralCode, showToast]);
 
   const handleNotifToggle = useCallback(async (val) => {
     if (val) {
       const granted = await requestNotificationPermissions();
       if (!granted) {
-        setInfoModal({ title: 'Notifications désactivées', body: 'Activez les notifications Athly dans les réglages de votre appareil.' });
+        setInfoModal({ title: 'Notifications désactivées', body: 'Active les notifications d\'Athly dans les réglages de ton téléphone, puis réessaie.' });
         return;
       }
       try {
         await scheduleDailyReminder();
       } catch (e) {
-        setInfoModal({ title: 'Erreur', body: 'Impossible de planifier la notification.', destructive: true });
+        setInfoModal({ title: 'Notification non programmée', body: 'Le rappel n\'a pas pu être programmé sur ce téléphone.', destructive: true });
         return;
       }
       setNotifEnabled(true);
@@ -256,7 +271,7 @@ export default function SettingsScreen({ navigation }) {
       await fireTestNotification(type);
       showFeedback(type === 'orange' ? 'Notif orange dans 3 s...' : 'Notif violette dans 3 s...');
     } catch (e) {
-      showFeedback('Erreur : ' + (e?.message || 'inconnue'));
+      showFeedback('Erreur : ' + (getErrorMessage(e, 'inconnue')));
     } finally {
       setSimLoading(false);
     }
@@ -264,7 +279,7 @@ export default function SettingsScreen({ navigation }) {
 
   const handleGodMode = useCallback(async (val) => {
     await setGodMode(val);
-    if (val) setInfoModal({ title: 'God Mode activé', body: 'Utilisez la console ci-dessous pour simuler votre progression.' });
+    if (val) setInfoModal({ title: 'God Mode activé', body: 'Utilise la console ci-dessous pour simuler ta progression.' });
   }, [setGodMode]);
 
   const [logoutConfirmVisible, setLogoutConfirmVisible] = useState(false);
@@ -277,7 +292,7 @@ export default function SettingsScreen({ navigation }) {
       await refresh();
       showFeedback(successMsg);
     } catch (e) {
-      showFeedback('Erreur : ' + (e?.message || 'inconnue'));
+      showFeedback('Erreur : ' + (getErrorMessage(e, 'inconnue')));
     } finally {
       setSimLoading(false);
     }
@@ -299,38 +314,38 @@ export default function SettingsScreen({ navigation }) {
 
   const handleSetLevel    = () => {
     const n = parseInt(targetLevel, 10);
-    if (!targetLevel || isNaN(n) || n < 0 || n > 200) { showFeedback('Niveau invalide (0–200)'); return; }
-    runSim(() => setLevelEverywhere(n), `Niveau ${n} appliqué ✓`);
+    if (!targetLevel || isNaN(n) || n < 0 || n > 200) { showFeedback('Niveau invalide (0 à 200)'); return; }
+    runSim(() => setLevelEverywhere(n), `Niveau ${n} appliqué`);
   };
-  const handleAddXP       = () => runSim(() => debugAddXP(1000), '+1000 XP injectés ✓');
+  const handleAddXP       = () => runSim(() => debugAddXP(1000), '+1000 XP injectés');
   const handleAddCustomXP = () => {
     const n = parseInt(targetXP, 10);
     if (!targetXP || isNaN(n) || n <= 0) { showFeedback('Montant invalide (> 0)'); return; }
-    runSim(() => debugAddXP(n), `+${n.toLocaleString('fr-FR')} XP injectés ✓`);
+    runSim(() => debugAddXP(n), `+${n.toLocaleString('fr-FR')} XP injectés`);
     setTargetXP('');
   };
-  const handlePlusLevel   = () => runSim(() => setLevelEverywhere(level + 1), `Passage au niveau ${level + 1} ✓`);
+  const handlePlusLevel   = () => runSim(() => setLevelEverywhere(level + 1), `Passage au niveau ${level + 1}`);
   const handleMinusLevel  = () => {
     if (level <= 0) { showFeedback('Déjà au niveau 0'); return; }
-    runSim(() => setLevelEverywhere(level - 1), `Retour au niveau ${level - 1} ✓`);
+    runSim(() => setLevelEverywhere(level - 1), `Retour au niveau ${level - 1}`);
   };
-  const handleGenSessions = () => runSim(() => debugAddSessions(50), '50 séances injectées ✓');
-  const handleSimReps     = () => runSim(() => debugSimulateReps(3000), '~3000 répétitions simulées ✓');
+  const handleGenSessions = () => runSim(() => debugAddSessions(50), '50 séances injectées');
+  const handleSimReps     = () => runSim(() => debugSimulateReps(3000), '~3000 répétitions simulées');
   const handleSetStreak   = () => {
     const n = parseInt(targetStreak, 10);
-    if (!targetStreak || isNaN(n) || n < 1 || n > 365) { showFeedback('Streak invalide (1–365)'); return; }
-    runSim(() => debugSetStreak(n), `Streak ${n} jours appliqué ✓`);
+    if (!targetStreak || isNaN(n) || n < 1 || n > 365) { showFeedback('Streak invalide (1 à 365)'); return; }
+    runSim(() => debugSetStreak(n), `Streak ${n} jours appliqué`);
   };
-  const handleResetDailyXP = () => runSim(debugResetDailyXP, 'Quota XP quotidien réinitialisé ✓');
+  const handleResetDailyXP = () => runSim(debugResetDailyXP, 'Quota XP quotidien réinitialisé');
   const [clearDebugConfirmVisible, setClearDebugConfirmVisible] = useState(false);
   const handleClearDebug = () => setClearDebugConfirmVisible(true);
   const confirmClearDebug = () => {
     setClearDebugConfirmVisible(false);
-    runSim(debugClearDebugLogs, 'Logs DEBUG effacés ✓');
+    runSim(debugClearDebugLogs, 'Logs DEBUG effacés');
   };
   const handleClearOverrides = () => {
     clearTrophyOverrides();
-    showFeedback('Overrides trophées réinitialisés ✓');
+    showFeedback('Overrides trophées réinitialisés');
   };
 
   // Le niveau simulé ci-dessus (debugSetLevel…) reste 100% local (AsyncStorage) —
@@ -342,11 +357,11 @@ export default function SettingsScreen({ navigation }) {
       setSimLoading(true);
       const res = await syncBackendLevel(level);
       await refetchUser();
-      showFeedback(`Backend synchronisé : niveau ${res.level} (${res.rank}) ✓`);
+      showFeedback(`Backend synchronisé : niveau ${res.level} (${res.rank})`);
     } catch (e) {
       const msg = e?.status === 404
         ? 'Indisponible en production.'
-        : (e?.data?.message || e?.message || 'inconnue');
+        : (getErrorMessage(e, 'inconnue'));
       showFeedback('Erreur : ' + msg);
     } finally {
       setSimLoading(false);
@@ -357,13 +372,13 @@ export default function SettingsScreen({ navigation }) {
   // attendre les paliers de 5h de séance. Bloqué en production (404).
   const handleGiveChests = useCallback(async () => {
     const n = parseInt(targetChests, 10);
-    if (!targetChests || isNaN(n) || n < 1 || n > 50) { showFeedback('Quantité invalide (1–50)'); return; }
+    if (!targetChests || isNaN(n) || n < 1 || n > 50) { showFeedback('Quantité invalide (1 à 50)'); return; }
     try {
       setSimLoading(true);
       const res = await giveChests(n);
-      showFeedback(`+${n} coffre(s) ✓ (total : ${res.chestCount})`);
+      showFeedback(`+${n} coffre(s) (total : ${res.chestCount})`);
     } catch (e) {
-      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (getErrorMessage(e, 'inconnue'));
       showFeedback('Erreur : ' + msg);
     } finally {
       setSimLoading(false);
@@ -377,9 +392,9 @@ export default function SettingsScreen({ navigation }) {
     try {
       setSimLoading(true);
       const res = await generateMockSocial();
-      showFeedback(res.message || 'Réseau social de test généré ✓');
+      showFeedback(res.message || 'Réseau social de test généré');
     } catch (e) {
-      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (getErrorMessage(e, 'inconnue'));
       showFeedback('Erreur : ' + msg);
     } finally {
       setSimLoading(false);
@@ -399,12 +414,12 @@ export default function SettingsScreen({ navigation }) {
       // de façon persistante, tant que ce compte de test reste valide.
       if (res.tag) {
         setTestFriendTag(res.tag);
-        showFeedback('Compte de test créé - tag affiché ci-dessous ↓');
+        showFeedback('Compte de test créé, tag affiché ci-dessous');
       } else {
         showFeedback(res.message || 'Compte de test créé');
       }
     } catch (e) {
-      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (getErrorMessage(e, 'inconnue'));
       showFeedback('Erreur : ' + msg);
     } finally {
       setSimLoading(false);
@@ -421,7 +436,7 @@ export default function SettingsScreen({ navigation }) {
       const res = await simulateLobbyInvite();
       showFeedback(res.message || 'Invitation de test créée');
     } catch (e) {
-      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (getErrorMessage(e, 'inconnue'));
       showFeedback('Erreur : ' + msg);
     } finally {
       setSimLoading(false);
@@ -435,9 +450,9 @@ export default function SettingsScreen({ navigation }) {
       setSimLoading(true);
       const res = await giveAllTitles();
       await refetchUser();
-      showFeedback(res.message || 'Tous les titres débloqués ✓');
+      showFeedback(res.message || 'Tous les titres débloqués');
     } catch (e) {
-      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (getErrorMessage(e, 'inconnue'));
       showFeedback('Erreur : ' + msg);
     } finally {
       setSimLoading(false);
@@ -451,9 +466,9 @@ export default function SettingsScreen({ navigation }) {
       setSimLoading(true);
       const res = await giveAllItems();
       await refetchUser();
-      showFeedback(res.message || 'Tous les objets ajoutés ✓');
+      showFeedback(res.message || 'Tous les objets ajoutés');
     } catch (e) {
-      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (getErrorMessage(e, 'inconnue'));
       showFeedback('Erreur : ' + msg);
     } finally {
       setSimLoading(false);
@@ -464,7 +479,7 @@ export default function SettingsScreen({ navigation }) {
   // partagé par les 3 simulateurs de trophées backend ci-dessous.
   const feedbackWithUnlocks = useCallback((baseMessage, newlyUnlocked) => {
     if (newlyUnlocked && newlyUnlocked.length > 0) {
-      return `${baseMessage} · ${newlyUnlocked.length} trophée(s) débloqué(s) ✓`;
+      return `${baseMessage} · ${newlyUnlocked.length} trophée(s) débloqué(s)`;
     }
     return `${baseMessage} (déjà débloqué)`;
   }, []);
@@ -474,14 +489,14 @@ export default function SettingsScreen({ navigation }) {
   // sans enchaîner des dizaines d'ouvertures manuelles. Bloqué en prod (404).
   const handleSimulateChests = useCallback(async () => {
     const n = parseInt(targetChests, 10);
-    if (!targetChests || isNaN(n) || n < 1 || n > 250) { showFeedback('Quantité invalide (1–250)'); return; }
+    if (!targetChests || isNaN(n) || n < 1 || n > 250) { showFeedback('Quantité invalide (1 à 250)'); return; }
     try {
       setSimLoading(true);
       const res = await simulateChestsOpened(n);
       await refetchUser();
       showFeedback(feedbackWithUnlocks(`+${n} coffre(s) simulé(s) (total : ${res.totalChestsOpened})`, res.newlyUnlocked));
     } catch (e) {
-      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (getErrorMessage(e, 'inconnue'));
       showFeedback('Erreur : ' + msg);
     } finally {
       setSimLoading(false);
@@ -497,7 +512,7 @@ export default function SettingsScreen({ navigation }) {
       await refetchUser();
       showFeedback(feedbackWithUnlocks('Parrainage simulé', res.newlyUnlocked));
     } catch (e) {
-      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (getErrorMessage(e, 'inconnue'));
       showFeedback('Erreur : ' + msg);
     } finally {
       setSimLoading(false);
@@ -513,7 +528,7 @@ export default function SettingsScreen({ navigation }) {
       await refetchUser();
       showFeedback(feedbackWithUnlocks('Anniversaire simulé', res.newlyUnlocked));
     } catch (e) {
-      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (getErrorMessage(e, 'inconnue'));
       showFeedback('Erreur : ' + msg);
     } finally {
       setSimLoading(false);
@@ -534,7 +549,7 @@ export default function SettingsScreen({ navigation }) {
       const res = await simulateGroup();
       showFeedback(res.message || 'Groupe de test créé');
     } catch (e) {
-      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (getErrorMessage(e, 'inconnue'));
       showFeedback('Erreur : ' + msg);
     } finally {
       setSimLoading(false);
@@ -549,7 +564,7 @@ export default function SettingsScreen({ navigation }) {
       const res = await simulateActivityEvent();
       showFeedback(res.message || 'Événement simulé');
     } catch (e) {
-      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (getErrorMessage(e, 'inconnue'));
       showFeedback('Erreur : ' + msg);
     } finally {
       setSimLoading(false);
@@ -564,7 +579,7 @@ export default function SettingsScreen({ navigation }) {
       const res = await simulateStreakBreak();
       showFeedback(res.message || 'Rupture de streak simulée');
     } catch (e) {
-      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (getErrorMessage(e, 'inconnue'));
       showFeedback('Erreur : ' + msg);
     } finally {
       setSimLoading(false);
@@ -580,7 +595,7 @@ export default function SettingsScreen({ navigation }) {
       const res = await simulateShakeSelf();
       showFeedback(res.message || (res.pushed ? 'Notification envoyée' : 'Échec d\'envoi'));
     } catch (e) {
-      const msg = e?.status === 404 ? 'Indisponible en production.' : (e?.data?.message || e?.message || 'inconnue');
+      const msg = e?.status === 404 ? 'Indisponible en production.' : (getErrorMessage(e, 'inconnue'));
       showFeedback('Erreur : ' + msg);
     } finally {
       setSimLoading(false);
@@ -598,27 +613,29 @@ export default function SettingsScreen({ navigation }) {
     try {
       setDeleteLoading(true);
 
-      // 1. Suppression côté serveur (cascade DB)
+      // 1. Suppression côté serveur (cascade complète, voir user.service.js)
       await deleteAccount();
 
-      // 2. Purge totale AsyncStorage (logs, séances, quêtes, token, prefs…)
-      await AsyncStorage.clear();
+      // 2. Effacement des données locales de CE compte uniquement : les
+      //    données d'un autre compte déjà utilisé sur cet appareil sont gardées.
+      await clearAccountScope(user?._id || user?.id);
 
-      // 3. Reset de tous les états en mémoire des contextes
+      // 3. Reset des états en mémoire des contextes
       clearWorkoutLogs();
       clearSavedWorkouts();
       clearQuests();
       clearCustomExercises();
       setUser(null);
 
-      // 4. Notification + déconnexion → redirection automatique vers Login
-      showToast('Votre compte a été entièrement supprimé conformément au RGPD.', 'success', 5000);
+      // 4. Notification + déconnexion → redirection automatique vers la connexion
+      showToast('Ton compte et toutes tes données ont été supprimés.', 'success', 5000);
       await signOut();
-    } catch {
+    } catch (e) {
       setDeleteModal2(false);
       setDeleteLoading(false);
+      showToast(getErrorMessage(e, 'La suppression du compte n\'a pas abouti. Réessaie dans un instant.'), 'error', 6000);
     }
-  }, [signOut, setUser, showToast, clearWorkoutLogs, clearSavedWorkouts, clearQuests, clearCustomExercises]);
+  }, [user, signOut, setUser, showToast, clearWorkoutLogs, clearSavedWorkouts, clearQuests, clearCustomExercises]);
 
   // ─── Trophies evaluation ──────────────────────────────────────────────────
 
@@ -691,7 +708,7 @@ export default function SettingsScreen({ navigation }) {
           <SettingsRow label="Mon code" last>
             <View style={styles.referralRow}>
               <Text style={styles.referralCode}>{user?.referralCode || '…'}</Text>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityLabel="Partager" accessibilityRole="button"
                 style={styles.referralShareBtn}
                 onPress={handleShareReferral}
                 disabled={!user?.referralCode}
@@ -742,7 +759,7 @@ export default function SettingsScreen({ navigation }) {
               const locked   = isThemeLocked(theme, level, unlockedCosmetics);
               const selected = profileThemeId === theme.id;
               return (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={theme.id}
                   style={[styles.themeItem, selected && styles.themeItemSel, locked && styles.themeItemLocked]}
                   onPress={() => !locked && setProfileThemeId(theme.id)}
@@ -769,27 +786,39 @@ export default function SettingsScreen({ navigation }) {
         {/* ═══ NOTIFICATIONS ════════════════════════════════════════════════════ */}
         <SectionLabel label="Notifications" />
         <SettingsGroup>
-          <SettingsRow label="Rappels d'entraînement" last>
-            <Switch value={notifEnabled} onValueChange={handleNotifToggle}
-              trackColor={{ false: 'rgba(255,255,255,0.12)', true: Colors.primary }} thumbColor="#fff" />
-          </SettingsRow>
+          {Platform.OS === 'web' ? (
+            <View style={styles.row}>
+              <Text style={styles.webNotice}>
+                Les rappels d'entraînement ne sont pas encore disponibles sur la version web d'Athly.
+              </Text>
+            </View>
+          ) : (
+            <SettingsRow label="Rappels d'entraînement" last>
+              <Switch value={notifEnabled} onValueChange={handleNotifToggle}
+                accessibilityLabel="Rappels d'entraînement"
+                trackColor={{ false: 'rgba(255,255,255,0.12)', true: Colors.primary }} thumbColor="#fff" />
+            </SettingsRow>
+          )}
         </SettingsGroup>
 
-        {/* ═══ SUPPORT ══════════════════════════════════════════════════════════ */}
-        <SectionLabel label="Support" />
+        {/* ═══ INFORMATIONS ═════════════════════════════════════════════════════ */}
+        <SectionLabel label="Informations" />
         <SettingsGroup>
-          <TouchableOpacity onPress={handleVersionTap} activeOpacity={0.7}>
+          <SettingsRow label="Politique de confidentialité" chevron onPress={() => navigation.navigate('Legal', { doc: 'confidentialite' })} />
+          <SettingsRow label="Conditions d'utilisation" chevron onPress={() => navigation.navigate('Legal', { doc: 'conditions' })} />
+          <SettingsRow label="Mentions légales" chevron last={false} onPress={() => navigation.navigate('Legal', { doc: 'mentions-legales' })} />
+          <TouchableOpacity accessibilityRole="button" onPress={handleVersionTap} activeOpacity={0.7}>
             <View style={styles.row}>
               <View style={styles.rowLabelWrap}>
                 <Text style={styles.rowLabel}>Version</Text>
               </View>
-              <Text style={styles.valueText}>2.0.0</Text>
+              <Text style={styles.valueText}>{APP_VERSION}</Text>
             </View>
           </TouchableOpacity>
         </SettingsGroup>
 
         {/* ═══ MODE DÉVELOPPEUR ════════════════════════════════════════════════ */}
-        {devVisible && (
+        {DEV_TOOLS_ENABLED && devVisible && (
           <>
             <SectionLabel label="Mode Développeur" />
             <SettingsGroup>
@@ -955,7 +984,7 @@ export default function SettingsScreen({ navigation }) {
                   </View>
                   <Text style={styles.devHint}>
                     Crée un groupe avec 3 coéquipiers factices, un par statut de Météo des
-                    séances testable (Prêt / Actif / Validé - le 4e, En sommeil,
+                    séances testable (Prêt / Actif / Validé ; le 4e, En sommeil,
                     s'obtient en ne touchant à aucun des trois). Rejouable sans doublons.
                   </Text>
                   <View style={styles.devBtnRow}>
@@ -978,7 +1007,7 @@ export default function SettingsScreen({ navigation }) {
                   </View>
                   <Text style={styles.devHint}>
                     Envoie une vraie notification push à ton propre appareil, avec le texte
-                    troll du bouton Secouer - vérifie l'infra push de bout en bout.
+                    troll du bouton Secouer : vérifie l'infra push de bout en bout.
                   </Text>
                 </DevSection>
 
@@ -989,7 +1018,7 @@ export default function SettingsScreen({ navigation }) {
                   </View>
                   <Text style={styles.devHint}>
                     Crée un lobby avec un coéquipier factice et t'envoie une vraie
-                    notification push d'invitation - teste tout le parcours en solo :
+                    notification push d'invitation : teste tout le parcours en solo :
                     popup "X t'invite", rejoindre, se déclarer prêt, faire sa séance,
                     et voir le bonus XP de groupe à la fin (le coéquipier factice suit
                     automatiquement chacun de tes statuts).
@@ -1003,7 +1032,7 @@ export default function SettingsScreen({ navigation }) {
                   </View>
                   <Text style={styles.devHint}>
                     Débloque directement les 17 titres du catalogue, sans passer par leurs
-                    conditions réelles - teste le sélecteur de titres en un clic.
+                    conditions réelles : teste le sélecteur de titres en un clic.
                   </Text>
                 </DevSection>
 
@@ -1033,7 +1062,7 @@ export default function SettingsScreen({ navigation }) {
                       {ULTIMATE_TROPHY.label}
                     </Text>
                     <Text style={[styles.trophyUltimateSub, { color: ultimateUnlocked ? Colors.success : Colors.textMuted }]}>
-                      {ultimateUnlocked ? '✓ Débloqué !' : `${fullTrophyList.filter(t => t.unlocked).length}/${fullTrophyList.length}`}
+                      {ultimateUnlocked ? 'Débloqué' : `${fullTrophyList.filter(t => t.unlocked).length}/${fullTrophyList.length}`}
                     </Text>
                   </View>
 
@@ -1043,14 +1072,14 @@ export default function SettingsScreen({ navigation }) {
                       label="Tout débloquer"
                       onPress={() => {
                         TROPHY_CATALOG.forEach(t => setTrophyOverride(t.id, true));
-                        showFeedback('Tous les trophées débloqués ✓');
+                        showFeedback('Tous les trophées débloqués');
                       }}
                       disabled={simLoading}
                       flex
                     />
                     <DevBtn
                       label="Tout réinitialiser"
-                      onPress={() => { clearTrophyOverrides(); showFeedback('Overrides réinitialisés ✓'); }}
+                      onPress={() => { clearTrophyOverrides(); showFeedback('Overrides réinitialisés'); }}
                       disabled={simLoading}
                       flex
                       variant="dim"
@@ -1058,7 +1087,7 @@ export default function SettingsScreen({ navigation }) {
                   </View>
 
                   {/* Accordéon — liste individuelle */}
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     style={styles.trophyAccordionHeader}
                     onPress={() => setTrophyExpanded(v => !v)}
                     activeOpacity={0.75}
@@ -1150,7 +1179,7 @@ export default function SettingsScreen({ navigation }) {
 
                 {/* ── VERROUILLAGE ── */}
                 <View style={styles.devLockDivider} />
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.devLockBtn}
                   onPress={handleLockDevSection}
                   activeOpacity={0.75}
@@ -1167,7 +1196,7 @@ export default function SettingsScreen({ navigation }) {
         <SectionLabel label="Centre d'aide & Tutoriel" />
 
         {/* Rejouer l'intégralité */}
-        <TouchableOpacity style={styles.tutReplayBtn} onPress={handleReplayFull} activeOpacity={0.82}>
+        <TouchableOpacity accessibilityRole="button" style={styles.tutReplayBtn} onPress={handleReplayFull} activeOpacity={0.82}>
           <View style={styles.tutReplayIcon}>
             <Ionicons name="play-circle" size={22} color={Colors.primary} />
           </View>
@@ -1181,7 +1210,7 @@ export default function SettingsScreen({ navigation }) {
         {/* Chapitres individuels */}
         <SettingsGroup>
           {TUTORIAL_CHAPTERS.map((chapter, idx) => (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               key={chapter.id}
               onPress={() => handleReplayChapter(chapter)}
               activeOpacity={0.75}
@@ -1201,13 +1230,13 @@ export default function SettingsScreen({ navigation }) {
         </SettingsGroup>
 
         {/* ─── Déconnexion ──────────────────────────────────────────────────── */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
+        <TouchableOpacity accessibilityRole="button" style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
           <Ionicons name="log-out-outline" size={15} color={Colors.error} style={{ marginRight: 8 }} />
           <Text style={styles.logoutText}>Déconnexion</Text>
         </TouchableOpacity>
 
         {/* ─── Suppression définitive du compte ────────────────────────────── */}
-        <TouchableOpacity style={styles.deleteAccountBtn} onPress={() => setDeleteModal1(true)} activeOpacity={0.7}>
+        <TouchableOpacity accessibilityRole="button" style={styles.deleteAccountBtn} onPress={() => setDeleteModal1(true)} activeOpacity={0.7}>
           <Ionicons name="trash-outline" size={15} color={Colors.error} style={{ marginRight: 8 }} />
           <Text style={styles.deleteAccountText}>Supprimer le compte</Text>
         </TouchableOpacity>
@@ -1230,7 +1259,7 @@ export default function SettingsScreen({ navigation }) {
             <Text style={styles.dmBody}>
               Pour maximiser tes entraînements, commence par personnaliser ton profil.
             </Text>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.welcomeBtn}
               onPress={() => { setWelcomeModal(false); navigation.navigate('EditProfile'); }}
               activeOpacity={0.82}
@@ -1238,7 +1267,7 @@ export default function SettingsScreen({ navigation }) {
               <Ionicons name="create-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
               <Text style={styles.welcomeBtnTxt}>Personnaliser mon profil</Text>
             </TouchableOpacity>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.dmBackBtn}
               onPress={() => setWelcomeModal(false)}
               activeOpacity={0.75}
@@ -1256,15 +1285,15 @@ export default function SettingsScreen({ navigation }) {
             <View style={styles.dmIconWrap}>
               <Ionicons name="warning-outline" size={28} color={Colors.destructive} />
             </View>
-            <Text style={styles.dmTitle}>Êtes-vous sûr ?</Text>
+            <Text style={styles.dmTitle}>Supprimer ton compte ?</Text>
             <Text style={styles.dmBody}>
-              Vous perdrez définitivement votre progression, vos stats, votre vitrine de trophées et votre rang d'athlète.{'\n\n'}Cette action est irréversible.
+              Ta progression, tes statistiques, tes trophées, tes amis et ton rang seront effacés.{'\n\n'}Cette action est définitive.
             </Text>
-            <TouchableOpacity style={styles.dmKeepBtn} onPress={() => setDeleteModal1(false)} activeOpacity={0.82}>
+            <TouchableOpacity accessibilityRole="button" style={styles.dmKeepBtn} onPress={() => setDeleteModal1(false)} activeOpacity={0.82}>
               <Ionicons name="shield-checkmark-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
               <Text style={styles.dmKeepTxt}>Conserver mon compte</Text>
             </TouchableOpacity>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.dmContinueBtn}
               onPress={() => { setDeleteModal1(false); setDeleteModal2(true); }}
               activeOpacity={0.75}
@@ -1284,9 +1313,9 @@ export default function SettingsScreen({ navigation }) {
             </View>
             <Text style={styles.dmTitle}>Confirmation finale</Text>
             <Text style={styles.dmBody}>
-              Cliquez sur le bouton ci-dessous pour détruire entièrement vos données de nos serveurs.
+              Appuie sur le bouton ci-dessous pour effacer toutes tes données de nos serveurs.
             </Text>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[styles.dmDestroyBtn, deleteLoading && { opacity: 0.7 }]}
               onPress={doDeleteAccount}
               disabled={deleteLoading}
@@ -1302,7 +1331,7 @@ export default function SettingsScreen({ navigation }) {
                 )
               }
             </TouchableOpacity>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.dmBackBtn}
               onPress={() => setDeleteModal2(false)}
               disabled={deleteLoading}
@@ -1370,13 +1399,19 @@ function SettingsRow({ label, children, last, chevron, onPress }) {
       </View>
     </View>
   );
-  if (onPress) return <TouchableOpacity onPress={onPress} activeOpacity={0.7}>{Inner}</TouchableOpacity>;
+  if (onPress) {
+    return (
+      <TouchableOpacity accessibilityRole={chevron ? 'link' : 'button'} accessibilityLabel={label} onPress={onPress} activeOpacity={0.7}>
+        {Inner}
+      </TouchableOpacity>
+    );
+  }
   return Inner;
 }
 
 function SegBtn({ label, active, onPress }) {
   return (
-    <TouchableOpacity onPress={onPress} style={[styles.seg, active && styles.segActive]} activeOpacity={0.8}>
+    <TouchableOpacity accessibilityRole="button" onPress={onPress} style={[styles.seg, active && styles.segActive]} activeOpacity={0.8}>
       <Text style={[styles.segText, active && styles.segTextActive]}>{label}</Text>
     </TouchableOpacity>
   );
@@ -1390,7 +1425,7 @@ function DevSection({ title, icon, badge, defaultOpen = false, children }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <View style={styles.devSectionWrap}>
-      <TouchableOpacity style={styles.devSectionHeader} onPress={() => setOpen((v) => !v)} activeOpacity={0.75}>
+      <TouchableOpacity accessibilityRole="button" style={styles.devSectionHeader} onPress={() => setOpen((v) => !v)} activeOpacity={0.75}>
         <View style={styles.devSectionHeaderLeft}>
           <Ionicons name={icon} size={13} color="rgba(255,215,0,0.65)" />
           <Text style={styles.devSectionTitle}>{title.toUpperCase()}</Text>
@@ -1422,7 +1457,7 @@ function DevBtn({ label, onPress, disabled, variant = 'default', flex, fullWidth
   const isOrange      = variant === 'orange';
   const isViolet      = variant === 'violet';
   return (
-    <TouchableOpacity onPress={onPress} disabled={disabled} activeOpacity={0.75}
+    <TouchableOpacity accessibilityRole="button" onPress={onPress} disabled={disabled} activeOpacity={0.75}
       style={[styles.devBtn, flex && { flex: 1 }, fullWidth && { alignSelf: 'stretch' },
         isDestructive && styles.devBtnDestructive, isDim && styles.devBtnDim,
         isOrange && styles.devBtnOrange, isViolet && styles.devBtnViolet,
@@ -1439,7 +1474,10 @@ function DevBtn({ label, onPress, disabled, variant = 'default', flex, fullWidth
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
+const APP_VERSION = expoConfig.version;
+
 const styles = StyleSheet.create({
+  webNotice: { flex: 1, color: Colors.textSecondary, fontSize: 13.5, lineHeight: 20 },
   root:          { flex: 1, backgroundColor: Colors.bgAbyss },
   scroll:        { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 8 },

@@ -38,7 +38,7 @@ export default function ConfirmModal({
           <Text style={modalStyles.title}>{title}</Text>
           {body ? <Text style={modalStyles.body}>{body}</Text> : null}
 
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[modalStyles.ctaBtn, styles.confirmSpacing, { backgroundColor: accent, shadowColor: accent }]}
             onPress={onConfirm}
             activeOpacity={0.85}
@@ -46,7 +46,7 @@ export default function ConfirmModal({
             <Text style={modalStyles.ctaTxt}>{confirmLabel}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} activeOpacity={0.75}>
+          <TouchableOpacity accessibilityRole="button" style={styles.cancelBtn} onPress={onCancel} activeOpacity={0.75}>
             <Text style={styles.cancelTxt}>{cancelLabel}</Text>
           </TouchableOpacity>
         </View>

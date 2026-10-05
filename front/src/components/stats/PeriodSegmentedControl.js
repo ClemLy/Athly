@@ -15,7 +15,7 @@ export default function PeriodSegmentedControl({ value = 'month', onChange }) {
       {ITEMS.map((item) => {
         const active = item.id === value;
         return (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             key={item.id}
             onPress={() => onChange && onChange(item.id)}
             style={[styles.item, active && styles.itemActive]}

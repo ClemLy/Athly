@@ -31,7 +31,7 @@ export default function ActionSheetModal({ visible, title, options = [], cancelL
           {!!title && <Text style={styles.title} numberOfLines={2}>{title}</Text>}
 
           {options.map((opt, i) => (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               key={`${opt.label}-${i}`}
               style={[styles.optionBtn, i === options.length - 1 && styles.optionBtnLast]}
               onPress={() => handlePress(opt)}
@@ -41,7 +41,7 @@ export default function ActionSheetModal({ visible, title, options = [], cancelL
             </TouchableOpacity>
           ))}
 
-          <TouchableOpacity style={styles.cancelBtn} onPress={onClose} activeOpacity={0.75}>
+          <TouchableOpacity accessibilityRole="button" style={styles.cancelBtn} onPress={onClose} activeOpacity={0.75}>
             <Text style={styles.cancelTxt}>{cancelLabel}</Text>
           </TouchableOpacity>
         </View>

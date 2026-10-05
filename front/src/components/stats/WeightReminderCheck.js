@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../context/AuthContext';
+import { useTutorial } from '../../context/TutorialContext';
 import { getWeightHistory } from '../../services';
 import WeightReminderModal from './WeightReminderModal';
 import WeightEntryModal from '../common/WeightEntryModal';
@@ -15,14 +16,24 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 // modale de rappel — sauf si l'utilisateur a déjà cliqué "Plus tard" au
 // cours des 7 derniers jours (pas de spam avant la semaine suivante).
 
+// Délai avant d'afficher le rappel : laisse l'accueil s'afficher et se poser
+// avant d'interrompre l'utilisateur.
+const SHOW_DELAY_MS = 1500;
+
 export default function WeightReminderCheck() {
   const { userToken } = useAuth();
+  const { bootstrapped, hasCompleted, isActive } = useTutorial();
   const [reminderVisible, setReminderVisible] = useState(false);
   const [entryVisible, setEntryVisible]       = useState(false);
 
+  // Jamais pendant (ni avant) le tutoriel : un nouveau compte voyait sinon le
+  // rappel de pesée s'empiler par-dessus la première étape du guide.
+  const tutorialSettled = bootstrapped && hasCompleted && !isActive;
+
   useEffect(() => {
-    if (!userToken) return;
-    (async () => {
+    if (!userToken || !tutorialSettled) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
       try {
         const dismissedAtRaw = await AsyncStorage.getItem(DISMISSED_AT_KEY);
         if (dismissedAtRaw) {
@@ -35,14 +46,15 @@ export default function WeightReminderCheck() {
         const lastEntry = history[history.length - 1];
         const lastWeighInAge = lastEntry ? Date.now() - new Date(lastEntry.date).getTime() : Infinity;
 
-        if (lastWeighInAge >= SEVEN_DAYS_MS) {
+        if (!cancelled && lastWeighInAge >= SEVEN_DAYS_MS) {
           setReminderVisible(true);
         }
       } catch (_) {
-        // Best-effort — ne doit jamais bloquer le démarrage de l'app.
+        // Best-effort : ne doit jamais bloquer le démarrage de l'app.
       }
-    })();
-  }, [userToken]);
+    }, SHOW_DELAY_MS);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [userToken, tutorialSettled]);
 
   const handleLater = useCallback(async () => {
     setReminderVisible(false);

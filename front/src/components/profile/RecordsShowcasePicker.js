@@ -79,7 +79,7 @@ export default function RecordsShowcasePicker({ visible, current = [], onSaved, 
               <Text style={styles.title}>Records mis en avant</Text>
               <Text style={styles.subtitle}>{selected.length}/{MAX_SHOWCASED} sélectionnés</Text>
             </View>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button" onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Ionicons name="close" size={22} color={Colors.textMuted} />
             </TouchableOpacity>
           </View>
@@ -119,7 +119,7 @@ export default function RecordsShowcasePicker({ visible, current = [], onSaved, 
                   const active = selected.includes(item.exercice);
                   const disabled = !active && selected.length >= MAX_SHOWCASED;
                   return (
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       style={[styles.row, active && styles.rowActive]}
                       onPress={() => toggle(item.exercice)}
                       disabled={disabled}
@@ -141,7 +141,7 @@ export default function RecordsShowcasePicker({ visible, current = [], onSaved, 
                 }}
               />
 
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
                 onPress={handleSave}
                 disabled={saving}

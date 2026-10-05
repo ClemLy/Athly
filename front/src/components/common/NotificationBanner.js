@@ -52,6 +52,8 @@ export default function NotificationBanner({ message, type = 'error' }) {
 
   return (
     <Animated.View
+      accessibilityRole="alert"
+      accessibilityLiveRegion="polite"
       style={[
         styles.container,
         { opacity, transform: [{ translateY }], backgroundColor: v.bg, borderColor: v.border },
@@ -94,8 +96,8 @@ const styles = StyleSheet.create({
   },
   text: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '500',
-    lineHeight: 18,
+    lineHeight: 20,
   },
 });

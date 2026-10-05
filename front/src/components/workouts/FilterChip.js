@@ -37,7 +37,7 @@ export default function FilterChip({ label, options = [], values = [], onChange 
 
   return (
     <>
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         style={[styles.chip, active && styles.chipActive]}
         onPress={() => setOpen(true)}
         activeOpacity={0.85}
@@ -59,8 +59,8 @@ export default function FilterChip({ label, options = [], values = [], onChange 
         animationType="fade"
         onRequestClose={() => setOpen(false)}
       >
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation && e.stopPropagation()}>
+        <Pressable accessible={false} style={styles.backdrop} onPress={() => setOpen(false)}>
+          <Pressable accessibilityRole="button" style={styles.sheet} onPress={(e) => e.stopPropagation && e.stopPropagation()}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>{label}</Text>
 
@@ -68,7 +68,7 @@ export default function FilterChip({ label, options = [], values = [], onChange 
               {options.map((opt) => {
                 const selected = values.includes(opt.id);
                 return (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={opt.id}
                     style={styles.option}
                     onPress={() => toggle(opt.id)}
@@ -88,10 +88,10 @@ export default function FilterChip({ label, options = [], values = [], onChange 
             </ScrollView>
 
             <View style={styles.footer}>
-              <TouchableOpacity onPress={clear} style={styles.clearBtn} activeOpacity={0.7}>
+              <TouchableOpacity accessibilityRole="button" onPress={clear} style={styles.clearBtn} activeOpacity={0.7}>
                 <Text style={styles.clearText}>Tout effacer</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setOpen(false)} style={styles.applyBtn} activeOpacity={0.85}>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setOpen(false)} style={styles.applyBtn} activeOpacity={0.85}>
                 <Text style={styles.applyText}>Appliquer</Text>
               </TouchableOpacity>
             </View>

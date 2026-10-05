@@ -59,7 +59,7 @@ describe('Exercise API (Performances)', () => {
 
     expect(res.statusCode).toEqual(201);
     expect(res.body.success).toBe(true);
-    expect(res.body.message).toBe("Performance enregistrée !");
+    expect(res.body.message).toBe("Performance enregistrée.");
   });
 
   it('devrait récupérer l\'historique d\'un exercice spécifique (GET /api/exercises/history/:name)', async () => {

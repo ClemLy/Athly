@@ -128,7 +128,7 @@ export default function ChestOpeningModal({ visible, drawnItem, onClose }) {
             <Text style={styles.itemName}>{item?.name ?? drawnItem?.itemType}</Text>
             <Text style={styles.itemDesc}>{item?.description ?? ''}</Text>
 
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[styles.collectBtn, { backgroundColor: rarity?.color ?? Colors.primary }]}
               onPress={onClose}
               activeOpacity={0.85}

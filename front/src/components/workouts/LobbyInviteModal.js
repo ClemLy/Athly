@@ -29,10 +29,10 @@ export default function LobbyInviteModal({ visible, fromPseudo, onJoin, onDismis
           </Text>
 
           <View style={styles.btnRow}>
-            <TouchableOpacity style={styles.dismissBtn} onPress={onDismiss} activeOpacity={0.8}>
+            <TouchableOpacity accessibilityRole="button" style={styles.dismissBtn} onPress={onDismiss} activeOpacity={0.8}>
               <Text style={styles.dismissBtnTxt}>Ignorer</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.joinBtn} onPress={onJoin} activeOpacity={0.85}>
+            <TouchableOpacity accessibilityRole="button" style={styles.joinBtn} onPress={onJoin} activeOpacity={0.85}>
               <Text style={styles.joinBtnTxt}>Rejoindre</Text>
             </TouchableOpacity>
           </View>
