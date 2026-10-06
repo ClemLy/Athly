@@ -15,6 +15,7 @@ import { TEMPLATES, instantiateWorkout } from '../../data/workoutTemplates';
 import ResumeWorkoutCard from '../../components/workouts/ResumeWorkoutCard';
 import { useWorkoutInProgress } from '../../context/WorkoutInProgressContext';
 import { useSavedWorkouts } from '../../context/SavedWorkoutsContext';
+import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import { instantiateSavedWorkout } from '../../services/savedWorkouts.service';
 import { useFocusEffect } from '@react-navigation/native';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
@@ -30,7 +31,16 @@ import { plural } from '../../utils/format';
 // Header : titre + 2 icônes (Mes exercices, Créer un exercice).
 // Body : callout Builder, section "Mes séances" sauvegardées, templates rapides.
 
-function TemplateCard({ template, onPress }) {
+// « il y a 3 j » pour la dernière fois qu'une séance a été faite.
+function lastDoneLabel(date) {
+  if (!date) return null;
+  const days = Math.round((Date.now() - new Date(date).getTime()) / 86400000);
+  if (days <= 0) return "Faite aujourd'hui";
+  if (days === 1) return 'Faite hier';
+  return `Faite il y a ${days} j`;
+}
+
+function TemplateCard({ template, lastDone, onPress }) {
   return (
     <TouchableOpacity accessibilityRole="button"
       style={styles.card}
@@ -50,6 +60,12 @@ function TemplateCard({ template, onPress }) {
           <Ionicons name="time-outline" size={13} color={Colors.textMuted} />
           <Text style={styles.meta} numberOfLines={1}>~{template.estimatedDurationMin} min</Text>
         </View>
+        {lastDone ? (
+          <View style={styles.recentRow}>
+            <Ionicons name="checkmark-circle" size={13} color={Colors.valid} />
+            <Text style={styles.metaRecent} numberOfLines={1}>{lastDoneLabel(lastDone)}</Text>
+          </View>
+        ) : null}
       </View>
       <Ionicons name="chevron-forward" size={22} color={Colors.chevron} />
     </TouchableOpacity>
@@ -97,6 +113,17 @@ const SKIP_CONFIRM_KEY = '@athly_skip_workout_confirm';
 export default function WorkoutListScreen({ navigation, route }) {
   const { loadWorkout, resumable } = useWorkoutInProgress();
   const { items: savedWorkouts, remove: removeSaved } = useSavedWorkouts();
+  const { sessionLogs } = useWorkoutLogs();
+
+  // Dernière réalisation de chaque séance (par nom) — repère « Faite il y a 3 j ».
+  const lastDoneByName = React.useMemo(() => {
+    const map = {};
+    (sessionLogs || []).forEach((l) => {
+      if (!l || !l.name || !l.date) return;
+      if (!map[l.name] || new Date(l.date) > new Date(map[l.name])) map[l.name] = l.date;
+    });
+    return map;
+  }, [sessionLogs]);
 
   const [confirmItem, setConfirmItem] = useState(null); // { type: 'template'|'saved', data }
   const [dontAsk, setDontAsk] = useState(false);
@@ -255,7 +282,7 @@ export default function WorkoutListScreen({ navigation, route }) {
     sections.push({ type: 'header', key: 'h-saved', label: 'Mes séances', count: savedWorkouts.length });
     savedWorkouts.forEach((s) => sections.push({ type: 'saved', key: `s-${s.id}`, item: s }));
   }
-  sections.push({ type: 'header', key: 'h-templates', label: 'Templates rapides', count: TEMPLATES.length });
+  sections.push({ type: 'header', key: 'h-templates', label: 'Séances prêtes à lancer', count: TEMPLATES.length });
   TEMPLATES.forEach((t) => sections.push({ type: 'template', key: `t-${t.id}`, item: t }));
 
   const renderItem = ({ item }) => {
@@ -314,6 +341,7 @@ export default function WorkoutListScreen({ navigation, route }) {
       return (
         <TemplateCard
           template={item.item}
+          lastDone={lastDoneByName[item.item.name]}
           onPress={() => onSelectTemplate(item.item)}
         />
       );
@@ -618,6 +646,8 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     flexShrink: 0,
   },
+  recentRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 },
+  metaRecent: { color: Colors.textSecondary, fontSize: 12.5, fontWeight: '600' },
   metaDot: {
     width: 3,
     height: 3,

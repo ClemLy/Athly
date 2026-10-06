@@ -8,7 +8,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Colors } from '../../constants/theme';
-import { useWorkoutInProgress } from '../../context/WorkoutInProgressContext';
+import useSetLogging from '../../hooks/useSetLogging';
 import {
   primaryMuscleLabel,
   secondaryMusclesLabels,
@@ -18,7 +18,7 @@ import SetTable from './SetTable';
 import ActionSheetModal from '../common/ActionSheetModal';
 
 // Bloc exercice pour la vue "Voir tous les exercices" (all-in-one).
-// Affiche le titre, les muscles, le SetTable compact et le bouton [+ Série].
+// Affiche le titre, les muscles et le SetTable compact (avec « + Série »).
 // La vidéo est volontairement masquée pour maximiser l'espace de saisie.
 //
 // Props :
@@ -28,39 +28,16 @@ import ActionSheetModal from '../common/ActionSheetModal';
 //   - onReplaceExercise : (exerciseIndex) => void
 
 function InlineExerciseBlock({ exercise, exerciseIndex, onRemoveExercise, onReplaceExercise }) {
-  const { actions } = useWorkoutInProgress();
-
   const title    = (exercise && (exercise.name || exercise.title)) || 'Exercice';
   const icon     = pickExerciseIcon(exercise);
   const primary  = primaryMuscleLabel(exercise);
   const secondary = secondaryMusclesLabels(exercise);
-  const sets     = (exercise && Array.isArray(exercise.sets)) ? exercise.sets : [];
   const isDone   = !!exercise?.done;
 
-  const completedCount = sets.filter((s) => !!s.completed).length;
+  const log = useSetLogging(exerciseIndex, exercise);
+  const sets = log.sets;
+  const completedCount = log.completedCount;
   const allDone = sets.length > 0 && completedCount === sets.length;
-
-  const handleToggle = useCallback((i) => {
-    actions.toggleSet(exerciseIndex, i);
-  }, [actions, exerciseIndex]);
-
-  const handleChange = useCallback((i, patch) => {
-    const cur    = sets[i] || {};
-    const weight = patch.weight !== undefined ? patch.weight : cur.weight;
-    const reps   = patch.reps   !== undefined ? patch.reps   : cur.reps;
-    actions.updateSet(exerciseIndex, i, {
-      weight: typeof weight === 'number' ? weight : Number(weight) || 0,
-      reps:   typeof reps   === 'number' ? reps   : Number(reps)   || 0,
-    });
-  }, [actions, exerciseIndex, sets]);
-
-  const handleAdd = useCallback(() => {
-    actions.addSet(exerciseIndex);
-  }, [actions, exerciseIndex]);
-
-  const handleRemove = useCallback((i) => {
-    actions.removeSet(exerciseIndex, i);
-  }, [actions, exerciseIndex]);
 
   const [actionSheetVisible, setActionSheetVisible] = useState(false);
 
@@ -121,17 +98,14 @@ function InlineExerciseBlock({ exercise, exerciseIndex, onRemoveExercise, onRepl
       {/* ── Tableau des séries (compact = sans marge) ─────────────────── */}
       <SetTable
         sets={sets}
-        onToggle={handleToggle}
-        onChange={handleChange}
-        onRemove={handleRemove}
+        onToggle={log.toggle}
+        onChange={log.change}
+        previousFor={log.previousFor}
+        onUsePrevious={log.usePrevious}
+        onAdd={log.addSet}
+        onRemoveLast={log.canRemoveLast ? log.removeLast : null}
         compact
       />
-
-      {/* ── Ajouter une série ─────────────────────────────────────────── */}
-      <TouchableOpacity accessibilityRole="button" style={styles.addBtn} onPress={handleAdd} activeOpacity={0.8}>
-        <Ionicons name="add" size={15} color={Colors.primary} />
-        <Text style={styles.addBtnText}>Ajouter une série</Text>
-      </TouchableOpacity>
 
       <ActionSheetModal
         visible={actionSheetVisible}
@@ -223,21 +197,6 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
 
-  // ── Footer "+ Série" ─────────────────────────────────────────────────────
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 11,
-    gap: 5,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Colors.borderSubtle,
-  },
-  addBtnText: {
-    color: Colors.primary,
-    fontSize: 13,
-    fontWeight: '700',
-  },
 });
 
 export default React.memo(InlineExerciseBlock);

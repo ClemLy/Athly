@@ -14,7 +14,7 @@
 import {
   normalizeId,
   MUSCLE_GROUPS,
-  SUBMUSCLE_TO_GROUP,
+  resolveMuscleGroup,
 } from '../constants/exerciseFilters';
 
 const yt = (q) => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
@@ -520,9 +520,9 @@ export function filterCatalog(catalog, filters) {
       if (!candidates.some((id) => subIds.includes(id))) return false;
     } else if (groups.length > 0) {
       // Match sur le groupe (targetMuscleGroup) ou via mapping sous-muscle → groupe
-      const targetGid = ex.targetMuscleGroup || SUBMUSCLE_TO_GROUP[normalizeId(ex.targetMuscle || '')] || '';
+      const targetGid = ex.targetMuscleGroup || resolveMuscleGroup(ex.targetMuscle) || '';
       const secondaryGids = (Array.isArray(ex.secondaryMuscles) ? ex.secondaryMuscles : [])
-        .map((m) => SUBMUSCLE_TO_GROUP[normalizeId(m)] || '');
+        .map((m) => resolveMuscleGroup(m) || '');
       const allGids = [targetGid, ...secondaryGids].filter(Boolean);
       if (!allGids.some((g) => groups.includes(g))) return false;
     }
@@ -637,7 +637,7 @@ export function generateWorkout(selection) {
       });
     } else if (t.kind === 'group') {
       pool = filtered.filter((ex) => {
-        const targetGid = ex.targetMuscleGroup || SUBMUSCLE_TO_GROUP[normalizeId(ex.targetMuscle || '')] || '';
+        const targetGid = ex.targetMuscleGroup || resolveMuscleGroup(ex.targetMuscle) || '';
         return targetGid === t.value;
       });
     }

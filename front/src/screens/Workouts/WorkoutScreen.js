@@ -93,6 +93,9 @@ export default function WorkoutScreen({ route, navigation }) {
 
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const filterActive = isFiltering(filters);
+  // Filtres repliés par défaut : en pleine séance (quelques exercices), ils
+  // encombrent plus qu'ils n'aident. Ils restent à un geste.
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [sheetVisible, setSheetVisible] = useState(false);
   const [sheetMode, setSheetMode] = useState('add');
@@ -447,10 +450,18 @@ export default function WorkoutScreen({ route, navigation }) {
       // Séance déjà validée : cette sortie ne doit jamais déclencher la popup
       // d'abandon (voir le listener 'beforeRemove' plus haut).
       allowExitRef.current = true;
-      // Pop the entire WorkoutStack back to WorkoutList (the root screen),
-      // then switch to Stats tab. Without popToTop(), WorkoutScreen stays on the
-      // stack and the user lands back here when they tap "Séances" again.
-      navigation.popToTop();
+      // On remet l'onglet Séances sur sa liste, puis on bascule sur Stats. Sans
+      // ça, l'écran de séance (vide) resterait dans l'onglet.
+      // Séance lancée depuis l'onglet Séances → pile [WorkoutList, Workout] :
+      // on dépile. Lancée depuis l'Accueil ou le Profil → pile [Workout] seule :
+      // popToTop() n'a rien à dépiler (erreur « POP_TO_TOP was not handled »),
+      // on remplace donc l'écran par la liste.
+      const stackState = navigation.getState?.();
+      if (stackState && stackState.index > 0) {
+        navigation.popToTop();
+      } else {
+        navigation.replace('WorkoutList');
+      }
       navigation.navigate('Stats');
     }
   }, [navigation, actions]);
@@ -496,30 +507,17 @@ export default function WorkoutScreen({ route, navigation }) {
     );
   };
 
-  const renderExercise = (ex, sourceIndex, opts = {}) => {
-    const isDone = !!(ex && ex.done);
-    return (
-      <View
-        key={(ex && (ex._id || ex.id)) || `ex-${sourceIndex}`}
-        style={isDone ? styles.doneExWrap : null}
-      >
-        <ExerciseCard
-          item={ex}
-          inSuperset={!!opts.inSuperset}
-          onPress={() => onCardPress(ex, sourceIndex)}
-          onReplace={() => openReplaceSheet(sourceIndex)}
-          onRemove={() => onRemove(sourceIndex, ex)}
-          onToggleSuperset={() => onToggleSuperset(sourceIndex)}
-        />
-        {isDone && (
-          <View style={styles.doneExBadge} pointerEvents="none">
-            <Ionicons name="checkmark-circle" size={13} color={Colors.valid} />
-            <Text style={styles.doneExText}>Terminé</Text>
-          </View>
-        )}
-      </View>
-    );
-  };
+  const renderExercise = (ex, sourceIndex, opts = {}) => (
+    <ExerciseCard
+      key={(ex && (ex._id || ex.id)) || `ex-${sourceIndex}`}
+      item={ex}
+      inSuperset={!!opts.inSuperset}
+      onPress={() => onCardPress(ex, sourceIndex)}
+      onReplace={() => openReplaceSheet(sourceIndex)}
+      onRemove={() => onRemove(sourceIndex, ex)}
+      onToggleSuperset={() => onToggleSuperset(sourceIndex)}
+    />
+  );
 
   const renderItem = ({ item }) => {
     if (item.type === 'superset') {
@@ -548,6 +546,11 @@ export default function WorkoutScreen({ route, navigation }) {
   );
 
   const exerciseCount = sourceExercises.length;
+  const totalSets = sourceExercises.reduce((n, ex) => n + (Array.isArray(ex.sets) ? ex.sets.length : 0), 0);
+  const doneSets = sourceExercises.reduce((n, ex) => n + (Array.isArray(ex.sets) ? ex.sets.filter((x) => x && x.completed).length : 0), 0);
+  const doneExercises = sourceExercises.filter((ex) => ex.done
+    || (Array.isArray(ex.sets) && ex.sets.length > 0 && ex.sets.every((x) => x && x.completed))).length;
+  const progress = totalSets > 0 ? doneSets / totalSets : 0;
 
   // ─────────────────────────────────────────────────────────────────────────
   // RETURN — structure vérifiable complète
@@ -555,44 +558,69 @@ export default function WorkoutScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
 
-      {/* ── Header immersif : nom + chrono géant ── */}
+      {/* ── Header immersif : nom, chrono, avancement global ── */}
       <View style={styles.header}>
         <Text style={styles.workoutName} numberOfLines={1}>
           {state.name || 'Séance en cours'}
         </Text>
-        <Text style={styles.chrono}>{formatElapsed(elapsed)}</Text>
-        <Text style={styles.chronoSub}>
-          {exerciseCount > 0
-            ? `${exerciseCount} exercice${exerciseCount > 1 ? 's' : ''} • ~${estimateMinutes(exerciseCount)} min`
-            : 'Ajoute tes exercices'}
+        <Text style={styles.chrono} accessibilityLabel={`Durée de la séance : ${formatElapsed(elapsed)}`}>
+          {formatElapsed(elapsed)}
         </Text>
+        {exerciseCount > 0 ? (
+          <View style={styles.progressBlock}>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
+            </View>
+            <Text style={styles.chronoSub}>
+              {doneSets}/{totalSets} séries  ·  {doneExercises}/{exerciseCount} exercices  ·  ~{estimateMinutes(exerciseCount)} min
+            </Text>
+          </View>
+        ) : (
+          <Text style={styles.chronoSub}>Ajoute tes exercices</Text>
+        )}
       </View>
 
       {/* ── Bulles de présence Multi (Section VII) ── */}
       <LobbyMembersBar members={lobby?.members ?? []} />
 
-      {/* ── Filtres ── */}
-      <SortBar filters={filters} onChange={setFilters} />
-
-      {/* ── Toggle vue globale ── */}
+      {/* ── Barre d'outils : affichage + filtres (repliés) ── */}
       {sourceExercises.length > 0 && (
-        <View style={styles.viewToggleBar}>
-          <TouchableOpacity accessibilityRole="button"
-            style={[styles.viewToggleBtn, allInOne && styles.viewToggleBtnActive]}
-            onPress={() => setAllInOne((v) => !v)}
+        <View style={styles.toolbar}>
+          <View style={styles.segmented} accessibilityRole="tablist">
+            {[
+              { key: false, label: 'Cartes', icon: 'albums-outline' },
+              { key: true, label: 'Tout afficher', icon: 'list-outline' },
+            ].map((opt) => {
+              const active = allInOne === opt.key;
+              return (
+                <TouchableOpacity
+                  key={opt.label}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: active }}
+                  style={[styles.segment, active && styles.segmentActive]}
+                  onPress={() => { if (!active) { haptics.selection(); setAllInOne(opt.key); } }}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name={opt.icon} size={15} color={active ? Colors.textPrimary : Colors.textMuted} />
+                  <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{opt.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={filtersOpen ? 'Masquer les filtres' : 'Filtrer les exercices'}
+            style={[styles.filterBtn, (filtersOpen || filterActive) && styles.filterBtnActive]}
+            onPress={() => setFiltersOpen((v) => !v)}
             activeOpacity={0.8}
           >
-            <Ionicons
-              name={allInOne ? 'list-outline' : 'apps-outline'}
-              size={13}
-              color={allInOne ? Colors.secondaryAccent : Colors.textMuted}
-            />
-            <Text style={[styles.viewToggleText, allInOne && styles.viewToggleTextActive]}>
-              {allInOne ? 'Vue détaillée' : 'Voir tous les exercices'}
-            </Text>
+            <Ionicons name="options-outline" size={18} color={filtersOpen || filterActive ? Colors.primary : Colors.textSecondary} />
+            {filterActive ? <View style={styles.filterDot} /> : null}
           </TouchableOpacity>
         </View>
       )}
+
+      {filtersOpen || filterActive ? <SortBar filters={filters} onChange={setFilters} /> : null}
 
       {/* ── Liste des exercices — flex:1 pour occuper tout l'espace disponible ── */}
       <View style={styles.listContainer}>
@@ -635,7 +663,10 @@ export default function WorkoutScreen({ route, navigation }) {
           {isFinalizing ? (
             <ActivityIndicator color="#fff" size="small" />
           ) : (
-            <Text style={styles.terminateBtnText}>TERMINER LA SÉANCE</Text>
+            <>
+              <Ionicons name="flag" size={18} color="#fff" />
+              <Text style={styles.terminateBtnText}>Terminer la séance</Text>
+            </>
           )}
         </TouchableOpacity>
       </View>
@@ -662,6 +693,7 @@ export default function WorkoutScreen({ route, navigation }) {
         prevTotalXP={recapData ? recapData.prevTotalXP : 0}
         completedQuests={recapData ? recapData.completedQuests || [] : []}
         bonusUnlocked={recapData ? recapData.bonusUnlocked || false : false}
+        workoutName={state.name}
         onClose={closeRecap}
       />
 
@@ -726,23 +758,31 @@ const styles = StyleSheet.create({
   },
   workoutName: {
     color: Colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 6,
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 2,
   },
   chrono: {
     color: Colors.primary,
-    fontSize: 56,
+    fontSize: 52,
     fontWeight: '900',
     letterSpacing: -1,
     fontVariant: ['tabular-nums'],
   },
+  progressBlock: { alignSelf: 'stretch', alignItems: 'center', marginTop: 8 },
+  progressTrack: {
+    alignSelf: 'stretch',
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+  },
+  progressFill: { height: '100%', borderRadius: 3, backgroundColor: Colors.valid },
   chronoSub: {
-    color: Colors.textMuted,
-    fontSize: 12,
-    marginTop: 4,
+    color: Colors.textSecondary,
+    fontSize: 13,
+    marginTop: 8,
+    fontVariant: ['tabular-nums'],
   },
 
   // ── Liste ────────────────────────────────────────────────────────────────
@@ -807,7 +847,9 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(255,255,255,0.08)',
   },
   terminateBtn: {
-    height: 60,
+    height: 56,
+    flexDirection: 'row',
+    gap: 10,
     backgroundColor: Colors.primary,
     borderRadius: 16,
     alignItems: 'center',
@@ -818,63 +860,53 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 10,
   },
-  doneExWrap: {
-    opacity: 0.55,
-  },
-  doneExBadge: {
-    position: 'absolute',
-    top: 10,
-    right: 32,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(34,197,94,0.14)', // Colors.valid à 14% opacité
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  doneExText: {
-    color: Colors.valid,
-    fontSize: 11,
-    fontWeight: '700',
-  },
   terminateBtnLoading: {
     opacity: 0.7,
   },
   terminateBtnText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 1.2,
+    fontSize: 16.5,
+    fontWeight: '800',
   },
 
-  // ── Bascule vue globale ────────────────────────────────────────────────
-  viewToggleBar: {
-    paddingHorizontal: 20,
-    paddingVertical: 6,
-    alignItems: 'flex-end',
-  },
-  viewToggleBtn: {
+  // ── Barre d'outils ─────────────────────────────────────────────────────
+  toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
+  },
+  segmented: {
+    flex: 1,
+    flexDirection: 'row',
+    padding: 3,
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.borderDim,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
-  viewToggleBtnActive: {
-    borderColor: 'rgba(110,106,240,0.45)',
-    backgroundColor: 'rgba(110,106,240,0.09)',
+  segment: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 38,
+    borderRadius: 11,
   },
-  viewToggleText: {
-    color: Colors.textMuted,
-    fontSize: 12,
-    fontWeight: '700',
+  segmentActive: { backgroundColor: 'rgba(255,255,255,0.1)' },
+  segmentText: { color: Colors.textMuted, fontSize: 13.5, fontWeight: '700' },
+  segmentTextActive: { color: Colors.textPrimary },
+  filterBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
-  viewToggleTextActive: {
-    color: Colors.secondaryAccent,
+  filterBtnActive: { backgroundColor: 'rgba(254,116,57,0.14)' },
+  filterDot: {
+    position: 'absolute', top: 9, right: 9, width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.primary,
   },
 });

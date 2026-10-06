@@ -234,7 +234,7 @@ export default function StatsScreen({ navigation }) {
 
             <View style={styles.kpisRow} ref={kpisRef} onLayout={onKpisLayout} collapsable={false}>
               <Kpi label="Séances" value={stats.totalSessions} icon="bookmark" />
-              <Kpi label="Sets"    value={stats.totalSets}     icon="checkmark-done" />
+              <Kpi label="Séries"  value={stats.totalSets}     icon="checkmark-done" />
               <Kpi label="Volume"  value={formatWeight(stats.totalVolume)} icon="barbell" wide />
             </View>
 

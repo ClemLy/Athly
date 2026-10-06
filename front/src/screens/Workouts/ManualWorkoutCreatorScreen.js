@@ -70,7 +70,7 @@ function ExerciseRow({ exercise, index, onRemove, onSetsChange, onRepsChange }) 
 
       <View style={styles.exoTargets}>
         <View style={styles.targetField}>
-          <Text style={styles.targetLabel}>Sets</Text>
+          <Text style={styles.targetLabel}>Séries</Text>
           <View style={styles.stepper}>
             <TouchableOpacity accessibilityLabel="Retirer" accessibilityRole="button"
               style={styles.stepperBtn}

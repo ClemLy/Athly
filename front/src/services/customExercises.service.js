@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SUBMUSCLE_TO_GROUP, normalizeId } from '../constants/exerciseFilters';
+import { resolveMuscleGroup } from '../constants/exerciseFilters';
 
 // CRUD des exercices personnalisés. Persiste dans AsyncStorage sous une clé dédiée.
 // Schéma d'un exo :
@@ -18,7 +18,7 @@ import { SUBMUSCLE_TO_GROUP, normalizeId } from '../constants/exerciseFilters';
 const STORAGE_KEY = 'athly:customExercises:v1';
 
 function deriveGroup(targetMuscle) {
-  return SUBMUSCLE_TO_GROUP[normalizeId(targetMuscle || '')] || '';
+  return resolveMuscleGroup(targetMuscle) || '';
 }
 
 function deriveEquipFlags(equipment) {

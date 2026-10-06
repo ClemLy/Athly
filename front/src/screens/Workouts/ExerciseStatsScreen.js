@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TouchableOpacity,
+  Pressable,
   ScrollView,
   StyleSheet,
 } from 'react-native';
@@ -10,27 +11,30 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
-import { aggregateExercise } from '../../services';
+import { aggregateExercise, getExerciseSessions } from '../../services';
 import ExerciseStatsChart from '../../components/stats/ExerciseStatsChart';
-import PRCard from '../../components/stats/PRCard';
-import { pluralWord } from '../../utils/format';
 
-// Détail historique d'un exercice : graphique de progression + PRs + suggestion.
+// Progression d'un exercice : record, objectif de la prochaine séance, courbe,
+// puis l'historique complet des séances (séries faites, meilleure série).
 //
 // route.params :
 //   - exerciseRef : { id, name } OU string
-//
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  const months = ['jan', 'fév', 'mar', 'avr', 'mai', 'juin', 'juil', 'août', 'sep', 'oct', 'nov', 'déc'];
-  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+
+const fmt = (n) => String(Math.round(Number(n) * 10) / 10).replace('.', ',');
+const fmtInt = (n) => Math.round(Number(n) || 0).toLocaleString('fr-FR');
+
+function shortDate(iso, withYear = false) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', ...(withYear ? { year: 'numeric' } : {}) });
 }
 
 const METRICS = [
-  { id: 'maxWeight', label: 'Poids max' },
+  { id: 'maxWeight', label: 'Charge max' },
   { id: 'volume', label: 'Volume' },
 ];
+
+const HISTORY_PREVIEW = 5;
 
 export default function ExerciseStatsScreen({ route, navigation }) {
   const params = (route && route.params) || {};
@@ -39,20 +43,44 @@ export default function ExerciseStatsScreen({ route, navigation }) {
 
   const { sessionLogs: logs } = useWorkoutLogs();
   const [metric, setMetric] = useState('maxWeight');
+  const [showAll, setShowAll] = useState(false);
 
   const stats = useMemo(() => aggregateExercise(logs, exerciseRef), [logs, exerciseRef]);
+  // Séances les plus récentes en premier, seulement celles avec au moins une série faite.
+  const sessions = useMemo(
+    () => getExerciseSessions(logs, exerciseRef)
+      .filter((s) => s.sets.some((x) => x && x.completed))
+      .reverse(),
+    [logs, exerciseRef],
+  );
+
+  const hasData = sessions.length > 0;
+
+  // Record de charge : sa date et le gain depuis la toute première séance.
+  const record = useMemo(() => {
+    const pts = (stats.points || []).filter((p) => p.maxWeight > 0);
+    if (pts.length === 0) return null;
+    let best = pts[0];
+    pts.forEach((p) => { if (p.maxWeight >= best.maxWeight) best = p; });
+    return { weight: best.maxWeight, date: best.date, gain: best.maxWeight - pts[0].maxWeight };
+  }, [stats.points]);
+
+  const firstDate = sessions.length ? sessions[sessions.length - 1].date : null;
+  const suggestion = stats.suggestedNext;
+  const visibleSessions = showAll ? sessions : sessions.slice(0, HISTORY_PREVIEW);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <View style={styles.header}>
-        <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button"
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          accessibilityLabel="Retour"
+          accessibilityRole="button"
           onPress={() => navigation && navigation.goBack()}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={styles.backBtn}
         >
-          <Ionicons name="chevron-back" size={26} color={Colors.textPrimary} />
+          <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>{exerciseName}</Text>
-        <View style={styles.headerSide} />
+        <Text style={styles.topLabel}>Progression</Text>
       </View>
 
       <ScrollView
@@ -60,316 +88,307 @@ export default function ExerciseStatsScreen({ route, navigation }) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.kpisRow}>
-          <Kpi label="Sessions" value={stats.totalSessions} icon="calendar-outline" />
-          <Kpi label="Poids max" value={stats.prWeight ? `${stats.prWeight} kg` : '-'} icon="trophy-outline" />
-          <Kpi label="1RM est." value={stats.prEstimate1RM ? `${stats.prEstimate1RM} kg` : '-'} icon="rocket-outline" />
+        {/* ── Titre ── */}
+        <View>
+          <Text style={styles.title} accessibilityRole="header">{exerciseName}</Text>
+          <Text style={styles.subtitle}>
+            {hasData
+              ? `${sessions.length} séance${sessions.length > 1 ? 's' : ''}  ·  depuis le ${shortDate(firstDate)}`
+              : 'Aucune séance enregistrée pour le moment'}
+          </Text>
         </View>
 
-        <View style={styles.card}>
-          <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardTitle}>Progression</Text>
-            <View style={styles.metricsToggle}>
-              {METRICS.map((m) => {
-                const active = m.id === metric;
-                return (
-                  <TouchableOpacity accessibilityRole="button"
-                    key={m.id}
-                    style={[styles.metricBtn, active && styles.metricBtnActive]}
-                    onPress={() => setMetric(m.id)}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={[styles.metricLabel, active && styles.metricLabelActive]}>{m.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+        {!hasData ? (
+          <View style={styles.emptyCard}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="trending-up" size={26} color={Colors.primary} />
             </View>
+            <Text style={styles.emptyTitle}>Ta courbe démarre à ta première séance</Text>
+            <Text style={styles.emptyBody}>
+              Valide des séries sur cet exercice : ton record, ta progression et tout ton historique apparaîtront ici.
+            </Text>
           </View>
-          <ExerciseStatsChart points={stats.points} metric={metric} />
-        </View>
+        ) : (
+          <>
+            {/* ── Record ── */}
+            <View style={styles.card}>
+              <View style={styles.recordRow}>
+                <View style={styles.recordMain}>
+                  <View style={styles.labelRow}>
+                    <Ionicons name="trophy" size={15} color={Colors.gold} />
+                    <Text style={styles.label}>Record de charge</Text>
+                  </View>
+                  <Text style={styles.recordValue}>
+                    {record ? fmt(record.weight) : '–'}
+                    <Text style={styles.recordUnit}> kg</Text>
+                  </Text>
+                  {record ? <Text style={styles.recordMeta}>le {shortDate(record.date)}</Text> : null}
+                  {record && record.gain > 0 ? (
+                    <View style={styles.gainRow}>
+                      <Ionicons name="arrow-up" size={13} color={Colors.valid} />
+                      <Text style={styles.gain}>+{fmt(record.gain)} kg depuis le début</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <View style={styles.recordSide}>
+                  <MiniStat label="1RM estimé" value={stats.prEstimate1RM ? `${fmt(stats.prEstimate1RM)} kg` : '–'} />
+                  <View style={styles.sideDivider} />
+                  <MiniStat label="Meilleur volume" value={stats.prVolume ? `${fmtInt(stats.prVolume)} kg` : '–'} />
+                </View>
+              </View>
+            </View>
 
-        <PRCard
-          prWeight={stats.prWeight}
-          prVolume={stats.prVolume}
-          prEstimate1RM={stats.prEstimate1RM}
-          suggestedNext={stats.suggestedNext}
-          totalSessions={stats.totalSessions}
-        />
+            {/* ── Objectif de la prochaine séance ── */}
+            {suggestion ? (
+              <View style={[styles.card, styles.goalCard]}>
+                <View style={styles.goalIcon}>
+                  <Ionicons name={suggestion.reason === 'progress' ? 'trending-up' : 'repeat'} size={20} color={Colors.primary} />
+                </View>
+                <View style={styles.goalText}>
+                  <Text style={styles.label}>Prochaine séance</Text>
+                  <Text style={styles.goalValue}>
+                    {fmt(suggestion.weight)} kg
+                    {suggestion.delta ? <Text style={styles.goalDelta}>{`  +${fmt(suggestion.delta)} kg`}</Text> : null}
+                  </Text>
+                  <Text style={styles.goalSub}>
+                    {suggestion.reason === 'progress'
+                      ? 'Toutes tes séries étaient faites la dernière fois : on monte.'
+                      : 'Toutes les séries n\'étaient pas faites : on consolide à la même charge.'}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
 
-        {stats.lastSession ? <LastSessionCard session={stats.lastSession} /> : null}
+            {/* ── Courbe ── */}
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Progression</Text>
+                <View style={styles.segmented} accessibilityRole="tablist">
+                  {METRICS.map((m) => {
+                    const active = m.id === metric;
+                    return (
+                      <TouchableOpacity
+                        key={m.id}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: active }}
+                        style={[styles.segment, active && styles.segmentActive]}
+                        onPress={() => setMetric(m.id)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{m.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+              <Text style={styles.chartHint}>
+                {metric === 'volume' ? 'Poids × répétitions, toutes séries confondues (kg)' : 'Charge la plus lourde soulevée à chaque séance'}
+              </Text>
+              <ExerciseStatsChart points={stats.points} metric={metric} />
+            </View>
 
-        <View style={styles.footerSpacer} />
+            {/* ── Historique ── */}
+            <View style={styles.card}>
+              <Text style={[styles.cardTitle, { marginBottom: 4 }]}>Historique des séances</Text>
+              {visibleSessions.map((s, i) => (
+                <SessionRow
+                  key={`${s.logId || s.date}-${i}`}
+                  session={s}
+                  isFirst={i === 0}
+                  isRecord={!!record && s.date === record.date}
+                />
+              ))}
+              {sessions.length > HISTORY_PREVIEW ? (
+                <Pressable
+                  onPress={() => setShowAll((v) => !v)}
+                  style={({ pressed }) => [styles.moreBtn, pressed && { opacity: 0.7 }]}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.moreText}>
+                    {showAll ? 'Afficher moins' : `Voir les ${sessions.length} séances`}
+                  </Text>
+                  <Ionicons name={showAll ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.primary} />
+                </Pressable>
+              ) : null}
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function LastSessionCard({ session }) {
-  const date = formatDate(session.date);
-  const completedCount = session.sets.filter((s) => s && s.completed).length;
-
+function MiniStat({ label, value }) {
   return (
-    <View style={styles.lastCard}>
-      <View style={styles.lastHeader}>
-        <View style={styles.lastHeaderLeft}>
-          <Ionicons name="time-outline" size={14} color={Colors.primary} />
-          <Text style={styles.lastTitle}>DERNIÈRE SÉANCE</Text>
-        </View>
-        <Text style={styles.lastDate}>{date}</Text>
-      </View>
-
-      <View style={styles.lastSetsHeader}>
-        <Text style={styles.lastColLabel} numberOfLines={1}>SET</Text>
-        <Text style={[styles.lastColLabel, { flex: 2, textAlign: 'center' }]}>POIDS</Text>
-        <Text style={[styles.lastColLabel, { flex: 2, textAlign: 'center' }]}>REPS</Text>
-        <View style={{ width: 28, alignItems: 'center' }} accessibilityLabel="Série validée">
-          <Ionicons name="checkmark" size={13} color={Colors.textMuted} />
-        </View>
-      </View>
-
-      {session.sets.length === 0 ? (
-        <Text style={styles.lastEmpty}>Aucune série enregistrée</Text>
-      ) : (
-        session.sets.map((s, i) => {
-          const w = Number(s && s.weight) || 0;
-          const r = Number(s && s.reps) || 0;
-          const done = !!(s && s.completed);
-          return (
-            <View key={i} style={[styles.lastSetRow, !done && styles.lastSetRowDim]}>
-              <Text style={styles.lastSetNum}>{i + 1}</Text>
-              <Text style={[styles.lastSetVal, { flex: 2, textAlign: 'center' }]}>
-                {w > 0 ? `${w} kg` : 'PC'}
-              </Text>
-              <Text style={[styles.lastSetVal, { flex: 2, textAlign: 'center' }]}>
-                {r > 0 ? r : '-'}
-              </Text>
-              <View style={{ width: 28, alignItems: 'center' }}>
-                <Ionicons
-                  name={done ? 'checkmark-circle' : 'ellipse-outline'}
-                  size={15}
-                  color={done ? Colors.valid : Colors.borderDim}
-                />
-              </View>
-            </View>
-          );
-        })
-      )}
-
-      {session.sets.length > 0 && (
-        <Text style={styles.lastSummary}>
-          {completedCount}/{session.sets.length} {pluralWord(session.sets.length, 'série validée', 'séries validées')}
-        </Text>
-      )}
-
-      {session.notes ? (
-        <View style={styles.lastNotesRow}>
-          <Ionicons name="document-text-outline" size={13} color={Colors.textMuted} style={{ marginRight: 6, flexShrink: 0 }} />
-          <Text style={styles.lastNotesText}>{session.notes}</Text>
-        </View>
-      ) : null}
+    <View style={styles.mini}>
+      <Text style={styles.miniValue} numberOfLines={1}>{value}</Text>
+      <Text style={styles.miniLabel} numberOfLines={1}>{label}</Text>
     </View>
   );
 }
 
-function Kpi({ label, value, icon }) {
+// Une séance passée : date, puis ses séries. Même charge partout → une ligne
+// « 35 kg × 10 · 9 · 8 · 8 » ; charges différentes → une pastille par série.
+function SessionRow({ session, isFirst, isRecord }) {
+  const done = session.sets.filter((x) => x && x.completed);
+  const weights = done.map((x) => Number(x.weight) || 0);
+  const sameWeight = weights.every((w) => w === weights[0]);
+  const d = new Date(session.date);
+  const valid = !Number.isNaN(d.getTime());
+
   return (
-    <View style={styles.kpi}>
-      <Ionicons name={icon} size={16} color={Colors.primary} />
-      <Text style={styles.kpiValue} numberOfLines={1}>{value}</Text>
-      <Text style={styles.kpiLabel}>{label}</Text>
+    <View style={[styles.sessionRow, !isFirst && styles.sessionRowBorder]}>
+      <View style={styles.dateTile}>
+        <Text style={styles.dateDay}>{valid ? d.getDate() : '–'}</Text>
+        <Text style={styles.dateMonth}>{valid ? d.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '') : ''}</Text>
+      </View>
+      <View style={styles.sessionBody}>
+        <View style={styles.sessionHead}>
+          <Text style={styles.sessionCount}>{done.length} série{done.length > 1 ? 's' : ''}</Text>
+          {isRecord ? (
+            <View style={styles.recordBadge}>
+              <Ionicons name="trophy" size={11} color={Colors.gold} />
+              <Text style={styles.recordBadgeText}>Record</Text>
+            </View>
+          ) : null}
+        </View>
+        {sameWeight ? (
+          <Text style={styles.sessionSummary}>
+            {weights[0] > 0 ? <Text style={styles.sessionWeight}>{`${fmt(weights[0])} kg`}</Text> : null}
+            {weights[0] > 0 ? '  ×  ' : ''}
+            {done.map((x) => x.reps).join(' · ')}
+            {weights[0] > 0 ? '' : ' réps'}
+          </Text>
+        ) : (
+          <View style={styles.chips}>
+            {done.map((x, i) => (
+              <View key={i} style={styles.chip}>
+                <Text style={styles.chipText}>
+                  {Number(x.weight) > 0 ? `${fmt(x.weight)} × ${x.reps}` : `${x.reps} réps`}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+        {session.notes ? (
+          <View style={styles.noteRow}>
+            <Ionicons name="document-text-outline" size={13} color={Colors.textMuted} />
+            <Text style={styles.noteText}>{session.notes}</Text>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.backgroundDeep },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 40,
-    paddingBottom: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1a1a20',
-  },
-  headerTitle: {
-    color: Colors.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
-    flex: 1,
-    textAlign: 'center',
-    paddingHorizontal: 8,
-  },
-  headerSide: { width: 26 },
+
+  topBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 },
+  backBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  topLabel: { color: Colors.textMuted, fontSize: 13.5, fontWeight: '600', marginLeft: 2 },
 
   scroll: { flex: 1 },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 30,
-  },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 48, gap: 14 },
 
-  kpisRow: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
-  kpi: {
-    flex: 1,
-    backgroundColor: Colors.cardDeep,
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    marginRight: 8,
-  },
-  kpiValue: {
-    color: Colors.textPrimary,
-    fontSize: 15,
-    fontWeight: '800',
-    marginTop: 6,
-  },
-  kpiLabel: {
-    color: Colors.textMuted,
-    fontSize: 11,
-    marginTop: 2,
-  },
+  title: { color: Colors.textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
+  subtitle: { color: Colors.textSecondary, fontSize: 14, marginTop: 6, fontVariant: ['tabular-nums'] },
 
   card: {
     backgroundColor: Colors.cardDeep,
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 14,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
   },
-  cardHeaderRow: {
-    flexDirection: 'row',
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  label: { color: Colors.textSecondary, fontSize: 13.5, fontWeight: '600' },
+
+  recordRow: { flexDirection: 'row', alignItems: 'stretch', gap: 16 },
+  recordMain: { flex: 1.3 },
+  recordValue: { color: Colors.textPrimary, fontSize: 40, fontWeight: '900', letterSpacing: -1, marginTop: 6, fontVariant: ['tabular-nums'] },
+  recordUnit: { fontSize: 18, fontWeight: '700', color: Colors.textSecondary, letterSpacing: 0 },
+  recordMeta: { color: Colors.textMuted, fontSize: 13, marginTop: 2, lineHeight: 18 },
+  gainRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
+  gain: { color: Colors.valid, fontSize: 13, fontWeight: '700' },
+  recordSide: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingLeft: 16,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: 'rgba(255,255,255,0.1)',
+  },
+  sideDivider: { height: 14 },
+  mini: {},
+  miniValue: { color: Colors.textPrimary, fontSize: 17, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  miniLabel: { color: Colors.textMuted, fontSize: 12.5, marginTop: 2 },
+
+  goalCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, borderColor: 'rgba(254,116,57,0.25)' },
+  goalIcon: {
+    width: 42, height: 42, borderRadius: 13,
+    backgroundColor: 'rgba(254,116,57,0.14)', alignItems: 'center', justifyContent: 'center',
+  },
+  goalText: { flex: 1 },
+  goalValue: { color: Colors.textPrimary, fontSize: 22, fontWeight: '800', marginTop: 2, fontVariant: ['tabular-nums'] },
+  goalDelta: { color: Colors.primary, fontSize: 15, fontWeight: '800' },
+  goalSub: { color: Colors.textMuted, fontSize: 13, marginTop: 4, lineHeight: 18 },
+
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  cardTitle: { color: Colors.textPrimary, fontSize: 17, fontWeight: '800' },
+  chartHint: { color: Colors.textMuted, fontSize: 12.5, marginTop: 6, marginBottom: 12 },
+  segmented: { flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 11, padding: 3 },
+  segment: { paddingHorizontal: 12, height: 32, borderRadius: 9, justifyContent: 'center' },
+  segmentActive: { backgroundColor: 'rgba(255,255,255,0.12)' },
+  segmentText: { color: Colors.textMuted, fontSize: 13, fontWeight: '700' },
+  segmentTextActive: { color: Colors.textPrimary },
+
+  sessionRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 14 },
+  sessionRowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' },
+  dateTile: {
+    width: 46, height: 52, borderRadius: 13,
+    backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center',
+  },
+  dateDay: { color: Colors.textPrimary, fontSize: 19, fontWeight: '800', lineHeight: 22, fontVariant: ['tabular-nums'] },
+  dateMonth: { color: Colors.textSecondary, fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
+  sessionBody: { flex: 1 },
+  sessionHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  sessionCount: { color: Colors.textMuted, fontSize: 13, fontWeight: '600' },
+  recordBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8,
+    backgroundColor: 'rgba(255,215,0,0.12)',
+  },
+  recordBadgeText: { color: Colors.gold, fontSize: 12, fontWeight: '800' },
+  sessionSummary: { color: Colors.textSecondary, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  sessionWeight: { color: Colors.textPrimary, fontWeight: '800' },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 9, paddingVertical: 5, borderRadius: 9,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  chipText: { color: Colors.textSecondary, fontSize: 13.5, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 10 },
+  noteText: { flex: 1, color: Colors.textSecondary, fontSize: 13, fontStyle: 'italic', lineHeight: 18 },
+
+  moreBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    minHeight: 44, marginTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)',
+  },
+  moreText: { color: Colors.primary, fontSize: 14, fontWeight: '700' },
+
+  emptyCard: {
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  cardTitle: {
-    color: Colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-  },
-  metricsToggle: {
-    flexDirection: 'row',
-    backgroundColor: Colors.bgAbyss,
-    borderRadius: 10,
-    padding: 3,
-  },
-  metricBtn: {
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  metricBtnActive: {
-    backgroundColor: Colors.primary,
-  },
-  metricLabel: {
-    color: Colors.textSecondary,
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  metricLabelActive: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-
-  footerSpacer: { height: 30 },
-
-  // ── Dernière séance ───────────────────────────────────────────────────────
-  lastCard: {
     backgroundColor: Colors.cardDeep,
-    borderRadius: 16,
-    padding: 16,
-    marginTop: 14,
+    borderRadius: 20,
+    paddingVertical: 32,
+    paddingHorizontal: 24,
   },
-  lastHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+  emptyIcon: {
+    width: 56, height: 56, borderRadius: 18,
+    backgroundColor: 'rgba(254,116,57,0.14)', alignItems: 'center', justifyContent: 'center', marginBottom: 14,
   },
-  lastHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  lastTitle: {
-    color: Colors.primary,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-  },
-  lastDate: {
-    color: Colors.textMuted,
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  lastSetsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingBottom: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-    marginBottom: 4,
-  },
-  lastColLabel: {
-    flex: 1,
-    color: Colors.textDim,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-  },
-  lastSetRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.04)',
-  },
-  lastSetRowDim: {
-    opacity: 0.45,
-  },
-  lastSetNum: {
-    flex: 1,
-    color: Colors.textDim,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  lastSetVal: {
-    color: Colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  lastSummary: {
-    color: Colors.textMuted,
-    fontSize: 11,
-    fontWeight: '500',
-    marginTop: 10,
-    textAlign: 'right',
-  },
-  lastNotesRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.07)',
-  },
-  lastNotesText: {
-    flex: 1,
-    color: Colors.textSecondary,
-    fontSize: 13,
-    fontStyle: 'italic',
-    lineHeight: 18,
-  },
-  lastEmpty: {
-    color: Colors.textMuted,
-    fontSize: 13,
-    textAlign: 'center',
-    paddingVertical: 10,
-  },
+  emptyTitle: { color: Colors.textPrimary, fontSize: 17, fontWeight: '800', textAlign: 'center' },
+  emptyBody: { color: Colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 8 },
 });

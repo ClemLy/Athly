@@ -1,82 +1,68 @@
 import React, { useCallback, useRef } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import SetRow from '../cards/SetRow';
 import { Colors } from '../../constants/theme';
 
-// Tableau des séries : [-] SET | POIDS (KG) | REPS | VALIDER
+// Tableau des séries : Série | Précédent | kg | Réps | ✓
 //
 // Props :
-//   - sets     : array<{ weight, reps, completed }>
-//   - onToggle : (setIndex) => void
-//   - onChange : (setIndex, { weight, reps }) => void
-//   - onRemove : (setIndex) => void | undefined
-//   - compact  : bool – zéro marge/radius pour InlineExerciseBlock
+//   - sets          : array<{ weight, reps, completed }>
+//   - onToggle      : (setIndex) => void
+//   - onChange      : (setIndex, { weight, reps }) => void
+//   - previousFor   : (setIndex) => { weight, reps } | null
+//   - onUsePrevious : (setIndex) => void
+//   - onAdd         : () => void — « + Ajouter une série »
+//   - onRemoveLast  : () => void | null — « Retirer » (dernière série non validée)
+//   - compact       : bool — sans marge ni bordure (vue « Tout afficher »)
 //
-// Autocomplétion :
-//   Quand le SET 1 a weight > 0 ET reps > 0 simultanément (i.e. les deux
-//   champs sont remplis), les valeurs sont copiées dans les sets suivants
-//   qui sont encore vides (weight = 0 ou '' ET reps = 0 ou '').
-//   Ces valeurs sont RÉELLES (stockées en state), pas des placeholders.
+// Autocomplétion : quand la série 1 a un poids ET des répétitions, les valeurs
+// sont recopiées dans les séries suivantes encore vides (valeurs réelles).
 
-function HeaderCell({ children, style, align = 'center' }) {
-  return (
-    <View style={[
-      styles.headerCellWrap,
-      style,
-      { alignItems: align === 'left' ? 'flex-start' : 'center' },
-    ]}>
-      <Text style={styles.headerText}>{children}</Text>
-    </View>
-  );
+function HeaderCell({ children, style }) {
+  return <Text style={[styles.headerText, style]}>{children}</Text>;
 }
 
-export default function SetTable({ sets = [], onToggle, onChange, onRemove, compact = false }) {
-  const canRemove = !!onRemove && sets.length > 1;
-
-  // Mémorise les valeurs précédentes auto-remplies pour propager chaque frappe
-  // (sans ça, dès que les sets suivants ont reps=3, isEmpty=false bloque la mise
-  // à jour suivante quand l'utilisateur tape "0" pour finir "30").
+export default function SetTable({
+  sets = [], onToggle, onChange, previousFor, onUsePrevious, onAdd, onRemoveLast, compact = false,
+}) {
+  // Mémorise les valeurs auto-remplies pour propager chaque frappe (sans ça,
+  // dès que les séries suivantes ont reps=3, elles ne suivent plus quand
+  // l'utilisateur tape « 0 » pour finir « 30 »).
   const lastAutoFill = useRef({ weight: 0, reps: 0 });
 
   const handleChange = useCallback((i, patch) => {
     if (!onChange) return;
     onChange(i, patch);
-
     if (i !== 0) return;
 
     const newWeight = Number(patch.weight) || 0;
-    const newReps   = Number(patch.reps)   || 0;
+    const newReps = Number(patch.reps) || 0;
     if (newWeight <= 0 || newReps <= 0) return;
 
     const prev = lastAutoFill.current;
-
     sets.forEach((s, idx) => {
       if (idx === 0 || s.completed) return;
       const sw = Number(s.weight) || 0;
-      const sr = Number(s.reps)   || 0;
-      const isEmpty       = sw === 0 && sr === 0;
-      // Aussi mettre à jour si ce set a été auto-rempli au keystroke précédent
+      const sr = Number(s.reps) || 0;
+      const isEmpty = sw === 0 && sr === 0;
       const wasAutoFilled = sw === prev.weight && sr === prev.reps && (prev.weight > 0 || prev.reps > 0);
       if (!isEmpty && !wasAutoFilled) return;
       onChange(idx, { weight: newWeight, reps: newReps });
     });
-
     lastAutoFill.current = { weight: newWeight, reps: newReps };
   }, [onChange, sets]);
 
   return (
     <View style={[styles.table, compact && styles.tableCompact]}>
-
-      {/* ── En-tête ──────────────────────────────────────────────────── */}
       <View style={styles.headerRow}>
-        <View style={styles.colDel} />
-        <HeaderCell style={styles.colSet} align="left">SET</HeaderCell>
-        <HeaderCell style={styles.colWeight}>POIDS (KG)</HeaderCell>
-        <HeaderCell style={styles.colReps}>REPS</HeaderCell>
-        <HeaderCell style={styles.colBtn}> </HeaderCell>
+        <HeaderCell style={styles.colSet}>Série</HeaderCell>
+        <HeaderCell style={styles.colPrev}>Précédent</HeaderCell>
+        <HeaderCell style={styles.colWeight}>kg</HeaderCell>
+        <HeaderCell style={styles.colReps}>Réps</HeaderCell>
+        <View style={styles.colCheck} />
       </View>
 
-      {/* ── Lignes ───────────────────────────────────────────────────── */}
       {sets.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyText}>Aucune série pour cet exercice</Text>
@@ -87,13 +73,40 @@ export default function SetTable({ sets = [], onToggle, onChange, onRemove, comp
             key={`set-${i}`}
             index={i}
             setData={s}
+            compact={compact}
+            previous={previousFor ? previousFor(i) : null}
             onToggle={() => onToggle && onToggle(i)}
             onChange={(patch) => handleChange(i, patch)}
-            onRemove={canRemove ? () => onRemove(i) : null}
+            onUsePrevious={onUsePrevious ? () => onUsePrevious(i) : undefined}
           />
         ))
       )}
 
+      {(onAdd || onRemoveLast) ? (
+        <View style={styles.footer}>
+          {onAdd ? (
+            <Pressable
+              style={({ pressed }) => [styles.footerBtn, pressed && styles.footerBtnPressed]}
+              onPress={onAdd}
+              accessibilityRole="button"
+            >
+              <Ionicons name="add" size={18} color={Colors.primary} />
+              <Text style={styles.addText}>Ajouter une série</Text>
+            </Pressable>
+          ) : null}
+          {onRemoveLast ? (
+            <Pressable
+              style={({ pressed }) => [styles.footerBtn, styles.removeBtn, pressed && styles.footerBtnPressed]}
+              onPress={onRemoveLast}
+              accessibilityRole="button"
+              accessibilityLabel="Retirer la dernière série"
+            >
+              <Ionicons name="remove" size={18} color={Colors.textSecondary} />
+              <Text style={styles.removeText}>Retirer</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -101,62 +114,59 @@ export default function SetTable({ sets = [], onToggle, onChange, onRemove, comp
 const styles = StyleSheet.create({
   table: {
     marginHorizontal: 20,
-    borderRadius: 14,
+    borderRadius: 18,
+    backgroundColor: Colors.cardDeep,
     borderWidth: 1,
-    borderColor: '#23232b',
-    backgroundColor: 'transparent',
+    borderColor: 'rgba(255,255,255,0.06)',
     overflow: 'hidden',
   },
   tableCompact: {
     marginHorizontal: 0,
     borderRadius: 0,
     borderWidth: 0,
+    backgroundColor: 'transparent',
   },
 
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    backgroundColor: '#16161c',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#23232b',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
   },
-  headerCellWrap: {
-    justifyContent: 'center',
-  },
-  headerText: {
-    color: Colors.textDim,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
+  headerText: { color: Colors.textMuted, fontSize: 12.5, fontWeight: '600', textAlign: 'center' },
 
-  // Colonnes — alignées avec celles de SetRow
-  colDel: {
-    width: 36,
+  // Colonnes — alignées sur SetRow
+  colSet: { width: 34 },
+  colPrev: { flex: 1, textAlign: 'left', paddingHorizontal: 6 },
+  colWeight: { width: 74 },
+  colReps: { width: 62 },
+  colCheck: { width: 52 },
+
+  empty: { paddingVertical: 22, alignItems: 'center' },
+  emptyText: { color: Colors.textMuted, fontSize: 13 },
+
+  footer: {
+    flexDirection: 'row',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.06)',
   },
-  colSet: {
+  footerBtn: {
     flex: 1,
-    paddingLeft: 4,
-  },
-  colWeight: {
-    flex: 2,
-  },
-  colReps: {
-    flex: 2,
-  },
-  colBtn: {
-    width: 80,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    minHeight: 50,
   },
-
-  empty: {
-    paddingVertical: 22,
-    alignItems: 'center',
+  footerBtnPressed: { backgroundColor: 'rgba(255,255,255,0.04)' },
+  removeBtn: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: 'auto',
+    paddingHorizontal: 20,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: 'rgba(255,255,255,0.06)',
   },
-  emptyText: {
-    color: Colors.textMuted,
-    fontSize: 13,
-  },
+  addText: { color: Colors.primary, fontSize: 15, fontWeight: '700' },
+  removeText: { color: Colors.textSecondary, fontSize: 14, fontWeight: '600' },
 });
