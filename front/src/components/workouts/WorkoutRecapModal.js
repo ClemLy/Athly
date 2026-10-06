@@ -3,23 +3,21 @@ import {
   Modal,
   View,
   Text,
-  Image,
   TouchableOpacity,
   StyleSheet,
   Animated,
   Easing,
   ScrollView,
+  AccessibilityInfo,
+  useWindowDimensions,
   Dimensions,
 } from 'react-native';
-
-const SCREEN_H = Dimensions.get('window').height;
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Colors } from '../../constants/theme';
 import { xpToLevel, getRank } from '../../services';
 import { QUEST_XP, BONUS_XP } from '../../services';
-
-const LOGO_VIOLET = require('../../../assets/logo-violet.png');
 
 const RANK_ICONS = {
   novice:      'shield-outline',
@@ -35,14 +33,11 @@ const RANK_ICONS = {
 };
 function getRankIcon(tier) { return RANK_ICONS[tier] || 'star-outline'; }
 
-let LottieView = null;
-let confettiSource = null;
-try {
-  LottieView = require('lottie-react-native').default;
-  confettiSource = require('../../../assets/animations/confetti.json');
-} catch (e) {
-  LottieView = null;
-  confettiSource = null;
+// 665 → « 665 kg » ; 6 300 → « 6,3 t »
+function formatVolume(v) {
+  const n = Math.round(Number(v) || 0);
+  if (n >= 1000) return `${String(Math.round(n / 100) / 10).replace('.', ',')} t`;
+  return `${n.toLocaleString('fr-FR')} kg`;
 }
 
 function formatDuration(s) {
@@ -59,6 +54,7 @@ function formatDuration(s) {
 //   stats          { totalVolume, setsCompleted, totalSets?, durationSeconds, xpEarned }
 //   newPRs         Array<{ name, oldPR, newPR }>
 //   prevTotalXP    number  — XP cumulé AVANT cette séance
+//   workoutName    string  — nom de la séance (sous-titre)
 // ─────────────────────────────────────────────────────────────────────────────
 export default function WorkoutRecapModal({
   visible,
@@ -68,11 +64,30 @@ export default function WorkoutRecapModal({
   prevTotalXP = 0,
   completedQuests = [],
   bonusUnlocked = false,
+  workoutName = '',
 }) {
+  const insets = useSafeAreaInsets();
+  // Sur Android (nouvelle architecture), le conteneur racine d'une Modal
+  // transparente n'a pas toujours la taille de l'écran : une couche en
+  // « absoluteFill » s'y calait et le récap ne couvrait qu'une partie de
+  // l'écran (contenu invisible, séance visible dessous). On impose donc la
+  // taille réelle de l'écran, en pixels. La hauteur de la fenêtre n'inclut
+  // pas la barre de navigation : on prend celle de l'écran pour passer dessous.
+  const { width: winW, height: windowH } = useWindowDimensions();
+  const winH = Math.max(windowH, Dimensions.get('screen').height);
+
+  // Réduction des animations demandée par l'appareil : on affiche directement
+  // les valeurs finales (compteur XP, barre de niveau).
+  const [reducedMotion, setReducedMotion] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled?.().then((v) => { if (alive) setReducedMotion(!!v); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
   const fade      = useRef(new Animated.Value(0)).current;
   const bodyScale = useRef(new Animated.Value(0.88)).current;
   const xpScale   = useRef(new Animated.Value(0.75)).current;
-  const lottieRef = useRef(null);
 
   // Compteur XP animé
   const xpCounter   = useRef(new Animated.Value(0)).current;
@@ -177,11 +192,7 @@ export default function WorkoutRecapModal({
       Animated.spring(xpScale, { toValue: 1, friction: 4, tension: 140, useNativeDriver: true }),
     ]).start();
 
-    const t = setTimeout(() => {
-      try { lottieRef.current && lottieRef.current.play(); } catch (e) {}
-    }, 80);
-
-    return () => clearTimeout(t);
+    return undefined;
   }, [visible, fade, bodyScale, xpScale]);
 
   // ── Rank-up sequence ─────────────────────────────────────────────────────────
@@ -355,6 +366,12 @@ export default function WorkoutRecapModal({
       return;
     }
 
+    if (reducedMotion) {
+      setDisplayedXP(xpEarned);
+      progressAnim.setValue(newProgress);
+      return undefined;
+    }
+
     const listener = xpCounter.addListener(({ value }) => setDisplayedXP(Math.round(value)));
     progressAnim.setValue(prevProgress);
 
@@ -390,7 +407,7 @@ export default function WorkoutRecapModal({
 
     return () => xpCounter.removeListener(listener);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+  }, [visible, reducedMotion]);
 
   return (
     <Modal
@@ -399,188 +416,169 @@ export default function WorkoutRecapModal({
       animationType="none"
       onRequestClose={onClose}
       statusBarTranslucent
+      navigationBarTranslucent
     >
-      <Animated.View style={[styles.overlay, { opacity: fade }]}>
+      <Animated.View style={[styles.overlay, { width: winW, height: winH, opacity: fade }]}>
 
-        {LottieView && confettiSource ? (
-          <View style={styles.confettiWrap} pointerEvents="none">
-            <LottieView
-              ref={lottieRef}
-              source={confettiSource}
-              autoPlay={false}
-              loop={false}
-              style={styles.confetti}
-            />
-          </View>
-        ) : null}
+        {/* Plein écran : le contenu est centré s'il tient, et défile sinon.
+            (L'ancienne carte à hauteur max figée au chargement sortait de
+            l'écran sur Android en bord à bord.) */}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 24, paddingBottom: 24 }]}
+          showsVerticalScrollIndicator={false}
+          bounces
+          overScrollMode="never"
+        >
+          <Animated.View style={[styles.content, { transform: [{ scale: bodyScale }] }]}>
 
-        <Animated.View style={[styles.body, { transform: [{ scale: bodyScale }], maxHeight: SCREEN_H * 0.9 }]}>
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            bounces
-            overScrollMode="never"
-            contentContainerStyle={styles.scrollContent}
-          >
-
-          {/* ── Logo ── */}
-          <View style={styles.logoWrap}>
-            <Image source={LOGO_VIOLET} style={styles.logo} resizeMode="contain" accessibilityLabel="Logo Athly" />
-          </View>
-
-          {/* ── Kicker + Titre ── */}
-          <Text style={styles.kicker}>SÉANCE TERMINÉE</Text>
-          <Text style={styles.title}>Mission accomplie !</Text>
-
-          {/* ── XP gagné (compteur animé) ── */}
-          <Animated.View style={[styles.xpCard, { transform: [{ scale: xpScale }] }, { borderColor: dailyCapReached ? 'rgba(255,255,255,0.12)' : newRank.color + '55' }]}>
-            {dailyCapReached ? (
-              <>
-                <Text style={[styles.xpLabel, { color: Colors.textMuted }]}>XP GAGNÉS</Text>
-                <Text style={[styles.xpValue, { color: Colors.textMuted, fontSize: 28, letterSpacing: 0 }]}>
-                  +0 XP
-                </Text>
-                <View style={styles.capBadge}>
-                  <Ionicons name="time-outline" size={13} color={Colors.textMuted} style={{ marginRight: 5 }} />
-                  <Text style={styles.capText}>Limite d'XP du jour atteinte. Reviens demain pour en gagner à nouveau.</Text>
-                </View>
-              </>
-            ) : (
-              <>
-                <Text style={[styles.xpLabel, { color: newRank.color }]}>XP GAGNÉS</Text>
-                <Animated.Text style={[styles.xpValue, { color: newRank.color, transform: [{ scale: xpPulse }] }]}>
-                  +{displayedXP.toLocaleString('fr-FR')}
-                </Animated.Text>
-              </>
-            )}
-          </Animated.View>
-
-          {/* ── Détail du calcul XP ── */}
-          {hasXPBreakdown && (
-            <View style={styles.xpDetail}>
-              <View style={styles.xpDetailRow}>
-                <Text style={styles.xpDetailLabel}>XP de base</Text>
-                <Text style={styles.xpDetailValue}>+{baseXP.toLocaleString('fr-FR')} XP</Text>
+            {/* ── Emblème + titre ── */}
+            <View style={styles.hero}>
+              <View style={[styles.emblem, { borderColor: newRank.color + '55', backgroundColor: newRank.color + '18' }]}>
+                <Ionicons name="checkmark" size={34} color={newRank.color} />
               </View>
-              {streakBonusXP > 0 && (
-                <View style={styles.xpDetailRow}>
-                  <Text style={styles.xpDetailLabel}>Bonus Régularité ×{xpMultiplier}</Text>
-                  <Text style={[styles.xpDetailValue, { color: Colors.primary }]}>+{streakBonusXP.toLocaleString('fr-FR')} XP</Text>
-                </View>
+              <Text style={styles.title} accessibilityRole="header">Séance terminée</Text>
+              <Text style={styles.subtitle} numberOfLines={1}>
+                {workoutName ? `${workoutName} · bien joué !` : 'Bien joué !'}
+              </Text>
+            </View>
+
+            {/* ── XP gagnée (compteur animé) ── */}
+            <Animated.View style={[styles.xpBlock, { transform: [{ scale: xpScale }] }]}>
+              {dailyCapReached ? (
+                <>
+                  <Text style={[styles.xpValue, { color: Colors.textMuted }]}>+0<Text style={styles.xpUnit}> XP</Text></Text>
+                  <View style={styles.capBadge}>
+                    <Ionicons name="time-outline" size={15} color={Colors.textSecondary} />
+                    <Text style={styles.capText}>Limite d'XP du jour atteinte. Reviens demain pour en gagner à nouveau.</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Animated.Text
+                    style={[styles.xpValue, { color: newRank.color, transform: [{ scale: xpPulse }] }]}
+                    accessibilityLabel={`${xpEarned} XP gagnés`}
+                  >
+                    +{displayedXP.toLocaleString('fr-FR')}
+                    <Text style={styles.xpUnit}> XP</Text>
+                  </Animated.Text>
+                  <Text style={styles.xpCaption}>gagnés sur cette séance</Text>
+                </>
               )}
-              {questXPEarned > 0 && (
-                <View style={styles.xpDetailRow}>
-                  <Text style={styles.xpDetailLabel}>Bonus Quêtes</Text>
-                  <Text style={[styles.xpDetailValue, { color: Colors.gold }]}>+{questXPEarned.toLocaleString('fr-FR')} XP</Text>
+            </Animated.View>
+
+            {/* ── Niveau ── */}
+            <Animated.View style={[styles.card, { transform: [{ scale: levelBounce }] }]}>
+              <View style={styles.levelHeader}>
+                <View style={[styles.levelPill, { backgroundColor: newRank.color + '1F' }]}>
+                  <Text style={[styles.levelPillText, { color: newRank.color }]}>Niveau {newLevel}</Text>
                 </View>
-              )}
-              <View style={styles.xpDetailDivider} />
-              <View style={styles.xpDetailRow}>
-                <Text style={[styles.xpDetailLabel, styles.xpDetailTotalLabel]}>Total</Text>
-                <Text style={[styles.xpDetailValue, styles.xpDetailTotalValue]}>{xpEarned.toLocaleString('fr-FR')} XP</Text>
-              </View>
-            </View>
-          )}
-
-          {/* ── Rang (uniquement si changement de tier) ── */}
-          {rankChanged ? (
-            <View style={[styles.rankBadge, { borderColor: newRank.color + '55', backgroundColor: newRank.color + '12' }]}>
-              <Ionicons name="arrow-up-circle" size={14} color={newRank.color} />
-              <Text style={[styles.rankBadgeText, { color: newRank.color }]}>
-                {'  '}NOUVEAU RANG : {newRank.name.toUpperCase()}
-              </Text>
-            </View>
-          ) : null}
-
-          {/* ── Barre de progression niveau ── */}
-          <Animated.View style={[styles.levelWrap, { transform: [{ scale: levelBounce }] }]}>
-            <View style={styles.levelHeader}>
-              <Text style={[styles.levelLabel, { color: newRank.color }]}>
-                {leveledUp ? `NIVEAU ${newLevel} ATTEINT !` : `NIVEAU ${prevLevel} · ${newRank.name}`}
-              </Text>
-              <Text style={styles.levelXPText}>
-                {newLevelData.currentInLevel.toLocaleString('fr-FR')} / {newLevelData.neededForNext.toLocaleString('fr-FR')} XP
-              </Text>
-            </View>
-            <View style={styles.levelTrack}>
-              <Animated.View
-                style={[
-                  styles.levelFill,
-                  { backgroundColor: newRank.color },
-                  {
-                    width: progressAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0%', '100%'],
-                    }),
-                  },
-                ]}
-              />
-            </View>
-          </Animated.View>
-
-          {/* ── Records battus ── */}
-          {hasPRs ? (
-            <View style={styles.prCard}>
-              <View style={styles.prHeader}>
-                <Ionicons name="trophy" size={14} color={Colors.primary} />
-                <Text style={styles.prTitle}>
-                  {newPRs.length === 1 ? 'Record battu !' : `${newPRs.length} records battus !`}
+                <Text style={styles.rankName} numberOfLines={1}>{newRank.name}</Text>
+                <Text style={styles.levelXPText}>
+                  {newLevelData.currentInLevel.toLocaleString('fr-FR')} / {newLevelData.neededForNext.toLocaleString('fr-FR')} XP
                 </Text>
               </View>
-              {newPRs.slice(0, 3).map((pr, i) => (
-                <View key={`pr-${i}`} style={styles.prRow}>
-                  <Text style={styles.prName} numberOfLines={1}>{pr.name}</Text>
-                  <Text style={styles.prValues}>
-                    <Text style={styles.prOld}>{pr.oldPR || '-'} kg</Text>
-                    <Text style={styles.prArrow}>  à  </Text>
-                    <Text style={styles.prNew}>{pr.newPR} kg</Text>
+              <View style={styles.levelTrack}>
+                <Animated.View
+                  style={[
+                    styles.levelFill,
+                    { backgroundColor: newRank.color },
+                    { width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) },
+                  ]}
+                />
+              </View>
+              <Text style={styles.levelHint}>
+                {leveledUp
+                  ? (rankChanged ? `Nouveau rang débloqué : ${newRank.name} !` : `Niveau ${newLevel} atteint !`)
+                  : `Encore ${Math.max(0, newLevelData.neededForNext - newLevelData.currentInLevel).toLocaleString('fr-FR')} XP pour le niveau ${newLevel + 1}`}
+              </Text>
+
+              {/* Détail du calcul XP */}
+              {hasXPBreakdown && (
+                <View style={styles.xpDetail}>
+                  <View style={styles.xpDetailRow}>
+                    <Text style={styles.xpDetailLabel}>Séance</Text>
+                    <Text style={styles.xpDetailValue}>+{baseXP.toLocaleString('fr-FR')} XP</Text>
+                  </View>
+                  {streakBonusXP > 0 && (
+                    <View style={styles.xpDetailRow}>
+                      <Text style={styles.xpDetailLabel}>Bonus régularité ×{String(xpMultiplier).replace('.', ',')}</Text>
+                      <Text style={[styles.xpDetailValue, { color: Colors.primary }]}>+{streakBonusXP.toLocaleString('fr-FR')} XP</Text>
+                    </View>
+                  )}
+                  {questXPEarned > 0 && (
+                    <View style={styles.xpDetailRow}>
+                      <Text style={styles.xpDetailLabel}>Bonus quêtes</Text>
+                      <Text style={[styles.xpDetailValue, { color: Colors.gold }]}>+{questXPEarned.toLocaleString('fr-FR')} XP</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </Animated.View>
+
+            {/* ── Chiffres de la séance ── */}
+            <View style={styles.kpisRow}>
+              <Kpi icon="time-outline" label="Durée" value={duration} />
+              <Kpi icon="barbell-outline" label="Volume" value={formatVolume(totalVolume)} />
+              <Kpi icon="checkmark-done" label="Séries" value={`${setsCompleted}/${totalSets}`} />
+            </View>
+
+            {/* ── Records battus ── */}
+            {hasPRs ? (
+              <View style={[styles.card, styles.prCard]}>
+                <View style={styles.sectionHeader}>
+                  <Ionicons name="trophy" size={17} color={Colors.gold} />
+                  <Text style={styles.sectionTitle}>
+                    {newPRs.length === 1 ? 'Nouveau record' : `${newPRs.length} nouveaux records`}
                   </Text>
                 </View>
-              ))}
-            </View>
-          ) : null}
-
-          {/* ── Quêtes accomplies ── */}
-          {hasQuests ? (
-            <View style={styles.questCard}>
-              <View style={styles.questHeader}>
-                <Ionicons name="flash" size={14} color={Colors.primary} />
-                <Text style={styles.questTitle}>
-                  {completedQuests.length === 1 ? 'Quête accomplie !' : `${completedQuests.length} quêtes accomplies !`}
-                </Text>
+                {newPRs.slice(0, 3).map((pr, i) => (
+                  <View key={`pr-${i}`} style={[styles.prRow, i > 0 && styles.rowBorder]}>
+                    <Text style={styles.prName} numberOfLines={1}>{pr.name}</Text>
+                    <Text style={styles.prValues}>
+                      {pr.oldPR ? <Text style={styles.prOld}>{`${pr.oldPR} kg  →  `}</Text> : null}
+                      <Text style={styles.prNew}>{pr.newPR} kg</Text>
+                    </Text>
+                  </View>
+                ))}
               </View>
-              {completedQuests.map((q, i) => (
-                <View key={q.templateId || `q-${i}`} style={styles.questRow}>
-                  <Ionicons name="checkmark-circle" size={13} color={Colors.primary} />
-                  <Text style={styles.questName} numberOfLines={1}>{q.label}</Text>
-                  <Text style={styles.questXP}>+{QUEST_XP} XP</Text>
-                </View>
-              ))}
-              {bonusUnlocked ? (
-                <View style={styles.questRow}>
-                  <Ionicons name="star" size={13} color={Colors.gold} />
-                  <Text style={[styles.questName, { color: Colors.gold }]}>Bonus toutes quêtes</Text>
-                  <Text style={[styles.questXP, { color: Colors.gold }]}>+{BONUS_XP} XP</Text>
-                </View>
-              ) : null}
-            </View>
-          ) : null}
+            ) : null}
 
-          {/* ── KPIs ── */}
-          <View style={styles.kpisRow}>
-            <Kpi icon="barbell"        label="Volume" value={`${totalVolume.toLocaleString('fr-FR')} kg`} color={newRank.color} />
-            <View style={styles.kpiSep} />
-            <Kpi icon="checkmark-done" label="Séries" value={`${setsCompleted}/${totalSets}`}            color={newRank.color} />
-            <View style={styles.kpiSep} />
-            <Kpi icon="time-outline"   label="Durée"  value={duration}                                   color={newRank.color} />
-          </View>
+            {/* ── Quêtes accomplies ── */}
+            {hasQuests ? (
+              <View style={styles.card}>
+                <View style={styles.sectionHeader}>
+                  <Ionicons name="flash" size={17} color={Colors.primary} />
+                  <Text style={styles.sectionTitle}>
+                    {completedQuests.length === 1 ? 'Quête accomplie' : `${completedQuests.length} quêtes accomplies`}
+                  </Text>
+                </View>
+                {completedQuests.map((q, i) => (
+                  <View key={q.templateId || `q-${i}`} style={[styles.questRow, i > 0 && styles.rowBorder]}>
+                    <Ionicons name="checkmark-circle" size={17} color={Colors.valid} />
+                    <Text style={styles.questName} numberOfLines={1}>{q.label}</Text>
+                    <Text style={styles.questXP}>+{QUEST_XP} XP</Text>
+                  </View>
+                ))}
+                {bonusUnlocked ? (
+                  <View style={[styles.questRow, styles.rowBorder]}>
+                    <Ionicons name="star" size={17} color={Colors.gold} />
+                    <Text style={[styles.questName, { color: Colors.gold }]}>Bonus toutes quêtes</Text>
+                    <Text style={[styles.questXP, { color: Colors.gold }]}>+{BONUS_XP} XP</Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+          </Animated.View>
+        </ScrollView>
 
-          {/* ── CTA ── */}
+        {/* ── Action principale, toujours visible ── */}
+        <View style={[styles.footer, { paddingBottom: 16 + insets.bottom }]}>
           <TouchableOpacity accessibilityRole="button" style={styles.cta} onPress={onClose} activeOpacity={0.85}>
-            <Text style={styles.ctaText}>Retour au tableau de bord</Text>
+            <Text style={styles.ctaText}>Voir mes statistiques</Text>
+            <Ionicons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
-
-          </ScrollView>
-        </Animated.View>
+        </View>
 
         {/* ── Rank-up CINEMATIC overlay ────────────────────────────────────── */}
         {rankUpAnimVisible ? (
@@ -604,7 +602,7 @@ export default function WorkoutRecapModal({
                 <Ionicons name={getRankIcon(newRank.tier)} size={44} color={newRank.color} />
               </Animated.View>
 
-              <Text style={styles.rkKicker}>NOUVEAU RANG DÉBLOQUÉ</Text>
+              <Text style={styles.rkKicker}>Nouveau rang débloqué</Text>
 
               {/* Nom du rang — ZOOM depuis 2.8× + responsive */}
               <Animated.View style={[styles.rkTitleWrap, { transform: [{ scale: rkTitleScale }], opacity: rkTitleOpacity }]}>
@@ -620,7 +618,7 @@ export default function WorkoutRecapModal({
 
               {/* Niveau + transition ancien → nouveau rang */}
               <Animated.Text style={[styles.rkLevelLine, { color: newRank.color + 'CC', opacity: rkSubtitleOp }]}>
-                NIVEAU {newLevel}
+                Niveau {newLevel}
               </Animated.Text>
               <Animated.View style={[styles.rkFromRow, { opacity: rkSubtitleOp }]}>
                 <Text style={styles.rkFromOld}>{prevRank.name}</Text>
@@ -660,15 +658,15 @@ export default function WorkoutRecapModal({
                 opacity: rankBadgeOpacity,
               },
             ]}>
-              <Text style={styles.rankUpKicker}>NIVEAU ATTEINT !</Text>
+              <Text style={styles.rankUpKicker}>Niveau atteint !</Text>
               <Animated.Text style={[
                 styles.rankUpName,
                 { color: newRank.color, transform: [{ scale: rankNamePulse }] },
               ]}>
                 {newLevel}
               </Animated.Text>
-              <Text style={[styles.rankUpLevel, { color: newRank.color + 'AA' }]}>
-                {newRank.name.toUpperCase()}
+              <Text style={[styles.rankUpLevel, { color: newRank.color + 'CC' }]}>
+                {newRank.name}
               </Text>
             </Animated.View>
 
@@ -689,10 +687,10 @@ export default function WorkoutRecapModal({
   );
 }
 
-function Kpi({ icon, label, value, color }) {
+function Kpi({ icon, label, value }) {
   return (
     <View style={styles.kpi}>
-      <Ionicons name={icon} size={14} color={color} />
+      <Ionicons name={icon} size={18} color={Colors.textSecondary} />
       <Text style={styles.kpiValue} numberOfLines={1}>{value}</Text>
       <Text style={styles.kpiLabel}>{label}</Text>
     </View>
@@ -700,249 +698,128 @@ function Kpi({ icon, label, value, color }) {
 }
 
 const styles = StyleSheet.create({
+  // Fond plein : l'écran de séance ne doit pas transparaître derrière le récap.
   overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(8, 10, 18, 0.93)',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    justifyContent: 'center',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    backgroundColor: Colors.bgAbyss,
   },
 
-  confettiWrap: {
-    ...StyleSheet.absoluteFillObject,
+  scroll: { flex: 1 },
+  scrollContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 20 },
+  content: { width: '100%', maxWidth: 440, alignSelf: 'center', gap: 14 },
+
+  // ── Emblème + titre ───────────────────────────────────────────────────────
+  hero: { alignItems: 'center', marginBottom: 4 },
+  emblem: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 16,
   },
-  confetti: {
-    width: 360,
-    height: 360,
-    opacity: 0.9,
-  },
+  title: { color: Colors.textPrimary, fontSize: 30, fontWeight: '800', letterSpacing: -0.6, textAlign: 'center' },
+  subtitle: { color: Colors.textSecondary, fontSize: 15, marginTop: 6, textAlign: 'center' },
 
-  body: {
-    backgroundColor: 'rgba(16, 16, 24, 0.99)',
-    borderRadius: 24,
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.08)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 28 },
-    shadowOpacity: 0.75,
-    shadowRadius: 56,
-    elevation: 28,
-  },
-  scrollContent: {
-    padding: 22,
-  },
-
-  // ── Logo ──────────────────────────────────────────────────────────────────
-  logoWrap: { alignItems: 'center', marginBottom: 14 },
-  logo: { width: 130, height: 87 },
-
-  // ── Kicker + Titre ────────────────────────────────────────────────────────
-  kicker: {
-    color: Colors.textMuted,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 2.8,
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  title: {
-    color: Colors.textPrimary,
-    fontSize: 26,
-    fontWeight: '900',
-    textAlign: 'center',
-    marginBottom: 18,
-  },
-
-  // ── XP Card ───────────────────────────────────────────────────────────────
-  xpCard: {
-    backgroundColor: 'rgba(110, 106, 240, 0.08)',
-    borderWidth: 1,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  xpLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 2.2,
-    marginBottom: 2,
-  },
-  xpValue: {
-    fontSize: 52,
-    fontWeight: '900',
-    letterSpacing: -1.5,
-    lineHeight: 58,
-  },
+  // ── XP ────────────────────────────────────────────────────────────────────
+  xpBlock: { alignItems: 'center', paddingVertical: 6 },
+  xpValue: { fontSize: 64, fontWeight: '900', letterSpacing: -2, lineHeight: 72, fontVariant: ['tabular-nums'] },
+  xpUnit: { fontSize: 26, fontWeight: '800', letterSpacing: 0 },
+  xpCaption: { color: Colors.textSecondary, fontSize: 14, marginTop: 2 },
   capBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 10,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  capText: {
-    color: Colors.textMuted,
-    fontSize: 12,
-    fontWeight: '600',
-    flex: 1,
-  },
-
-  // ── Badge rang ────────────────────────────────────────────────────────────
-  rankBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  rankBadgeText: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-  },
-
-  // ── Barre de niveau ───────────────────────────────────────────────────────
-  levelWrap: { marginBottom: 14 },
-  levelHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  levelLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-  },
-  levelXPText: {
-    color: Colors.textMuted,
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  levelTrack: {
-    height: 6,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  levelFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-
-  // ── PRs ───────────────────────────────────────────────────────────────────
-  prCard: {
-    backgroundColor: 'rgba(254,116,57,0.09)',
-    borderColor: 'rgba(254,116,57,0.28)',
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
-  },
-  prHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  prTitle: { color: Colors.primary, fontSize: 13, fontWeight: '800', marginLeft: 6 },
-  prRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 5,
-  },
-  prName: { color: Colors.textPrimary, fontSize: 13, fontWeight: '600', flex: 1, marginRight: 8 },
-  prValues: { fontSize: 13, fontWeight: '700' },
-  prOld: { color: Colors.textMuted },
-  prArrow: { color: Colors.textMuted },
-  prNew: { color: Colors.primary, fontWeight: '900' },
-
-  // ── Quêtes ────────────────────────────────────────────────────────────────
-  questCard: {
-    backgroundColor: 'rgba(254,116,57,0.07)',
-    borderColor: 'rgba(254,116,57,0.22)',
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
-  },
-  questHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  questTitle: { color: Colors.primary, fontSize: 13, fontWeight: '800', marginLeft: 6 },
-  questRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
     gap: 8,
-  },
-  questName: {
-    color: Colors.textPrimary,
-    fontSize: 12,
-    fontWeight: '600',
-    flex: 1,
-  },
-  questXP: {
-    color: Colors.primary,
-    fontSize: 12,
-    fontWeight: '800',
-    flexShrink: 0,
-  },
-
-  // ── KPIs ──────────────────────────────────────────────────────────────────
-  kpisRow: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(22, 22, 31, 0.9)',
-    borderRadius: 14,
-    paddingVertical: 13,
-    paddingHorizontal: 4,
-    marginBottom: 16,
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.06)',
-  },
-  kpi: { flex: 1, alignItems: 'center' },
-  kpiValue: {
-    color: Colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '800',
-    marginTop: 4,
-  },
-  kpiLabel: { color: Colors.textMuted, fontSize: 10, marginTop: 2 },
-  kpiSep: {
-    width: StyleSheet.hairlineWidth,
-    height: 32,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignSelf: 'center',
-  },
-
-  // ── Détail XP ─────────────────────────────────────────────────────────────
-  xpDetail: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    marginTop: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 12,
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.08)',
     paddingHorizontal: 14,
     paddingVertical: 10,
-    marginBottom: 12,
   },
-  xpDetailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  capText: { color: Colors.textSecondary, fontSize: 13.5, flex: 1, lineHeight: 19 },
+
+  // ── Cartes ────────────────────────────────────────────────────────────────
+  card: {
+    backgroundColor: Colors.cardDeep,
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.07)' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  sectionTitle: { color: Colors.textPrimary, fontSize: 16, fontWeight: '800' },
+
+  // ── Niveau ────────────────────────────────────────────────────────────────
+  levelHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  levelPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  levelPillText: { fontSize: 13.5, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  rankName: { flex: 1, color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
+  levelXPText: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  levelTrack: { height: 8, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 4, overflow: 'hidden' },
+  levelFill: { height: '100%', borderRadius: 4 },
+  levelHint: { color: Colors.textSecondary, fontSize: 13.5, marginTop: 10 },
+
+  xpDetail: {
+    marginTop: 14,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+  xpDetailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
+  xpDetailLabel: { color: Colors.textSecondary, fontSize: 13.5 },
+  xpDetailValue: { color: Colors.textPrimary, fontSize: 13.5, fontWeight: '700', fontVariant: ['tabular-nums'] },
+
+  // ── Chiffres ──────────────────────────────────────────────────────────────
+  kpisRow: { flexDirection: 'row', gap: 10 },
+  kpi: {
+    flex: 1,
     alignItems: 'center',
-    paddingVertical: 5,
+    paddingVertical: 14,
+    borderRadius: 18,
+    backgroundColor: Colors.cardDeep,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
   },
-  xpDetailLabel: { color: Colors.textMuted, fontSize: 12, fontWeight: '500' },
-  xpDetailValue: { color: Colors.textSecondary, fontSize: 12, fontWeight: '700' },
-  xpDetailDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    marginVertical: 4,
+  kpiValue: { color: Colors.textPrimary, fontSize: 18, fontWeight: '800', marginTop: 6, fontVariant: ['tabular-nums'] },
+  kpiLabel: { color: Colors.textMuted, fontSize: 12.5, marginTop: 2 },
+
+  // ── Records ───────────────────────────────────────────────────────────────
+  prCard: { borderColor: 'rgba(255,215,0,0.25)' },
+  prRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, gap: 10 },
+  prName: { color: Colors.textPrimary, fontSize: 14.5, fontWeight: '600', flex: 1 },
+  prValues: { fontSize: 14.5, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  prOld: { color: Colors.textMuted },
+  prNew: { color: Colors.gold, fontWeight: '900' },
+
+  // ── Quêtes ────────────────────────────────────────────────────────────────
+  questRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 10 },
+  questName: { color: Colors.textPrimary, fontSize: 14.5, fontWeight: '600', flex: 1 },
+  questXP: { color: Colors.primary, fontSize: 13.5, fontWeight: '800', flexShrink: 0 },
+
+  // ── Action principale ─────────────────────────────────────────────────────
+  footer: { paddingHorizontal: 20, paddingTop: 12 },
+  cta: {
+    flexDirection: 'row',
+    gap: 8,
+    width: '100%',
+    maxWidth: 440,
+    alignSelf: 'center',
+    height: 56,
+    backgroundColor: Colors.primary,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
   },
-  xpDetailTotalLabel: { color: Colors.textPrimary, fontWeight: '700', fontSize: 13 },
-  xpDetailTotalValue: { color: Colors.textPrimary, fontWeight: '900', fontSize: 13 },
+  ctaText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 
   // ── Rank-up overlay ───────────────────────────────────────────────────────
   rankOverlayWrap: {
@@ -973,10 +850,10 @@ const styles = StyleSheet.create({
     elevation: 24,
   },
   rankUpKicker: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 3.5,
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.2,
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -991,17 +868,15 @@ const styles = StyleSheet.create({
     textShadowRadius: 18,
   },
   rankUpLevel: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '700',
-    letterSpacing: 2,
     textAlign: 'center',
-    textTransform: 'uppercase',
   },
   rankUpTap: {
     position: 'absolute',
     bottom: 56,
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 12,
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 14,
     fontWeight: '600',
     letterSpacing: 0.5,
   },
@@ -1053,13 +928,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   rkKicker: {
-    color: 'rgba(255,255,255,0.32)',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 4,
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.2,
     textAlign: 'center',
-    marginBottom: 14,
-    textTransform: 'uppercase',
+    marginBottom: 12,
   },
   rkRankName: {
     fontSize: 60,
@@ -1072,9 +946,9 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   rkLevelLine: {
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '800',
-    letterSpacing: 3,
+    letterSpacing: 0.2,
     textAlign: 'center',
     marginTop: 12,
     marginBottom: 8,
@@ -1085,39 +959,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   rkFromOld: {
-    color: 'rgba(255,255,255,0.30)',
-    fontSize: 12,
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 14,
     fontWeight: '700',
   },
   rkFromNew: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '800',
   },
   rkTap: {
     position: 'absolute',
     bottom: 56,
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 12,
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 14,
     fontWeight: '600',
     letterSpacing: 0.5,
   },
 
-  // ── CTA ───────────────────────────────────────────────────────────────────
-  cta: {
-    backgroundColor: Colors.primary,
-    paddingVertical: 15,
-    borderRadius: 14,
-    alignItems: 'center',
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 14,
-    elevation: 8,
-  },
-  ctaText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
 });

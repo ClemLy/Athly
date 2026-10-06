@@ -450,10 +450,18 @@ export default function WorkoutScreen({ route, navigation }) {
       // Séance déjà validée : cette sortie ne doit jamais déclencher la popup
       // d'abandon (voir le listener 'beforeRemove' plus haut).
       allowExitRef.current = true;
-      // Pop the entire WorkoutStack back to WorkoutList (the root screen),
-      // then switch to Stats tab. Without popToTop(), WorkoutScreen stays on the
-      // stack and the user lands back here when they tap "Séances" again.
-      navigation.popToTop();
+      // On remet l'onglet Séances sur sa liste, puis on bascule sur Stats. Sans
+      // ça, l'écran de séance (vide) resterait dans l'onglet.
+      // Séance lancée depuis l'onglet Séances → pile [WorkoutList, Workout] :
+      // on dépile. Lancée depuis l'Accueil ou le Profil → pile [Workout] seule :
+      // popToTop() n'a rien à dépiler (erreur « POP_TO_TOP was not handled »),
+      // on remplace donc l'écran par la liste.
+      const stackState = navigation.getState?.();
+      if (stackState && stackState.index > 0) {
+        navigation.popToTop();
+      } else {
+        navigation.replace('WorkoutList');
+      }
       navigation.navigate('Stats');
     }
   }, [navigation, actions]);
@@ -685,6 +693,7 @@ export default function WorkoutScreen({ route, navigation }) {
         prevTotalXP={recapData ? recapData.prevTotalXP : 0}
         completedQuests={recapData ? recapData.completedQuests || [] : []}
         bonusUnlocked={recapData ? recapData.bonusUnlocked || false : false}
+        workoutName={state.name}
         onClose={closeRecap}
       />
 
