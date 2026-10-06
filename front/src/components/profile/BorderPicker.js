@@ -11,8 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
-import { SHAPE_DEFS, COLOR_DEFS, ColorPreview, ShapePreview } from './AvatarFrame';
-import AvatarFrame from './AvatarFrame';
+import { SHAPE_DEFS, COLOR_DEFS, ColorPreview, ShapePreview, FrameStage } from './AvatarFrame';
 
 // ─── Item components (memoized) ───────────────────────────────────────────────
 
@@ -149,22 +148,22 @@ export default function BorderPicker({
           <View style={styles.previewSection}>
             <View style={styles.previewCard}>
               {/*
-                Pass userInitial so AvatarFrame renders the letter as SVG <Text> at
-                (cx,cy) — perfectly centred for every shape. The ghost circle is gone:
-                no more borderRadius/borderColor wrapper passed as children.
-                The fallback View (for colorId='none') keeps a plain circle appearance.
+                Zone fixe : la carte garde la même hauteur quelle que soit la
+                forme, et les ornements (couronne, ailes…) ne débordent jamais.
+                Le fallback (colorId='none') garde l'apparence du cercle simple.
               */}
-              <AvatarFrame
+              <FrameStage
                 shapeId={previewShape}
                 colorId={previewColor}
                 size={72}
+                width={128}
+                height={118}
                 userInitial={(userInitial || 'A').slice(0, 1).toUpperCase()}
               >
-                {/* Shown only when colorId='none' (AvatarFrame returns <>children</>) */}
                 <View style={styles.previewAvatarFallback}>
                   <Text style={styles.previewInitial}>{(userInitial || 'A').slice(0, 1).toUpperCase()}</Text>
                 </View>
-              </AvatarFrame>
+              </FrameStage>
               <View style={styles.previewInfo}>
                 <Text style={styles.previewLabel}>
                   {SHAPE_DEFS.find((s) => s.id === previewShape)?.name || 'Cercle'}
@@ -314,9 +313,9 @@ const styles = StyleSheet.create({
 
   previewSection: { alignItems: 'center', marginBottom: 20 },
   previewCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 18,
+    flexDirection: 'row', alignItems: 'center', gap: 14,
     backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 18, paddingVertical: 16, paddingHorizontal: 24,
+    borderRadius: 18, paddingVertical: 8, paddingHorizontal: 12,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)', width: '100%',
   },
   // Fallback shown only when colorId='none' (AvatarFrame returns children as-is).

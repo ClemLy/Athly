@@ -1,7 +1,18 @@
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import Constants from 'expo-constants';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Expo Go Android ne supporte plus expo-notifications depuis le SDK 53 : le
+// simple import du module lève une erreur qui bloque tout le démarrage de
+// l'app. On le charge donc à la demande, jamais sur web ni dans Expo Go
+// Android — les notifications y sont simplement désactivées (un build EAS /
+// development build les retrouve intégralement).
+const isExpoGoAndroid = Platform.OS === 'android'
+  && Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
+export const Notifications = (Platform.OS === 'web' || isExpoGoAndroid)
+  ? null
+  : require('expo-notifications');
 
 const DAILY_NOTIF_IDS_KEY  = 'athly:notif:daily_ids:v2';
 // Titre du DERNIER rappel quotidien généré (persisté en cache local) — permet
@@ -43,8 +54,8 @@ const MESSAGES_VIOLET = [
   { title: "Le canapé a gagné ?", body: "Demain, revanche. Mais il reste encore ce soir." },
 ];
 
-// expo-notifications n'existe pas sur web — on n'enregistre le handler que sur mobile
-if (Platform.OS !== 'web') {
+// Handler enregistré uniquement là où le module est disponible (voir plus haut).
+if (Notifications) {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
@@ -56,7 +67,7 @@ if (Platform.OS !== 'web') {
 }
 
 export async function setupNotificationChannels() {
-  if (Platform.OS === 'web' || Platform.OS !== 'android') return;
+  if (!Notifications || Platform.OS !== 'android') return;
   await Promise.all([
     Notifications.setNotificationChannelAsync(CHANNEL_ORANGE_ID, {
       name: 'Rappels Motivation',
@@ -86,7 +97,7 @@ export async function setupNotificationChannels() {
 }
 
 export async function requestNotificationPermissions() {
-  if (Platform.OS === 'web') return false;
+  if (!Notifications) return false;
   const { status } = await Notifications.requestPermissionsAsync();
   return status === 'granted';
 }
@@ -99,7 +110,7 @@ export async function requestNotificationPermissions() {
  * bloquante pour le reste de l'app).
  */
 export async function getExpoPushToken() {
-  if (Platform.OS === 'web') return null;
+  if (!Notifications) return null;
   try {
     const { status: existing } = await Notifications.getPermissionsAsync();
     let status = existing;
@@ -134,7 +145,7 @@ function pickDailyOccurrence(previous) {
 }
 
 export async function fireTestNotification(type) {
-  if (Platform.OS === 'web') return;
+  if (!Notifications) return;
   const isOrange = type === 'orange';
   const msg = pickRandom(isOrange ? MESSAGES_ORANGE : MESSAGES_VIOLET);
   await Notifications.scheduleNotificationAsync({
@@ -160,7 +171,7 @@ export async function fireTestNotification(type) {
  * propre contenu -> plus d'effet "perroquet".
  */
 export async function scheduleDailyReminder(hour = 18, minute = 0, count = DAILY_BATCH_SIZE) {
-  if (Platform.OS === 'web') return null;
+  if (!Notifications) return null;
 
   // Nettoie systématiquement toute planification précédente avant d'en créer
   // une nouvelle, pour éviter l'accumulation de rappels dupliqués en arrière-plan.
@@ -220,7 +231,7 @@ export async function scheduleDailyReminder(hour = 18, minute = 0, count = DAILY
  * jamais les notifications en attente.
  */
 export async function ensureDailyRemindersScheduled(hour = 18, minute = 0) {
-  if (Platform.OS === 'web') return;
+  if (!Notifications) return;
   try {
     const raw = await AsyncStorage.getItem(DAILY_NOTIF_IDS_KEY);
     const stored = raw ? JSON.parse(raw) : null;
@@ -236,7 +247,7 @@ export async function ensureDailyRemindersScheduled(hour = 18, minute = 0) {
 }
 
 export async function cancelDailyReminder() {
-  if (Platform.OS === 'web') return;
+  if (!Notifications) return;
   try {
     const raw = await AsyncStorage.getItem(DAILY_NOTIF_IDS_KEY);
     const stored = raw ? JSON.parse(raw) : null;
@@ -252,7 +263,7 @@ export async function cancelDailyReminder() {
 // stock des rappels quotidiens gérés ci-dessus.
 
 async function fireImmediate({ title, body, channelId, data }) {
-  if (Platform.OS === 'web') return null;
+  if (!Notifications) return null;
   return Notifications.scheduleNotificationAsync({
     content: {
       title,

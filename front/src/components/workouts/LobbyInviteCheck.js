@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { joinLobby } from '../../services';
+import { joinLobby, Notifications } from '../../services';
 import { navigate } from '../../navigation/navigationRef';
 import LobbyInviteModal from './LobbyInviteModal';
 
@@ -28,7 +26,8 @@ export default function LobbyInviteCheck() {
   }, []);
 
   useEffect(() => {
-    if (Platform.OS === 'web' || !userToken) return undefined;
+    // Notifications est null sur web et dans Expo Go Android (voir notificationService).
+    if (!Notifications || !userToken) return undefined;
 
     const receivedSub = Notifications.addNotificationReceivedListener((notification) => {
       const data = notification?.request?.content?.data;
