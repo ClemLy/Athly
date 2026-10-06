@@ -600,6 +600,11 @@ function weightedShuffle(items, weightFn) {
 //   3. Tri intra-bucket par score décroissant (adaptation au niveau)
 //   4. Slice à targetCount (basé sur durée)
 //
+// Nombre d'exercices visé pour une durée (≈ 9 min par exercice, entre 3 et 10).
+export function exerciseCountFor(durationMin) {
+  return Math.max(3, Math.min(10, Math.round((Number(durationMin) || 60) / 9)));
+}
+
 export function generateWorkout(selection) {
   const sel = selection || {};
   const groups = Array.isArray(sel.groups) ? sel.groups : [];
@@ -612,7 +617,7 @@ export function generateWorkout(selection) {
   const catalog = getCombinedCatalog(customExercises);
   const filtered = filterCatalog(catalog, { groups, subMuscles, equipment, level });
 
-  const targetCount = Math.max(3, Math.min(10, Math.round(durationMin / 9)));
+  const targetCount = exerciseCountFor(durationMin);
 
   // Cibles utilisées pour le round-robin :
   // - subMuscles si fournis (priorité fine)
