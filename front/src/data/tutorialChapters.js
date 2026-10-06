@@ -244,13 +244,13 @@ export const TUTORIAL_CHAPTERS = [
       {
         key: 'social_add',
         title: 'Ajouter un Ami',
-        body: "Chaque joueur a un tag unique façon Discord (ex: Player#1234). Saisis-le pour envoyer une demande, après un aperçu de son profil.",
+        body: "Chaque joueur a un tag unique (ex : Player#1234). Appuie sur l'icône en haut à droite et saisis le tag de ton ami pour lui envoyer une demande.",
         targetKey: null, position: 'center', scrollY: null,
       },
       {
         key: 'social_group',
         title: 'Groupes de Streak & Météo',
-        body: "Forme un groupe de 5 amis maximum : si tout le monde valide sa journée, la streak collective grimpe. La Météo des séances montre en direct qui est Prêt, Actif ou a Validé.",
+        body: "Forme un groupe de 5 amis maximum : si tout le monde fait sa séance du jour, la streak collective grimpe. Chaque membre affiche son statut : séance faite, en pleine séance ou pas encore entraîné.",
         targetKey: null, position: 'center', scrollY: null,
       },
       {

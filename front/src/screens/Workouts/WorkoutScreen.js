@@ -32,7 +32,9 @@ import { ConfirmModal } from '../../components/common';
 import LobbyMembersBar from '../../components/workouts/LobbyMembersBar';
 import LobbyWaitingOverlay from '../../components/workouts/LobbyWaitingOverlay';
 import MultiLootModal from '../../components/workouts/MultiLootModal';
-import { getLobby, finishLobby } from '../../services';
+import { getLobby, finishLobby, leaveLobby } from '../../services';
+import { useMyId } from '../../hooks/useMyId';
+import { computeBonusPercent } from '../../components/workouts/MultiLobbyModal';
 
 const DEFAULT_FILTERS = { muscles: [], levels: [], equipment: [] };
 
@@ -65,9 +67,11 @@ export default function WorkoutScreen({ route, navigation }) {
   // le lobby ne sert qu'à afficher les bulles de présence et à synchroniser
   // la clôture (voir handleTerminate / executeFinalize plus bas).
   const lobbyId = route?.params?.lobbyId ?? null;
+  const myId = useMyId();
   const [lobby, setLobby] = useState(null);
   const [multiWaiting, setMultiWaiting] = useState(false);
   const [multiLoot, setMultiLoot] = useState(null); // { memberCount, bonusPercent, bonusXp }
+  const [lootVisible, setLootVisible] = useState(false);
   const multiBonusPendingRef = useRef(null); // { bonusPercent, memberCount } — consommé par executeFinalize
   const lobbyPollRef = useRef(null);
 
@@ -185,12 +189,13 @@ export default function WorkoutScreen({ route, navigation }) {
   const confirmAbandon = useCallback(() => {
     setAbandonModalVisible(false);
     allowExitRef.current = true;
+    if (lobbyId) leaveLobby(lobbyId).catch(() => {});
     actions.reset();
     if (pendingNavActionRef.current) {
       navigation.dispatch(pendingNavActionRef.current);
       pendingNavActionRef.current = null;
     }
-  }, [navigation, actions]);
+  }, [navigation, actions, lobbyId]);
 
   const cancelAbandon = useCallback(() => {
     haptics.error();
@@ -405,7 +410,14 @@ export default function WorkoutScreen({ route, navigation }) {
                 setMultiWaiting(false);
                 executeFinalize();
               }
-            } catch (_) {}
+            } catch (e) {
+              // Salon disparu : rien à attendre, la séance est enregistrée.
+              if (e?.status === 404 || e?.status === 403) {
+                clearInterval(lobbyPollRef.current);
+                setMultiWaiting(false);
+                executeFinalize();
+              }
+            }
           }, 3000);
         }
       } catch (_) {
@@ -422,11 +434,24 @@ export default function WorkoutScreen({ route, navigation }) {
 
   useEffect(() => () => { if (lobbyPollRef.current) clearInterval(lobbyPollRef.current); }, []);
 
+  // « Ne pas attendre » : un partenaire peut avoir abandonné, perdu le réseau
+  // ou fermé l'app. On enregistre sa propre séance tout de suite (sans le
+  // bonus d'équipe, distribué seulement quand tout le monde a fini).
+  const stopWaiting = useCallback(() => {
+    if (lobbyPollRef.current) clearInterval(lobbyPollRef.current);
+    multiBonusPendingRef.current = null;
+    setMultiWaiting(false);
+    executeFinalize();
+  }, [executeFinalize]);
+
   // Valider quand même (0 XP, shortSession)
   const handleForceFinish = useCallback(() => {
     setShortWarningVisible(false);
+    // Séance trop courte (0 XP) : elle ne compte pas pour l'équipe. On quitte
+    // la séance Multi pour que les partenaires ne m'attendent pas.
+    if (lobbyId) leaveLobby(lobbyId).catch(() => {});
     executeFinalize({ shortSession: true });
-  }, [executeFinalize]);
+  }, [executeFinalize, lobbyId]);
 
   const handleToastHide = useCallback(() => {
     const next = toastQueueRef.current;
@@ -469,13 +494,14 @@ export default function WorkoutScreen({ route, navigation }) {
   const closeRecap = useCallback(() => {
     setRecapVisible(false);
     setRecapData(null);
-    // Séance en Multi avec butin en attente : le popup d'équipe (MultiLootModal)
-    // prend le relai plutôt que de naviguer immédiatement — voir closeMultiLoot.
-    if (multiLoot) return;
+    // Séance en Multi avec butin en attente : la récompense d'équipe s'affiche
+    // une fois le récap fermé (jamais par-dessus) — voir closeMultiLoot.
+    if (multiLoot) { setLootVisible(true); return; }
     leaveWorkoutScreen();
   }, [multiLoot, leaveWorkoutScreen]);
 
   const closeMultiLoot = useCallback(() => {
+    setLootVisible(false);
     setMultiLoot(null);
     leaveWorkoutScreen();
   }, [leaveWorkoutScreen]);
@@ -581,7 +607,11 @@ export default function WorkoutScreen({ route, navigation }) {
       </View>
 
       {/* ── Bulles de présence Multi (Section VII) ── */}
-      <LobbyMembersBar members={lobby?.members ?? []} />
+      <LobbyMembersBar
+        members={lobby?.members ?? []}
+        myId={myId}
+        bonusPercent={computeBonusPercent(lobby?.memberCount ?? 0)}
+      />
 
       {/* ── Barre d'outils : affichage + filtres (repliés) ── */}
       {sourceExercises.length > 0 && (
@@ -727,10 +757,16 @@ export default function WorkoutScreen({ route, navigation }) {
         onCancel={() => setRemoveConfirm(null)}
       />
 
-      <LobbyWaitingOverlay visible={multiWaiting} members={lobby?.members ?? []} />
+      <LobbyWaitingOverlay
+        visible={multiWaiting}
+        members={lobby?.members ?? []}
+        myId={myId}
+        bonusPercent={computeBonusPercent(lobby?.memberCount ?? 0)}
+        onStopWaiting={stopWaiting}
+      />
 
       <MultiLootModal
-        visible={!!multiLoot}
+        visible={lootVisible && !!multiLoot}
         memberCount={multiLoot?.memberCount}
         bonusPercent={multiLoot?.bonusPercent ?? 0}
         bonusXp={multiLoot?.bonusXp}

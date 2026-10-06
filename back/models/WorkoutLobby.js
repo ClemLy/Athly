@@ -52,6 +52,23 @@ const WorkoutLobbySchema = new mongoose.Schema(
     },
     creationDate: { type: Date, default: Date.now },
 
+    // Amis invités qui n'ont pas encore rejoint. Permet d'afficher
+    // l'invitation DANS l'app (écran Social, popup) : les notifications push
+    // n'existent ni sur le web ni dans Expo Go, et peuvent être désactivées.
+    invitedUsers: {
+      type: [
+        new mongoose.Schema(
+          {
+            user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+            by:   { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+            at:   { type: Date, default: Date.now },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+
     // Bonus XP Multi appliqué à la clôture (voir computeMultiBonusPercent) —
     // figé au moment où le dernier membre finit, pour un affichage cohérent
     // même si (en théorie) memberCount changeait après coup.
@@ -61,6 +78,7 @@ const WorkoutLobbySchema = new mongoose.Schema(
 );
 
 WorkoutLobbySchema.index({ "members.user": 1, status: 1 });
+WorkoutLobbySchema.index({ "invitedUsers.user": 1, status: 1 });
 
 module.exports = mongoose.model("WorkoutLobby", WorkoutLobbySchema);
 module.exports.MAX_MEMBERS = MAX_MEMBERS;

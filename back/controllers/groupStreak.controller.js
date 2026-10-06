@@ -22,7 +22,7 @@ const BLOOD_SANG_STREAK_THRESHOLD = 30;
 
 // Champs publics exposés pour un membre de groupe (lastActiveAt alimente la
 // Météo des séances — statut "Prêt")
-const MEMBER_PUBLIC_FIELDS = 'pseudo level rank xp lastActiveAt';
+const MEMBER_PUBLIC_FIELDS = 'pseudo level rank xp lastActiveAt equippedFrame';
 
 // Météo des séances : une séance "draft"/"in_progress" plus vieille que cette
 // fenêtre est considérée abandonnée plutôt qu'activement chronométrée — évite

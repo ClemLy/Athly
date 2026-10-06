@@ -36,3 +36,20 @@ export async function finishLobby(lobbyId) {
   const res = await API.post(`/lobby/${lobbyId}/finish`);
   return res.data;
 }
+
+// Quitter le salon ou la séance en cours (idempotent).
+export async function leaveLobby(lobbyId) {
+  const res = await API.post(`/lobby/${lobbyId}/leave`);
+  return res.data;
+}
+
+// Invitations Multi en attente, visibles dans l'app même sans notification.
+export async function getLobbyInvites() {
+  const res = await API.get('/lobby/invites');
+  return res.data;
+}
+
+export async function declineLobbyInvite(lobbyId) {
+  const res = await API.post(`/lobby/${lobbyId}/decline`);
+  return res.data;
+}

@@ -9,6 +9,8 @@ const { checkAndUnlockAchievements } = require('./reward.controller');
 const { checkAndUnlockTitles } = require('./title.controller');
 
 const { MAX_MEMBERS } = WorkoutLobby;
+// Une invitation non acceptée expire au bout de 2 h (lobby certainement abandonné).
+const INVITE_TTL_MS = 2 * 60 * 60 * 1000;
 const MEMBER_PUBLIC_FIELDS = 'pseudo level rank equippedFrame';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -70,6 +72,53 @@ async function canJoinLobby(lobby, userId) {
       { recipient: userId, requester: { $in: memberIds } },
     ],
   });
+}
+
+/**
+ * Clôture le lobby si TOUS ses membres restants ont fini : passage atomique
+ * 'active' → 'completed' (un seul appel peut le faire, donc compteurs et
+ * trophées ne sont distribués qu'une fois), bonus XP figé, compteur
+ * totalMultiSessions incrémenté, trophées et titres vérifiés.
+ * Appelé par finishLobby (le dernier termine) et leaveLobby (le dernier
+ * retardataire s'en va).
+ */
+async function closeLobbyIfDone(lobbyId, memberCount) {
+  const closed = await WorkoutLobby.findOneAndUpdate(
+    {
+      _id: lobbyId,
+      status: 'active',
+      'members.0': { $exists: true },
+      members: { $not: { $elemMatch: { status: { $ne: 'finished' } } } },
+    },
+    { $set: { status: 'completed', xpBonusPercent: computeMultiBonusPercent(memberCount) } },
+    { returnDocument: 'after' },
+  );
+  const unlocked = {};
+  const titles = {};
+  if (!closed) return { closed: null, unlocked, titles };
+
+  // Best-effort : les trophées/titres ne doivent jamais faire échouer la clôture.
+  try {
+    // Incrémente le compteur AVANT de vérifier les trophées gradués
+    // (MULTI_SESSIONS_5 / MULTI_SESSIONS_30), sinon le seuil serait
+    // évalué sur l'ancienne valeur.
+    await User.updateMany(
+      { _id: { $in: closed.members.map((m) => m.user) } },
+      { $inc: { totalMultiSessions: 1 } },
+    );
+    const results = await Promise.all(
+      closed.members.map((m) => checkAndUnlockAchievements(m.user.toString())),
+    );
+    closed.members.forEach((m, i) => { unlocked[m.user.toString()] = results[i]; });
+
+    const titleResults = await Promise.all(
+      closed.members.map((m) => checkAndUnlockTitles(m.user.toString())),
+    );
+    closed.members.forEach((m, i) => { titles[m.user.toString()] = titleResults[i]; });
+  } catch (_) {
+    // ignore — la clôture du lobby ne doit pas dépendre des trophées/titres.
+  }
+  return { closed, unlocked, titles };
 }
 
 function serializeLobby(lobby) {
@@ -187,6 +236,16 @@ exports.inviteToLobby = async (req, res, next) => {
       User.findById(friendId).select('pseudo'),
     ]);
     if (!friend) return next(createError('Ce compte est introuvable.', 404));
+    if (lobby.members.some((m) => m.user.toString() === friendId)) {
+      return next(createError(`${friend.pseudo} est déjà dans la séance.`, 422));
+    }
+
+    // Visible dans l'app même sans notification (web, Expo Go, push coupées).
+    await WorkoutLobby.updateOne({ _id: lobby._id }, { $pull: { invitedUsers: { user: friendId } } });
+    await WorkoutLobby.updateOne(
+      { _id: lobby._id },
+      { $push: { invitedUsers: { user: friendId, by: myId, at: new Date() } } },
+    );
 
     await sendPushToUser(friendId, {
       title: 'Invitation Multi',
@@ -231,6 +290,7 @@ exports.joinLobby = async (req, res, next) => {
       }
       lobby.members.push({ user: myId, status: 'waiting' });
       lobby.memberCount = lobby.members.length;
+      lobby.invitedUsers = lobby.invitedUsers.filter((i) => i.user.toString() !== myId);
       await lobby.save();
     }
 
@@ -273,6 +333,7 @@ exports.readyLobby = async (req, res, next) => {
       }
       lobby.members.push({ user: myId, status: 'ready' });
       lobby.memberCount = lobby.members.length;
+      lobby.invitedUsers = lobby.invitedUsers.filter((i) => i.user.toString() !== myId);
     } else {
       member.status = 'ready';
     }
@@ -382,44 +443,12 @@ exports.finishLobby = async (req, res, next) => {
       );
     }
 
-    // Clôture : un seul appel peut faire passer le lobby de 'active' à
-    // 'completed' (filtre conditionnel), donc les compteurs et trophées ne
-    // sont distribués qu'une fois. Persisté AVANT la vérification des trophées :
-    // checkAndUnlockAchievements interroge WorkoutLobby en base (status 'completed').
-    const closed = await WorkoutLobby.findOneAndUpdate(
-      { _id: lobby._id, status: 'active', members: { $not: { $elemMatch: { status: { $ne: 'finished' } } } } },
-      { $set: { status: 'completed', xpBonusPercent: computeMultiBonusPercent(lobby.memberCount) } },
-      { returnDocument: 'after' },
-    );
+    // Clôture si tout le monde a fini (persistée AVANT la vérification des
+    // trophées : checkAndUnlockAchievements interroge WorkoutLobby en base).
+    const { closed, unlocked: newlyUnlockedByUser, titles: newlyUnlockedTitlesByUser } =
+      await closeLobbyIfDone(lobby._id, lobby.memberCount);
     const allFinished = Boolean(closed);
     lobby = closed || (await WorkoutLobby.findById(lobby._id));
-
-    let newlyUnlockedByUser = {};
-    let newlyUnlockedTitlesByUser = {};
-    if (allFinished) {
-      // Best-effort : les trophées/titres ne doivent jamais faire échouer la clôture.
-      try {
-        // Incrémente le compteur AVANT de vérifier les trophées gradués
-        // (MULTI_SESSIONS_5 / MULTI_SESSIONS_30), sinon le seuil serait
-        // évalué sur l'ancienne valeur.
-        await User.updateMany(
-          { _id: { $in: lobby.members.map((m) => m.user) } },
-          { $inc: { totalMultiSessions: 1 } },
-        );
-
-        const results = await Promise.all(
-          lobby.members.map((m) => checkAndUnlockAchievements(m.user.toString())),
-        );
-        lobby.members.forEach((m, i) => { newlyUnlockedByUser[m.user.toString()] = results[i]; });
-
-        const titleResults = await Promise.all(
-          lobby.members.map((m) => checkAndUnlockTitles(m.user.toString())),
-        );
-        lobby.members.forEach((m, i) => { newlyUnlockedTitlesByUser[m.user.toString()] = titleResults[i]; });
-      } catch (_) {
-        // ignore — la clôture du lobby ne doit pas dépendre des trophées/titres.
-      }
-    }
 
     await populateLobby(lobby);
 
@@ -430,6 +459,117 @@ exports.finishLobby = async (req, res, next) => {
       newlyUnlocked: allFinished ? (newlyUnlockedByUser[myId] ?? []) : [],
       newlyUnlockedTitles: allFinished ? (newlyUnlockedTitlesByUser[myId] ?? []) : [],
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// leaveLobby  POST /api/lobby/:id/leave
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Quitte la séance Multi (fermeture du salon d'attente, abandon de la séance).
+ * Sans ça, un membre parti restait « pas prêt » (personne ne pouvait plus
+ * démarrer) ou « en séance » (les autres attendaient sa fin indéfiniment).
+ *
+ *  - salon d'attente : le membre est retiré ; si tous les restants sont
+ *    prêts (2+), la séance démarre ; un salon vide est supprimé.
+ *  - séance en cours : le membre est retiré ; si tous les restants ont
+ *    déjà fini, la séance est clôturée pour eux.
+ *  - l'hôte qui part transmet son rôle au membre suivant.
+ *
+ * Idempotent : quitter un salon inexistant, terminé ou déjà quitté répond 200.
+ */
+exports.leaveLobby = async (req, res, next) => {
+  try {
+    const myId = req.user.id;
+    const { id } = req.params;
+    if (!isValidId(id)) return next(createError("Cette séance Multi n'existe plus.", 400));
+
+    const lobby = await WorkoutLobby.findOneAndUpdate(
+      { _id: id, 'members.user': myId, status: { $ne: 'completed' } },
+      { $pull: { members: { user: myId } } },
+      { returnDocument: 'after' },
+    );
+    if (!lobby) return res.status(200).json({ success: true, lobby: null });
+
+    if (lobby.members.length === 0) {
+      await WorkoutLobby.deleteOne({ _id: lobby._id });
+      return res.status(200).json({ success: true, lobby: null });
+    }
+
+    lobby.memberCount = lobby.members.length;
+    if (lobby.creatorId.toString() === myId) lobby.creatorId = lobby.members[0].user;
+    if (lobby.status === 'waiting'
+      && lobby.memberCount >= 2
+      && lobby.members.every((m) => m.status === 'ready')) {
+      lobby.status = 'active';
+    }
+    await lobby.save();
+
+    if (lobby.status === 'active') await closeLobbyIfDone(lobby._id, lobby.memberCount);
+
+    return res.status(200).json({ success: true, lobby: null });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getMyInvites  GET /api/lobby/invites
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Invitations Multi en attente pour l'utilisateur : salons encore ouverts,
+ * non complets, où il a été invité il y a moins de 2 h et qu'il n'a pas
+ * encore rejoints. Interrogée par l'app (écran Social, popup globale).
+ */
+exports.getMyInvites = async (req, res, next) => {
+  try {
+    const myId = req.user.id;
+    const since = new Date(Date.now() - INVITE_TTL_MS);
+
+    const lobbies = await WorkoutLobby.find({
+      status: 'waiting',
+      'members.user': { $ne: myId },
+      invitedUsers: { $elemMatch: { user: myId, at: { $gte: since } } },
+      memberCount: { $lt: MAX_MEMBERS },
+    })
+      .sort({ updatedAt: -1 })
+      .limit(5)
+      .populate('members.user', MEMBER_PUBLIC_FIELDS)
+      .populate('invitedUsers.by', 'pseudo');
+
+    const invites = lobbies.map((l) => {
+      const inv = l.invitedUsers.find((i) => (i.user._id || i.user).toString() === myId);
+      return {
+        lobbyId:     l._id,
+        from:        inv && inv.by ? { _id: inv.by._id, pseudo: inv.by.pseudo } : null,
+        invitedAt:   inv ? inv.at : null,
+        memberCount: l.memberCount,
+        members:     l.members.map((m) => ({ user: m.user, status: m.status })),
+      };
+    });
+
+    return res.status(200).json({ success: true, invites });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// declineInvite  POST /api/lobby/:id/decline
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Ignore une invitation Multi : elle n'est plus proposée. Idempotent. */
+exports.declineInvite = async (req, res, next) => {
+  try {
+    const myId = req.user.id;
+    const { id } = req.params;
+    if (!isValidId(id)) return next(createError("Cette séance Multi n'existe plus.", 400));
+    await WorkoutLobby.updateOne({ _id: id }, { $pull: { invitedUsers: { user: myId } } });
+    return res.status(200).json({ success: true });
   } catch (err) {
     next(err);
   }

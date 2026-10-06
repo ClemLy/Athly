@@ -10,11 +10,14 @@ const { inviteToLobby } = require('../validators/workoutLobby.validator');
 router.use(auth);
 
 router.post('/create',        lobby.createLobby);
+router.get('/invites',         lobby.getMyInvites);   // avant '/:id'
 router.get('/:id',             lobby.getLobby);
 router.post('/:id/invite',     validate(inviteToLobby), lobby.inviteToLobby);
 router.post('/:id/join',       lobby.joinLobby);
 router.post('/:id/ready',      lobby.readyLobby);
 router.post('/:id/unready',    lobby.unreadyLobby);
 router.post('/:id/finish',     lobby.finishLobby);
+router.post('/:id/leave',      lobby.leaveLobby);
+router.post('/:id/decline',    lobby.declineInvite);
 
 module.exports = router;

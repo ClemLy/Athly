@@ -1,46 +1,53 @@
-import React from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 
 // ─── MultiLootModal ────────────────────────────────────────────────────────────
-// Popup d'équipe explosive (Section VII) : affichée dès que le dernier membre
-// du lobby termine sa séance — le salon passe 'completed', tout le monde se
-// déverrouille simultanément et voit le bonus XP Multi appliqué.
+// Récompense d'équipe : affichée quand le dernier membre du salon termine.
+// Le chiffre qui compte (l'XP bonus réellement gagnée) est mis en avant.
 //
 // Props :
-//   visible         bool
-//   memberCount     number
-//   bonusPercent    number (0..0.50)
-//   bonusXp         number — montant XP réellement crédité
-//   onClose         () => void
+//   visible       bool
+//   memberCount   number
+//   bonusPercent  number (0..0.50)
+//   bonusXp       number — XP réellement créditée
+//   onClose       () => void
 
 export default function MultiLootModal({ visible, memberCount, bonusPercent, bonusXp, onClose }) {
+  const scale = useRef(new Animated.Value(0.85)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!visible) return;
+    scale.setValue(0.85);
+    opacity.setValue(0);
+    Animated.parallel([
+      Animated.spring(scale, { toValue: 1, friction: 6, tension: 90, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 1, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+    ]).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <View style={styles.card}>
+        <Animated.View style={[styles.card, { opacity, transform: [{ scale }] }]}>
           <View style={styles.iconWrap}>
-            <Ionicons name="trophy" size={34} color={Colors.gold} />
+            <Ionicons name="people" size={30} color={Colors.gold} />
           </View>
+          <Text style={styles.title} accessibilityRole="header">Séance d'équipe terminée</Text>
+          <Text style={styles.body}>Vous avez terminé à {memberCount}. L'effort collectif paie !</Text>
 
-          <Text style={styles.eyebrow}>SÉANCE D'ÉQUIPE TERMINÉE</Text>
-          <Text style={styles.title}>Butin distribué !</Text>
-          <Text style={styles.body}>
-            Vous avez terminé cette séance à {memberCount}. L'effort collectif paie.
-          </Text>
-
-          <View style={styles.bonusChip}>
-            <Ionicons name="flash" size={18} color="#fff" style={{ marginRight: 8 }} />
-            <Text style={styles.bonusChipTxt}>
-              Bonus Multi +{Math.round(bonusPercent * 100)}% {bonusXp != null ? `(+${bonusXp} XP)` : ''}
-            </Text>
+          <View style={styles.bonusBox}>
+            <Text style={styles.bonusValue}>+{bonusXp ?? 0} XP</Text>
+            <Text style={styles.bonusLabel}>Bonus d'équipe (+{Math.round((bonusPercent || 0) * 100)} %)</Text>
           </View>
 
           <TouchableOpacity accessibilityRole="button" style={styles.closeBtn} onPress={onClose} activeOpacity={0.85}>
-            <Text style={styles.closeBtnTxt}>Nickel !</Text>
+            <Text style={styles.closeBtnTxt}>Continuer</Text>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -48,48 +55,28 @@ export default function MultiLootModal({ visible, memberCount, bonusPercent, bon
 
 const styles = StyleSheet.create({
   backdrop: {
-    flex:            1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    justifyContent:  'center',
-    alignItems:      'center',
-    paddingHorizontal: 24,
+    flex: 1, backgroundColor: 'rgba(5,6,10,0.9)',
+    justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20,
   },
   card: {
-    width:           '100%',
-    backgroundColor: Colors.bgDeep2,
-    borderRadius:    24,
-    borderWidth:     1,
-    borderColor:     'rgba(255,215,0,0.4)',
-    padding:         28,
-    alignItems:      'center',
-    shadowColor:     Colors.gold,
-    shadowOffset:    { width: 0, height: 20 },
-    shadowOpacity:   0.5,
-    shadowRadius:    40,
-    elevation:       24,
+    width: '100%', maxWidth: 420, backgroundColor: Colors.cardDeep, borderRadius: 24,
+    borderWidth: 1, borderColor: 'rgba(255,215,0,0.3)', padding: 24, alignItems: 'center',
   },
   iconWrap: {
-    width: 76, height: 76, borderRadius: 24,
-    backgroundColor: 'rgba(255,215,0,0.12)',
-    borderWidth: 1, borderColor: 'rgba(255,215,0,0.4)',
-    justifyContent: 'center', alignItems: 'center', marginBottom: 16,
+    width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,215,0,0.12)', marginBottom: 14,
   },
-  eyebrow: { color: Colors.textMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1.5, marginBottom: 6 },
-  title: { color: Colors.textPrimary, fontSize: 21, fontWeight: '900', marginBottom: 10, textAlign: 'center' },
-  body: { color: Colors.textSecondary, fontSize: 13.5, lineHeight: 20, textAlign: 'center', marginBottom: 20 },
-  bonusChip: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: Colors.primary, borderRadius: 13,
-    paddingVertical: 12, paddingHorizontal: 18, marginBottom: 22, width: '100%',
-    shadowColor: Colors.primary, shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4, shadowRadius: 12, elevation: 6,
+  title: { color: Colors.textPrimary, fontSize: 21, fontWeight: '900', textAlign: 'center' },
+  body: { color: Colors.textSecondary, fontSize: 14.5, lineHeight: 21, textAlign: 'center', marginTop: 6 },
+  bonusBox: {
+    alignSelf: 'stretch', alignItems: 'center', marginTop: 18, paddingVertical: 16, borderRadius: 16,
+    backgroundColor: 'rgba(255,215,0,0.07)', borderWidth: 1, borderColor: 'rgba(255,215,0,0.22)',
   },
-  bonusChipTxt: { color: '#fff', fontSize: 14.5, fontWeight: '800' },
+  bonusValue: { color: Colors.gold, fontSize: 34, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  bonusLabel: { color: Colors.textSecondary, fontSize: 14, fontWeight: '600', marginTop: 2 },
   closeBtn: {
-    width: '100%', height: 50, borderRadius: 13,
-    justifyContent: 'center', alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    alignSelf: 'stretch', height: 52, borderRadius: 15, marginTop: 18,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primary,
   },
-  closeBtnTxt: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
+  closeBtnTxt: { color: '#fff', fontSize: 16, fontWeight: '800' },
 });
