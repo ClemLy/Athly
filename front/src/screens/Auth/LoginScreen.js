@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Image,
   KeyboardAvoidingView, Platform, ActivityIndicator,
@@ -9,26 +9,15 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '../../constants/theme';
 import AuthInput from '../../components/inputs/AuthInput';
+import { PrimaryButton, FrameShowcase, useEntrance, useShake } from '../../components/auth/AuthKit';
 import { NotificationBanner } from '../../components/common';
-import { login, googleLogin } from '../../services';
+import { login, googleLogin, haptics } from '../../services';
 import { useAuth } from '../../context/AuthContext';
 import { useGoogleAuth } from '../../hooks';
 import { getErrorMessage } from '../../utils/errorMessages';
 
 const LOGO_ORANGE = require('../../../assets/logo-orange.png');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function FadeLoader() {
-  const opacity = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }).start();
-  }, []);
-  return (
-    <Animated.View style={{ opacity }}>
-      <ActivityIndicator color="#fff" />
-    </Animated.View>
-  );
-}
 
 export default function LoginScreen({ navigation }) {
   const { signIn } = useAuth();
@@ -43,6 +32,12 @@ export default function LoginScreen({ navigation }) {
   const [emailErr, setEmailErr]         = useState('');
   const [globalErr, setGlobalErr]       = useState('');
   const [errType, setErrType]           = useState('error');
+
+  // Entrée échelonnée (vitrine → titre → formulaire → actions) et secousse
+  // du formulaire quand la connexion est refusée.
+  const enter = useEntrance(4);
+  const [shakeStyle, shake] = useShake();
+  const fail = () => { haptics.error(); shake(); };
 
   // Dès que promptAsync() résout avec succès, useGoogleAuth expose l'idToken —
   // on le transmet immédiatement au backend pour vérification et connexion.
@@ -82,6 +77,7 @@ export default function LoginScreen({ navigation }) {
   const handleLogin = async () => {
     if (!validateEmail() || !password) {
       if (!password) { setErrType('error'); setGlobalErr('Entre ton mot de passe.'); }
+      fail();
       return;
     }
     try {
@@ -89,6 +85,7 @@ export default function LoginScreen({ navigation }) {
       setGlobalErr('');
       const res = await login(email.trim(), password);
       if (!res?.token) throw new Error('no_token');
+      haptics.success();
       await signIn(res.token, rememberMe);
     } catch (error) {
       const status = error?.status;
@@ -102,6 +99,7 @@ export default function LoginScreen({ navigation }) {
       setGlobalErr(status === 401
         ? 'Email ou mot de passe incorrect.'
         : getErrorMessage(error, 'La connexion n\'a pas abouti. Réessaie dans un instant.'));
+      fail();
     } finally {
       setLoading(false);
     }
@@ -119,123 +117,121 @@ export default function LoginScreen({ navigation }) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Image source={LOGO_ORANGE} style={s.logo} resizeMode="contain" />
+          {/* Vitrine : la progression des cadres, de l'Acier à ATHLY GOD. */}
+          <Animated.View style={[s.hero, enter[0]]}>
+            <Image source={LOGO_ORANGE} style={s.logo} resizeMode="contain" accessibilityLabel="Athly" />
+            <FrameShowcase />
+          </Animated.View>
 
-          <View style={s.titleBlock}>
-            <Text style={s.brand}>Bienvenue</Text>
-            <Text style={s.tagline}>Connecte-toi pour retrouver ta progression</Text>
-          </View>
+          <Animated.View style={[s.titleBlock, enter[1]]}>
+            <Text style={s.title} accessibilityRole="header">On reprend ?</Text>
+            <Text style={s.tagline}>Ta série, ton niveau et tes cadres t'attendent.</Text>
+          </Animated.View>
 
-          <AuthInput
-            label="Email"
-            icon="mail-outline"
-            placeholder="nom@exemple.fr"
-            value={email}
-            onChangeText={(v) => { setEmail(v); if (emailErr) validateEmail(v); if (globalErr) setGlobalErr(''); }}
-            onBlur={() => { if (email) validateEmail(); }}
-            error={emailErr}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="email"
-            textContentType="emailAddress"
-            inputMode="email"
-            enterKeyHint="next"
-          />
+          <Animated.View style={[enter[2], shakeStyle]}>
+            <AuthInput
+              label="Email"
+              icon="mail-outline"
+              placeholder="nom@exemple.fr"
+              value={email}
+              onChangeText={(v) => { setEmail(v); if (emailErr) validateEmail(v); if (globalErr) setGlobalErr(''); }}
+              onBlur={() => { if (email) validateEmail(); }}
+              error={emailErr}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
+              inputMode="email"
+              enterKeyHint="next"
+            />
 
-          <AuthInput
-            label="Mot de passe"
-            icon="lock-closed-outline"
-            placeholder="••••••••"
-            value={password}
-            onChangeText={(v) => { setPassword(v); if (globalErr) setGlobalErr(''); }}
-            isPassword
-            secureTextEntry={!showPassword}
-            showPassword={showPassword}
-            setShowPassword={setShowPassword}
-            autoComplete="current-password"
-            textContentType="password"
-            enterKeyHint="go"
-            onSubmitEditing={handleLogin}
-          />
+            <AuthInput
+              label="Mot de passe"
+              icon="lock-closed-outline"
+              placeholder="Ton mot de passe"
+              value={password}
+              onChangeText={(v) => { setPassword(v); if (globalErr) setGlobalErr(''); }}
+              isPassword
+              secureTextEntry={!showPassword}
+              showPassword={showPassword}
+              setShowPassword={setShowPassword}
+              autoComplete="current-password"
+              textContentType="password"
+              enterKeyHint="go"
+              onSubmitEditing={handleLogin}
+            />
 
-          {/* Rester connecté + Mot de passe oublié */}
-          <View style={s.optionRow}>
-            <TouchableOpacity
-              style={s.rememberRow}
-              onPress={() => setRememberMe(v => !v)}
-              activeOpacity={0.75}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: rememberMe }}
-              hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
-            >
-              <View style={[s.checkbox, rememberMe && s.checkboxActive]}>
-                {rememberMe && <Ionicons name="checkmark" size={11} color="#fff" />}
-              </View>
-              <Text style={s.rememberLabel}>Rester connecté</Text>
-            </TouchableOpacity>
+            {/* Rester connecté + Mot de passe oublié */}
+            <View style={s.optionRow}>
+              <TouchableOpacity
+                style={s.rememberRow}
+                onPress={() => { haptics.selection(); setRememberMe((v) => !v); }}
+                activeOpacity={0.75}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: rememberMe }}
+                hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+              >
+                <View style={[s.checkbox, rememberMe && s.checkboxActive]}>
+                  {rememberMe && <Ionicons name="checkmark" size={12} color="#fff" />}
+                </View>
+                <Text style={s.rememberLabel}>Rester connecté</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={() => navigation.navigate('ForgotPassword', { email: email.trim() })}
-              accessibilityRole="link"
-              hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
-            >
-              <Text style={s.forgotLink}>Mot de passe oublié ?</Text>
-            </TouchableOpacity>
-          </View>
-
-          {globalErr ? <NotificationBanner message={globalErr} type={errType} /> : null}
-
-          <TouchableOpacity
-            style={s.primaryBtn}
-            onPress={handleLogin}
-            disabled={loading}
-            activeOpacity={0.82}
-            accessibilityRole="button"
-            accessibilityLabel="Se connecter"
-            accessibilityState={{ busy: loading, disabled: loading }}
-          >
-            {loading ? <FadeLoader /> : <Text style={s.btnText}>Se connecter</Text>}
-          </TouchableOpacity>
-
-          {googleConfigured && (
-            <View style={s.divider}>
-              <View style={s.dividerLine} />
-              <Text style={s.dividerText}>ou</Text>
-              <View style={s.dividerLine} />
+              <TouchableOpacity
+                onPress={() => navigation.navigate('ForgotPassword', { email: email.trim() })}
+                accessibilityRole="link"
+                hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+              >
+                <Text style={s.forgotLink}>Mot de passe oublié ?</Text>
+              </TouchableOpacity>
             </View>
-          )}
 
-          {googleConfigured && (
-            <TouchableOpacity
-              style={s.googleBtn}
-              onPress={handleGoogleLogin}
-              disabled={googleLoading || !googleRequest}
-              activeOpacity={0.82}
-              accessibilityRole="button"
-              accessibilityLabel="Continuer avec Google"
-            >
-              {googleLoading
-                ? <ActivityIndicator color={Colors.textPrimary} />
-                : (
-                  <>
-                    <Ionicons name="logo-google" size={18} color={Colors.textPrimary} style={{ marginRight: 10 }} />
-                    <Text style={s.googleBtnText}>Continuer avec Google</Text>
-                  </>
-                )}
-            </TouchableOpacity>
-          )}
+            {globalErr ? <NotificationBanner message={globalErr} type={errType} /> : null}
+          </Animated.View>
 
-          <View style={s.switchRow}>
-            <Text style={s.switchLabel}>Pas encore de compte ? </Text>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Register')}
-              accessibilityRole="link"
-              hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
-            >
-              <Text style={s.linkBold}>Créer un compte</Text>
-            </TouchableOpacity>
-          </View>
+          <Animated.View style={enter[3]}>
+            <PrimaryButton label="Se connecter" onPress={handleLogin} loading={loading} style={s.primaryBtn} />
+
+            {googleConfigured && (
+              <View style={s.divider}>
+                <View style={s.dividerLine} />
+                <Text style={s.dividerText}>ou</Text>
+                <View style={s.dividerLine} />
+              </View>
+            )}
+
+            {googleConfigured && (
+              <TouchableOpacity
+                style={s.googleBtn}
+                onPress={handleGoogleLogin}
+                disabled={googleLoading || !googleRequest}
+                activeOpacity={0.82}
+                accessibilityRole="button"
+                accessibilityLabel="Continuer avec Google"
+              >
+                {googleLoading
+                  ? <ActivityIndicator color={Colors.textPrimary} />
+                  : (
+                    <>
+                      <Ionicons name="logo-google" size={18} color={Colors.textPrimary} style={{ marginRight: 10 }} />
+                      <Text style={s.googleBtnText}>Continuer avec Google</Text>
+                    </>
+                  )}
+              </TouchableOpacity>
+            )}
+
+            <View style={s.switchRow}>
+              <Text style={s.switchLabel}>Pas encore de compte ? </Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Register')}
+                accessibilityRole="link"
+                hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+              >
+                <Text style={s.linkBold}>Créer un compte</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -247,61 +243,53 @@ const s = StyleSheet.create({
   content: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingHorizontal: 28,
-    paddingTop: 32,
-    paddingBottom: 56,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 40,
   },
-  logo: { width: 190, height: 120, alignSelf: 'center', marginBottom: 32 },
+  hero: { alignItems: 'center', marginBottom: 18 },
+  logo: { width: 104, height: 52, marginBottom: 2 },
 
-  titleBlock: { marginBottom: 32 },
-  brand: {
-    color: Colors.textPrimary, fontSize: 30, fontWeight: '700',
-    letterSpacing: -0.5, marginBottom: 6,
+  titleBlock: { marginBottom: 24, alignItems: 'center' },
+  title: {
+    color: Colors.textPrimary, fontSize: 30, fontWeight: '800',
+    letterSpacing: -0.8, marginBottom: 6,
   },
-  tagline: { color: Colors.textMuted, fontSize: 14, letterSpacing: 0.2 },
+  tagline: { color: Colors.textSecondary, fontSize: 15, lineHeight: 21, textAlign: 'center' },
 
   optionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 4,
-    marginBottom: 4,
+    marginTop: -2,
+    marginBottom: 6,
   },
   rememberRow: { flexDirection: 'row', alignItems: 'center' },
   checkbox: {
-    width: 20, height: 20, borderRadius: 5,
-    borderWidth: 1.5, borderColor: Colors.textMuted,
+    width: 20, height: 20, borderRadius: 6,
+    borderWidth: 1.5, borderColor: Colors.borderDim,
     justifyContent: 'center', alignItems: 'center',
     marginRight: 8,
   },
   checkboxActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  rememberLabel: { color: Colors.textSecondary, fontSize: 13 },
-  forgotLink: { color: Colors.primary, fontSize: 13, fontWeight: '600' },
+  rememberLabel: { color: Colors.textSecondary, fontSize: 13.5 },
+  forgotLink: { color: Colors.textSecondary, fontSize: 13.5, fontWeight: '600', textDecorationLine: 'underline' },
 
-  primaryBtn: {
-    backgroundColor: Colors.primary, height: 56, borderRadius: 14,
-    justifyContent: 'center', alignItems: 'center', marginTop: 24,
-    shadowColor: Colors.primary, shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4, shadowRadius: 16, elevation: 8,
-  },
-  btnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.4 },
+  primaryBtn: { marginTop: 18 },
 
-  divider: {
-    flexDirection: 'row', alignItems: 'center', marginVertical: 28,
-  },
-  dividerLine: { flex: 1, height: 1, backgroundColor: Colors.separator },
-  dividerText: { color: Colors.textMuted, marginHorizontal: 12, fontSize: 12 },
+  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 22 },
+  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: Colors.separator },
+  dividerText: { color: Colors.textMuted, marginHorizontal: 12, fontSize: 12.5 },
 
   googleBtn: {
-    flexDirection: 'row', height: 56, borderRadius: 14,
+    flexDirection: 'row', height: 54, borderRadius: 16,
     justifyContent: 'center', alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
-    marginBottom: 20,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
   },
   googleBtnText: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
 
-  switchRow: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', marginTop: 8 },
+  switchRow: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', marginTop: 26 },
   switchLabel: { color: Colors.textMuted, fontSize: 14 },
-  linkBold: { color: Colors.primary, fontWeight: '700', fontSize: 14 },
+  linkBold: { color: Colors.primary, fontWeight: '800', fontSize: 14 },
 });
