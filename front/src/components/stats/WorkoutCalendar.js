@@ -2,102 +2,129 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
+import { formatWeight } from '../../utils/format';
+import { indexLogsByDay, monthSummary, longDay, MONTHS_LONG } from '../../services/periodStats';
 
-// Calendrier mensuel léger : grille 7×N, points orange sur les jours avec séance.
-// Pas de dépendance externe.
+// ─── WorkoutCalendar ──────────────────────────────────────────────────────────
+//
+// Calendrier mensuel sur TOUT l'historique : les jours d'entraînement sont des
+// pastilles pleines, repérables d'un coup d'œil. Appuyer sur l'une d'elles
+// filtre la liste des séances sur ce jour (re-appuyer annule le filtre).
+// Pas de mois futurs : il n'y a rien à y voir.
 //
 // Props :
-//   - workoutDates : { 'YYYY-MM-DD': true }  (issu de aggregateGlobal)
-//   - onSelectDate : (dateKey) => void  (optionnel)
-//
-const DAYS_LABEL = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-const MONTH_LABELS = [
-  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+//   logs        séances
+//   selectedDay 'YYYY-MM-DD' | null
+//   onSelectDay (dateKey | null) => void
+
+const WEEKDAYS = [
+  { short: 'L', long: 'lundi' }, { short: 'M', long: 'mardi' }, { short: 'M', long: 'mercredi' },
+  { short: 'J', long: 'jeudi' }, { short: 'V', long: 'vendredi' }, { short: 'S', long: 'samedi' },
+  { short: 'D', long: 'dimanche' },
 ];
 
 function dayKey(year, month, day) {
-  // mois 0-indexé
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
 function buildMonthGrid(year, month) {
-  const first = new Date(year, month, 1);
-  const startOffset = (first.getDay() + 6) % 7; // lundi = 0
+  const startOffset = (new Date(year, month, 1).getDay() + 6) % 7; // lundi = 0
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  // Tableau de cells : null pour les vides (avant le 1er ou après le dernier jour)
   const cells = [];
   for (let i = 0; i < startOffset; i += 1) cells.push(null);
   for (let d = 1; d <= daysInMonth; d += 1) cells.push(d);
-  // Pad fin pour compléter la dernière semaine
   while (cells.length % 7 !== 0) cells.push(null);
   return cells;
 }
 
-export default function WorkoutCalendar({ workoutDates = {}, onSelectDate }) {
+export default function WorkoutCalendar({ logs = [], selectedDay = null, onSelectDay }) {
   const today = new Date();
-  const [cursor, setCursor] = useState({
-    year: today.getFullYear(),
-    month: today.getMonth(),
-  });
+  const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() });
 
+  const byDay = useMemo(() => indexLogsByDay(logs), [logs]);
   const cells = useMemo(() => buildMonthGrid(cursor.year, cursor.month), [cursor]);
+  const summary = useMemo(() => monthSummary(logs, cursor.year, cursor.month), [logs, cursor]);
 
   const todayKey = dayKey(today.getFullYear(), today.getMonth(), today.getDate());
+  const isCurrentMonth = cursor.year === today.getFullYear() && cursor.month === today.getMonth();
+  const monthName = `${MONTHS_LONG[cursor.month].charAt(0).toUpperCase()}${MONTHS_LONG[cursor.month].slice(1)} ${cursor.year}`;
 
   const previous = useCallback(() => {
-    setCursor(({ year, month }) => {
-      if (month === 0) return { year: year - 1, month: 11 };
-      return { year, month: month - 1 };
-    });
+    setCursor(({ year, month }) => (month === 0 ? { year: year - 1, month: 11 } : { year, month: month - 1 }));
   }, []);
-
   const next = useCallback(() => {
-    setCursor(({ year, month }) => {
-      if (month === 11) return { year: year + 1, month: 0 };
-      return { year, month: month + 1 };
-    });
+    setCursor(({ year, month }) => (month === 11 ? { year: year + 1, month: 0 } : { year, month: month + 1 }));
   }, []);
 
   return (
-    <View style={styles.wrap}>
+    <View>
       <View style={styles.header}>
-        <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button" onPress={previous} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Mois précédent"
+          onPress={previous}
+          style={styles.navBtn}
+        >
           <Ionicons name="chevron-back" size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>
-          {MONTH_LABELS[cursor.month]} {cursor.year}
-        </Text>
-        <TouchableOpacity accessibilityLabel="Ouvrir" accessibilityRole="button" onPress={next} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle} accessibilityRole="header">{monthName}</Text>
+          <Text style={styles.headerSub}>
+            {summary.sessions > 0
+              ? `${summary.sessions} séance${summary.sessions > 1 ? 's' : ''}  ·  ${formatWeight(summary.volume)}`
+              : 'Aucune séance'}
+          </Text>
+        </View>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Mois suivant"
+          accessibilityState={{ disabled: isCurrentMonth }}
+          onPress={next}
+          disabled={isCurrentMonth}
+          style={[styles.navBtn, isCurrentMonth && styles.navBtnDisabled]}
+        >
           <Ionicons name="chevron-forward" size={20} color={Colors.textPrimary} />
         </TouchableOpacity>
       </View>
 
       <View style={styles.weekdays}>
-        {DAYS_LABEL.map((d, i) => (
-          <Text key={`w-${i}`} style={styles.weekdayLabel}>{d}</Text>
+        {WEEKDAYS.map((d) => (
+          <Text key={d.long} style={styles.weekdayLabel} accessibilityLabel={d.long}>{d.short}</Text>
         ))}
       </View>
 
       <View style={styles.grid}>
         {cells.map((d, i) => {
-          if (d === null) {
-            return <View key={`c-${i}`} style={styles.cell} />;
-          }
+          if (d === null) return <View key={`c-${i}`} style={styles.cell} />;
           const k = dayKey(cursor.year, cursor.month, d);
-          const hasWorkout = !!workoutDates[k];
+          const count = (byDay[k] || []).length;
           const isToday = k === todayKey;
+          const isFuture = k > todayKey;
+          const isSelected = k === selectedDay;
+
+          if (count === 0) {
+            return (
+              <View key={`c-${i}`} style={styles.cell} accessible accessibilityLabel={`${longDay(k)}${isToday ? ", aujourd'hui" : ''}, repos`}>
+                <View style={[styles.day, isToday && styles.dayToday]}>
+                  <Text style={[styles.dayText, isFuture && styles.dayTextFuture, isToday && styles.dayTextToday]}>{d}</Text>
+                </View>
+              </View>
+            );
+          }
           return (
-            <TouchableOpacity accessibilityRole="button"
+            <TouchableOpacity
               key={`c-${i}`}
-              style={[styles.cell, isToday && styles.cellToday]}
-              onPress={() => onSelectDate && onSelectDate(k)}
+              style={styles.cell}
+              onPress={() => onSelectDay && onSelectDay(isSelected ? null : k)}
               activeOpacity={0.7}
-              disabled={!onSelectDate}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
+              accessibilityLabel={`${longDay(k)}, ${count} séance${count > 1 ? 's' : ''}`}
+              accessibilityHint={isSelected ? 'Affiche toutes les séances' : 'Affiche les séances de ce jour'}
             >
-              <Text style={[styles.cellText, isToday && styles.cellTextToday]}>{d}</Text>
-              {hasWorkout ? <View style={styles.dot} /> : null}
+              <View style={[styles.day, styles.dayTrained, isSelected && styles.daySelected]}>
+                <Text style={styles.dayTextTrained}>{d}</Text>
+              </View>
             </TouchableOpacity>
           );
         })}
@@ -107,63 +134,31 @@ export default function WorkoutCalendar({ workoutDates = {}, onSelectDate }) {
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    backgroundColor: Colors.cardDeep,
-    borderRadius: 16,
-    padding: 14,
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerTitle: { color: Colors.textPrimary, fontSize: 16, fontWeight: '800' },
+  headerSub: { color: Colors.textSecondary, fontSize: 13, marginTop: 2 },
+  navBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
+  navBtnDisabled: { opacity: 0.3 },
+
+  weekdays: { flexDirection: 'row', marginBottom: 4 },
+  weekdayLabel: { flex: 1, textAlign: 'center', color: Colors.textMuted, fontSize: 12, fontWeight: '700' },
+
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  cell: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
+  day: {
+    width: '82%', maxWidth: 40, aspectRatio: 1, borderRadius: 999,
+    alignItems: 'center', justifyContent: 'center',
   },
-  headerTitle: {
-    color: Colors.textPrimary,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  weekdays: {
-    flexDirection: 'row',
-    marginBottom: 6,
-  },
-  weekdayLabel: {
-    flex: 1,
-    textAlign: 'center',
-    color: Colors.textMuted,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  cell: {
-    width: `${100 / 7}%`,
-    aspectRatio: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 4,
-  },
-  cellToday: {
-    backgroundColor: 'rgba(254, 116, 57, 0.10)',
-    borderRadius: 8,
-  },
-  cellText: {
-    color: Colors.textPrimary,
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  cellTextToday: {
-    color: Colors.primary,
-    fontWeight: '800',
-  },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: Colors.primary,
-    marginTop: 2,
-  },
+  dayToday: { borderWidth: 1.5, borderColor: `${Colors.primary}AA` },
+  dayTrained: { backgroundColor: Colors.primary },
+  daySelected: { borderWidth: 2.5, borderColor: '#FFFFFF' },
+  dayText: { color: Colors.textSecondary, fontSize: 14, fontWeight: '500', fontVariant: ['tabular-nums'] },
+  dayTextFuture: { color: 'rgba(255,255,255,0.22)' },
+  dayTextToday: { color: Colors.primary, fontWeight: '800' },
+  dayTextTrained: { color: '#FFFFFF', fontSize: 14, fontWeight: '800', fontVariant: ['tabular-nums'] },
 });
