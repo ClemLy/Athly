@@ -4,12 +4,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { getMyRecords } from '../../services';
 import { updateRecordsShowcase } from '../../services';
+import { BUILTIN_CATALOG } from '../../data/exerciseCatalog';
+import { indexExercise, searchExercises, normalizeText } from '../../data/exerciseSearch';
+
+const CATALOG_BY_NAME = new Map(BUILTIN_CATALOG.map((e) => [normalizeText(e.name), e]));
 
 const MAX_SHOWCASED = 6;
 
-function normalize(s) {
-  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-}
 
 // ─── RecordsShowcasePicker ─────────────────────────────────────────────────────
 // Sélection de jusqu'à 6 records d'exercices à mettre en avant sur le profil
@@ -41,11 +42,18 @@ export default function RecordsShowcasePicker({ visible, current = [], onSaved, 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  const filtered = useMemo(() => {
-    const q = normalize(query.trim());
-    if (!q) return records;
-    return records.filter((r) => normalize(r.exercice).includes(q));
-  }, [records, query]);
+  // Même recherche que partout (muscle, matériel, fautes de frappe) : chaque
+  // record est rattaché à son exercice du catalogue quand il existe.
+  const index = useMemo(() => records.map((r) => {
+    const ex = CATALOG_BY_NAME.get(normalizeText(r.exercice)) || {};
+    return indexExercise({ ...ex, name: r.exercice, record: r });
+  }), [records]);
+
+  const filtered = useMemo(
+    () => searchExercises(index, query).map((e) => e.record),
+    [index, query],
+  );
+  const muscleOf = (name) => CATALOG_BY_NAME.get(normalizeText(name))?.targetMuscle;
 
   const toggle = (name) => {
     setSelected((prev) => {
@@ -102,10 +110,17 @@ export default function RecordsShowcasePicker({ visible, current = [], onSaved, 
                   style={styles.searchInput}
                   value={query}
                   onChangeText={setQuery}
-                  placeholder="Chercher parmi tes records…"
+                  placeholder="Nom, muscle ou matériel…"
                   placeholderTextColor={Colors.textMuted}
                   autoCapitalize="none"
+                  autoCorrect={false}
+                  accessibilityLabel="Chercher parmi tes records"
                 />
+                {query ? (
+                  <TouchableOpacity accessibilityRole="button" accessibilityLabel="Effacer la recherche" onPress={() => setQuery('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                ) : null}
               </View>
 
               <FlatList
@@ -114,7 +129,7 @@ export default function RecordsShowcasePicker({ visible, current = [], onSaved, 
                 keyboardShouldPersistTaps="handled"
                 style={styles.list}
                 contentContainerStyle={{ paddingBottom: 8 }}
-                ListEmptyComponent={<Text style={styles.emptyTxt}>Aucun exercice ne correspond.</Text>}
+                ListEmptyComponent={<Text style={[styles.emptyTxt, { marginTop: 24 }]}>{`Aucun de tes records ne correspond à « ${query.trim()} ».`}</Text>}
                 renderItem={({ item }) => {
                   const active = selected.includes(item.exercice);
                   const disabled = !active && selected.length >= MAX_SHOWCASED;
@@ -129,7 +144,12 @@ export default function RecordsShowcasePicker({ visible, current = [], onSaved, 
                         <Text style={[styles.rowName, disabled && styles.rowNameDisabled]} numberOfLines={1}>
                           {item.exercice}
                         </Text>
-                        <Text style={styles.rowValue}>{item.maxPoids} kg × {item.maxReps}</Text>
+                        <Text style={styles.rowValue}>
+                          {item.maxPoids > 0
+                            ? `${String(item.maxPoids).replace('.', ',')} kg × ${item.maxReps}`
+                            : `${item.maxReps} reps`}
+                          {muscleOf(item.exercice) ? `  ·  ${muscleOf(item.exercice)}` : ''}
+                        </Text>
                       </View>
                       <Ionicons
                         name={active ? 'checkbox' : 'square-outline'}
@@ -196,10 +216,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
-    borderRadius: 12, paddingHorizontal: 12, height: 44,
+    borderRadius: 12, paddingHorizontal: 12, height: 48,
     marginBottom: 10,
   },
-  searchInput: { flex: 1, color: Colors.textPrimary, fontSize: 14 },
+  searchInput: { flex: 1, color: Colors.textPrimary, fontSize: 15 },
   list: { flex: 1 },
   row: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
