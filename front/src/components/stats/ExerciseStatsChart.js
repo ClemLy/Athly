@@ -51,6 +51,22 @@ export default function ExerciseStatsChart({ points = [], metric = 'maxWeight', 
   const dataset = data.length === 1 ? [data[0], data[0]] : data;
   const lbls = data.length === 1 ? [labels[0] || '', labels[0] || ''] : labels;
 
+  // Graduations rondes : on choisit un nombre de segments qui divise l'écart
+  // (30 → 35 kg : 5 segments = 30, 31, 32, 33, 34, 35) au lieu d'arrondir des
+  // pas de 1,25 kg (qui affichaient 30, 31, 33, 34, 35).
+  const min = Math.min(...dataset);
+  const max = Math.max(...dataset);
+  const range = Math.round(max - min);
+  const segments = range === 0 ? 1 : ([4, 5, 3, 2].find((n) => range % n === 0 && range / n >= 1) || 4);
+  const formatY = (v) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return v;
+    const r = Math.round(n * 10) / 10;
+    return metric === 'volume'
+      ? Math.round(r).toLocaleString('fr-FR')
+      : String(r).replace('.', ',');
+  };
+
   return (
     <View style={styles.wrap}>
       <LineChart
@@ -63,8 +79,9 @@ export default function ExerciseStatsChart({ points = [], metric = 'maxWeight', 
         withVerticalLabels
         withHorizontalLabels
         fromZero={false}
-        segments={4}
-        yAxisSuffix={metric === 'volume' ? '' : 'kg'}
+        segments={segments}
+        formatYLabel={formatY}
+        yAxisSuffix={metric === 'volume' ? '' : ' kg'}
         chartConfig={CHART_CONFIG}
         style={styles.chart}
       />
@@ -75,14 +92,18 @@ export default function ExerciseStatsChart({ points = [], metric = 'maxWeight', 
 const CHART_CONFIG = {
   backgroundGradientFrom: Colors.cardDeep,
   backgroundGradientTo: Colors.cardDeep,
-  decimalPlaces: 0,
+  decimalPlaces: 1,
   color: (opacity = 1) => `rgba(254, 116, 57, ${opacity})`,
   labelColor: () => Colors.textMuted,
   propsForDots: {
-    r: '4',
-    strokeWidth: '2',
-    stroke: '#0A0A0A',
+    r: '5',
+    strokeWidth: '2.5',
+    stroke: Colors.cardDeep,
   },
+  fillShadowGradientFrom: Colors.primary,
+  fillShadowGradientFromOpacity: 0.28,
+  fillShadowGradientTo: Colors.primary,
+  fillShadowGradientToOpacity: 0,
   propsForBackgroundLines: {
     stroke: '#23232b',
   },
@@ -103,13 +124,13 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: Colors.textPrimary,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     textAlign: 'center',
   },
   emptyHint: {
-    color: Colors.textMuted,
-    fontSize: 12,
+    color: Colors.textSecondary,
+    fontSize: 13.5,
     textAlign: 'center',
     marginTop: 6,
   },
