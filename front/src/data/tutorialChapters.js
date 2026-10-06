@@ -41,7 +41,7 @@ export const TUTORIAL_CHAPTERS = [
       {
         key: 'quick_stats',
         title: 'Stats de la Semaine',
-        body: "Séances, volume total et streak quotidienne : tes chiffres de la semaine en un coup d'œil.",
+        body: "Ta semaine en un coup d'œil : les jours où tu t'es entraîné, tes séances, ton volume et ta série en cours.",
         targetKey: 'home_quickstats', position: 'bottom', scrollY: 180,
       },
       {

@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
+  useWindowDimensions,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,10 +18,8 @@ import { useUser } from '../../context/UserContext';
 import {
   computeStreak,
   recommendNextMuscleGroup,
-  aggregateGlobal,
   xpToLevel,
 } from '../../services';
-import { findMuscleGroup } from '../../constants/exerciseFilters';
 import {
   TEMPLATES,
   instantiateWorkout,
@@ -30,8 +29,7 @@ import {
 import EmptyHomeState from '../../components/home/EmptyHomeState';
 import ResumeWorkoutCard from '../../components/workouts/ResumeWorkoutCard';
 import HeroSessionCard from '../../components/home/HeroSessionCard';
-import QuickStatsRow from '../../components/home/QuickStatsRow';
-import StreakBadge from '../../components/profile/StreakBadge';
+import WeekCard from '../../components/home/WeekCard';
 import DailyQuestsCard from '../../components/home/DailyQuestsCard';
 import RecoveryRitualsCard from '../../components/home/RecoveryRitualsCard';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
@@ -39,6 +37,7 @@ import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 import { useDevSettings } from '../../hooks';
 import { MOCK_TUTORIAL_LOGS } from '../../data/mockTutorialStats';
 import { formatWeight, plural } from '../../utils/format';
+import { weekDays, weekTotals, recommendationReason, greeting, todayLabel } from '../../data/homeInsights';
 
 // Écran d'accueil. Bascule entre EmptyHomeState (compte vierge) et état actif
 // (séance recommandée + stats semaine + récents) selon `logs.length`.
@@ -57,10 +56,15 @@ export default function HomeScreen({ navigation }) {
 
   // Réconciliation du flag "tutoriel terminé" avec le backend (cohérence
   // inter-appareils) : si le serveur dit "déjà fait", on ne re-déclenche pas.
-  const { user } = useUser();
+  const { user, refetch: refetchUser } = useUser();
   useEffect(() => {
     if (user) reconcileWithServer(!!user.hasCompletedOnboarding);
   }, [user, reconcileWithServer]);
+  // Le profil (pseudo, onboarding) peut ne pas être encore chargé à l'ouverture.
+  useEffect(() => {
+    if (!user) refetchUser();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Injection de données fantômes pendant le Chapitre 1 pour que le spotlight
   // puisse pointer les éléments actifs (level chip, hero, stats, quêtes, rituel).
@@ -143,9 +147,10 @@ export default function HomeScreen({ navigation }) {
     () => findTemplateForGroup(recommendedGroup) || TEMPLATES[0],
     [recommendedGroup],
   );
-  const weekly = useMemo(() => aggregateGlobal(workoutLogs, 'week'), [workoutLogs]);
   const streak = useMemo(() => computeStreak(activeLogs), [activeLogs]);
-  const { level } = useMemo(() => xpToLevel(activeXP), [activeXP]);
+  const { level, progress: levelProgress } = useMemo(() => xpToLevel(activeXP), [activeXP]);
+  const week = useMemo(() => weekDays(workoutLogs), [workoutLogs]);
+  const weekly = useMemo(() => weekTotals(workoutLogs, week), [workoutLogs, week]);
   const recentLogs = useMemo(() => workoutLogs.slice(0, 3), [workoutLogs]);
 
   const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -158,13 +163,12 @@ export default function HomeScreen({ navigation }) {
     [loading, activeLogs, todayKey],
   );
 
-  const recommendedReason = useMemo(() => {
-    if (!workoutLogs || workoutLogs.length === 0) {
-      return 'On démarre par une séance Push pour bien lancer ton programme.';
-    }
-    const groupLabel = (findMuscleGroup(recommendedGroup) || {}).label || 'ce groupe';
-    return `${groupLabel} n'a pas été suffisamment travaillé récemment. On rééquilibre.`;
-  }, [workoutLogs, recommendedGroup]);
+  const recommendedReason = useMemo(
+    () => recommendationReason(workoutLogs, recommendedGroup),
+    [workoutLogs, recommendedGroup],
+  );
+  const pseudo = user ? String(user.pseudo || user.name || '').trim() : '';
+  const narrow = useWindowDimensions().width < 360;
 
   // ─── Navigation ──────────────────────────────────────────────────────────
   const startRecommended = useCallback(() => {
@@ -205,22 +209,28 @@ export default function HomeScreen({ navigation }) {
 
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Text style={styles.greeting}>Bonjour</Text>
-            <Text style={styles.tagline}>
-              {isFirstTime ? 'Prêt à commencer ?' : 'Continue sur ta lancée'}
+            <Text style={styles.dateLine}>{todayLabel()}</Text>
+            <Text style={[styles.greeting, narrow && styles.greetingNarrow]} numberOfLines={1} accessibilityRole="header">
+              {pseudo ? `${greeting()}, ${pseudo}` : greeting()}
             </Text>
           </View>
           {!isFirstTime && !loading ? (
-            <View style={styles.headerRight} ref={levelChipRef} onLayout={onLevelChipLayout} collapsable={false}>
-              <TouchableOpacity accessibilityRole="button"
+            <View ref={levelChipRef} onLayout={onLevelChipLayout} collapsable={false}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={`Niveau ${level}, ${Math.round(levelProgress * 100)} % vers le niveau ${level + 1}. Voir les stats`}
                 style={styles.levelChip}
                 onPress={goToStats}
                 activeOpacity={0.85}
               >
-                <Text style={styles.levelChipKicker}>NIV.</Text>
-                <Text style={styles.levelChipValue}>{level}</Text>
+                <View style={styles.levelChipRow}>
+                  <Text style={styles.levelChipKicker}>NIV.</Text>
+                  <Text style={styles.levelChipValue}>{level}</Text>
+                </View>
+                <View style={styles.levelTrack}>
+                  <View style={[styles.levelFill, { width: `${Math.max(6, Math.round(levelProgress * 100))}%` }]} />
+                </View>
               </TouchableOpacity>
-              {streak > 0 ? <StreakBadge streak={streak} compact /> : null}
             </View>
           ) : null}
         </View>
@@ -243,22 +253,25 @@ export default function HomeScreen({ navigation }) {
             <View style={styles.activeBlock}>
               <View ref={heroRef} onLayout={onHeroLayout} collapsable={false}>
                 <HeroSessionCard
-                  title="Séance recommandée"
+                  title="Recommandée pour toi"
                   templateName={recommendedTemplate ? recommendedTemplate.name : 'Séance'}
                   reason={recommendedReason}
                   exerciseCount={recommendedTemplate ? recommendedTemplate.buildExercises().length : 0}
                   durationMin={recommendedTemplate ? recommendedTemplate.estimatedDurationMin : 0}
                   groupId={recommendedGroup}
                   onStart={startRecommended}
+                  onBrowse={goToTemplates}
                 />
               </View>
 
               <View style={styles.section} ref={quickStatsRef} onLayout={onQuickStatsLayout} collapsable={false}>
-                <Text style={styles.sectionTitle}>Cette semaine</Text>
-                <QuickStatsRow
-                  sessions={weekly.totalSessions}
-                  volume={weekly.totalVolume}
+                <WeekCard
+                  days={week}
+                  sessions={weekly.sessions}
+                  volume={weekly.volume}
                   streak={streak}
+                  trainedToday={hasWorkoutToday}
+                  onPress={goToStats}
                 />
               </View>
 
@@ -293,15 +306,6 @@ export default function HomeScreen({ navigation }) {
                   </View>
                 </View>
               ) : null}
-
-              <TouchableOpacity accessibilityRole="button"
-                style={styles.secondaryCta}
-                onPress={goToTemplates}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="library-outline" size={18} color={Colors.textSecondary} />
-                <Text style={styles.secondaryCtaText}>Choisir une autre séance</Text>
-              </TouchableOpacity>
             </View>
           )}
         </Animated.View>
@@ -370,32 +374,39 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 22,
   },
-  headerLeft: { flex: 1 },
-  headerRight: {
-    alignItems: 'flex-end',
-    gap: 8,
+  headerLeft: { flex: 1, marginRight: 12 },
+  dateLine: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 4,
   },
   greeting: {
     color: Colors.textPrimary,
-    fontSize: 30,
-    fontWeight: '800',
+    fontSize: 28,
+    fontWeight: '900',
     letterSpacing: 0.2,
   },
-  tagline: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    marginTop: 4,
-  },
+  greetingNarrow: { fontSize: 23 },
   levelChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: 'rgba(110, 106, 240, 0.15)',
     borderColor: 'rgba(110, 106, 240, 0.45)',
     borderWidth: 1,
     paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
+    paddingTop: 7,
+    paddingBottom: 8,
+    borderRadius: 14,
+    minWidth: 76,
   },
+  levelChipRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  levelTrack: {
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    marginTop: 6,
+    overflow: 'hidden',
+  },
+  levelFill: { height: '100%', borderRadius: 2, backgroundColor: Colors.secondaryAccent },
   levelChipKicker: {
     color: Colors.secondaryAccent,
     fontSize: 10,
@@ -473,19 +484,4 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
-  secondaryCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.cardDeep,
-    paddingVertical: 14,
-    borderRadius: 14,
-    marginTop: 18,
-  },
-  secondaryCtaText: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '700',
-    marginLeft: 8,
-  },
 });
