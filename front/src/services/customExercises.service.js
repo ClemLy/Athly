@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { resolveMuscleGroup } from '../constants/exerciseFilters';
+import { resolveMuscleGroup, normalizeId } from '../constants/exerciseFilters';
 
 // CRUD des exercices personnalisés. Persiste dans AsyncStorage sous une clé dédiée.
 // Schéma d'un exo :

@@ -239,6 +239,33 @@ export function searchExercises(index, query) {
   return scored.map((s) => s.ex);
 }
 
+// Exercices proches d'un nom saisi librement (création d'un exercice perso) :
+// contrairement à la recherche, tous les mots n'ont pas à correspondre
+// (« Curl incliné prise neutre » → Curl incliné). Il faut au moins un mot
+// qui colle au nom de l'exercice, pas seulement au muscle.
+export function findSimilarExercises(index, name, limit = 3) {
+  const tokens = tokenize(name);
+  if (tokens.length === 0) return [];
+  const qNorm = normalizeText(name);
+  const scored = [];
+  for (const it of index) {
+    let total = 0;
+    let matched = 0;
+    let strong = false;
+    for (const tk of tokens) {
+      const s = tokenScore(tk, it);
+      if (s > 0) { total += s; matched += 1; }
+      if (s >= 8) strong = true;
+    }
+    if (!strong) continue;
+    const exact = it.nameNorm === qNorm;
+    scored.push({ ex: it.ex, exact, matched, total: total + (exact ? 30 : 0), len: it.nameNorm.length });
+  }
+  scored.sort((a, b) => Number(b.exact) - Number(a.exact) || b.matched - a.matched
+    || b.total - a.total || a.len - b.len);
+  return scored.slice(0, limit).map(({ ex, exact }) => ({ ex, exact }));
+}
+
 // Filtres explicites (puces) : groupe musculaire et matériel.
 export function filterIndex(index, { group = null, equipment = null } = {}) {
   return index.filter((it) => (!group || it.group === group) && (!equipment || it.equipment.includes(equipment)));
