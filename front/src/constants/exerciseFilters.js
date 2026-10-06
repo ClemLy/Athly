@@ -77,6 +77,20 @@ export const SUBMUSCLE_TO_GROUP = MUSCLE_GROUPS.reduce((acc, g) => {
   return acc;
 }, {});
 
+// Groupe musculaire d'un libellé de muscle. Accepte aussi bien un sous-muscle
+// du catalogue (« Pectoraux haut ») qu'un nom de groupe, éventuellement précisé
+// entre parenthèses (« Pectoraux », « Dos (large) », « Épaules (arrière) ») —
+// format utilisé par les séances types. Sans ça, ces exercices tombaient dans
+// « Autre » et faussaient la répartition musculaire.
+export function resolveMuscleGroup(label) {
+  if (!label) return null;
+  const id = normalizeId(label);
+  if (SUBMUSCLE_TO_GROUP[id]) return SUBMUSCLE_TO_GROUP[id];
+  const base = normalizeId(String(label).replace(/\(.*?\)/g, ''));
+  if (MUSCLE_GROUPS.some((g) => g.id === base)) return base;
+  return SUBMUSCLE_TO_GROUP[base] || null;
+}
+
 // Liste plate des sous-muscles avec leur groupe parent.
 export const ALL_SUBMUSCLES = MUSCLE_GROUPS.flatMap((g) =>
   g.subMuscles.map((s) => ({ ...s, groupId: g.id, groupLabel: g.label })),

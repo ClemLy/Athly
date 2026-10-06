@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SUBMUSCLE_TO_GROUP, normalizeId } from '../constants/exerciseFilters';
+import { resolveMuscleGroup, normalizeId } from '../constants/exerciseFilters';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service de statistiques (100% local AsyncStorage).
@@ -196,8 +196,10 @@ export function computeWorkoutStats(workout) {
     }
     // Inclure aussi les exercices poids du corps (weight=0) si des reps ont été effectuées
     if (exVolume > 0 || exCompletedReps > 0) {
-      const groupId = ex.targetMuscleGroup
-        || SUBMUSCLE_TO_GROUP[normalizeId(ex.targetMuscle || '')]
+      // Un groupe stocké « other » (ancien bug) est traité comme inconnu.
+      const stored = ex.targetMuscleGroup && ex.targetMuscleGroup !== 'other' ? ex.targetMuscleGroup : null;
+      const groupId = stored
+        || resolveMuscleGroup(ex.targetMuscle)
         || 'other';
       muscleDistribution[groupId] = (muscleDistribution[groupId] || 0) + exVolume;
     }
@@ -232,7 +234,7 @@ export function buildLogFromWorkout(workout, prevLogs = []) {
           id: ex.id || null,
           name: ex.name || '',
           targetMuscleGroup: ex.targetMuscleGroup
-            || SUBMUSCLE_TO_GROUP[normalizeId(ex.targetMuscle || '')]
+            || resolveMuscleGroup(ex.targetMuscle)
             || null,
           targetMuscle: ex.targetMuscle || '',
           isCompound: !!ex.isCompound,
@@ -261,10 +263,23 @@ export function buildLogFromWorkout(workout, prevLogs = []) {
 
 // ─── CRUD logs ───────────────────────────────────────────────────────────────
 
+// Séances enregistrées avant le correctif des groupes musculaires : les
+// exercices des séances types (« Pectoraux », « Dos (large) »…) y sont
+// classés « Autre ». On recalcule leur répartition depuis leurs exercices, en
+// mémoire uniquement (les données stockées ne sont pas réécrites).
+export function repairMuscleDistribution(log) {
+  if (!log || !log.muscleDistribution || !('other' in log.muscleDistribution)) return log;
+  if (!Array.isArray(log.exercises) || log.exercises.length === 0) return log;
+  const { muscleDistribution } = computeWorkoutStats({ exercises: log.exercises });
+  return { ...log, muscleDistribution };
+}
+
 export async function listLogs() {
   const all = await readAll();
   // Tri descendant par date (plus récent en premier)
-  return [...all].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  return [...all]
+    .map(repairMuscleDistribution)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }
 
 export async function addLog(log) {

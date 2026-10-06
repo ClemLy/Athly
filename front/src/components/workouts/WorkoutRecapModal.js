@@ -569,7 +569,7 @@ export default function WorkoutRecapModal({
           <View style={styles.kpisRow}>
             <Kpi icon="barbell"        label="Volume" value={`${totalVolume.toLocaleString('fr-FR')} kg`} color={newRank.color} />
             <View style={styles.kpiSep} />
-            <Kpi icon="checkmark-done" label="Sets"   value={`${setsCompleted}/${totalSets}`}            color={newRank.color} />
+            <Kpi icon="checkmark-done" label="Séries" value={`${setsCompleted}/${totalSets}`}            color={newRank.color} />
             <View style={styles.kpiSep} />
             <Kpi icon="time-outline"   label="Durée"  value={duration}                                   color={newRank.color} />
           </View>
