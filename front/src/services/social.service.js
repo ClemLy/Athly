@@ -49,8 +49,9 @@ export async function getFriendProfile(friendId) {
   return res.data;
 }
 
-export async function getLeaderboard() {
-  const res = await API.get('/friends/leaderboard');
+// period 'week' : XP gagnée en séance depuis lundi (weeklyXp, weeklySessions).
+export async function getLeaderboard(period) {
+  const res = await API.get(period === 'week' ? '/friends/leaderboard?period=week' : '/friends/leaderboard');
   return res.data;
 }
 

@@ -9,7 +9,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { useToast } from '../../context/ToastContext';
 import { getRank, xpToLevel } from '../../services';
-import { getFriendProfile, getMyGroup, shakeMember } from '../../services';
+import { getFriendProfile, getMyGroup, shakeMember, removeFriend } from '../../services';
+import { ConfirmModal } from '../../components/common';
 import { RARITY_META } from '../../services';
 
 import HeroLevelCard        from '../../components/profile/HeroLevelCard';
@@ -39,7 +40,8 @@ function buildBgGradient(isGod, isLegend, isElite) {
 }
 
 export default function FriendProfileScreen({ route, navigation }) {
-  const { friendId, pseudo } = route.params ?? {};
+  const { friendId, pseudo, friendshipId } = route.params ?? {};
+  const [removeVisible, setRemoveVisible] = useState(false);
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
 
@@ -254,9 +256,42 @@ export default function FriendProfileScreen({ route, navigation }) {
             </GlassCard>
           </Section>
 
+          {/* ── Retirer (ici plutôt que dans la liste, où il était trop facile à toucher) ── */}
+          {friendshipId ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              style={styles.removeLink}
+              onPress={() => setRemoveVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.removeLinkTxt}>Retirer de mes amis</Text>
+            </TouchableOpacity>
+          ) : null}
+
           <View style={{ height: 40 }} />
         </Animated.View>
       </ScrollView>
+
+      <ConfirmModal
+        visible={removeVisible}
+        icon="person-remove-outline"
+        title={`Retirer ${profile.user.pseudo} ?`}
+        body={`${profile.user.pseudo} ne fera plus partie de tes amis et votre niveau d'amitié sera perdu. Vous pourrez vous réajouter plus tard.`}
+        confirmLabel="Retirer"
+        cancelLabel="Annuler"
+        destructive
+        onConfirm={async () => {
+          setRemoveVisible(false);
+          try {
+            await removeFriend(friendshipId);
+            showToast(`${profile.user.pseudo} a été retiré de tes amis.`, 'success');
+            navigation.goBack();
+          } catch (error) {
+            if (!error.isSessionExpired) showToast(getErrorMessage(error, "L'action n'a pas abouti. Réessaie dans un instant."), 'error');
+          }
+        }}
+        onCancel={() => setRemoveVisible(false)}
+      />
     </View>
   );
 }
@@ -327,6 +362,8 @@ const styles = StyleSheet.create({
   shakeSub:   { color: Colors.textMuted, fontSize: 11, marginTop: 1 },
 
   section: { marginTop: 26 },
+  removeLink: { alignSelf: 'center', marginTop: 28, paddingVertical: 12, paddingHorizontal: 20 },
+  removeLinkTxt: { color: Colors.error, fontSize: 14.5, fontWeight: '700' },
   sectionTitle: {
     color: Colors.textPrimary, fontSize: 11, fontWeight: '800',
     letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 12,

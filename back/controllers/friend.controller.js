@@ -584,8 +584,12 @@ exports.getFriendProfile = async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Classement dynamique : l'utilisateur + tous ses amis acceptés,
- * triés par XP décroissant, avec le rang de chacun.
+ * Classement dynamique : l'utilisateur + tous ses amis acceptés, avec le
+ * rang de chacun.
+ *  - ?period=week : XP gagnée en séance depuis lundi 00:00 (heure serveur)
+ *    + nombre de séances. Plus juste pour les débutants : tout le monde
+ *    repart de zéro chaque semaine.
+ *  - par défaut : XP totale (comportement historique).
  */
 exports.getLeaderboard = async (req, res, next) => {
   try {
@@ -603,6 +607,40 @@ exports.getLeaderboard = async (req, res, next) => {
     const competitors = await User.find({ _id: { $in: [...friendIds, myId] } })
       .select(FRIEND_PUBLIC_FIELDS)
       .sort({ xp: -1 });
+
+    if (req.query.period === 'week') {
+      const weekStart = new Date();
+      weekStart.setHours(0, 0, 0, 0);
+      weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+
+      const totals = await Workout.aggregate([
+        {
+          $match: {
+            user: { $in: competitors.map((u) => u._id) },
+            status: { $in: ['finished', 'completed'] },
+            date: { $gte: weekStart },
+          },
+        },
+        { $group: { _id: '$user', weeklyXp: { $sum: '$xpEarned' }, weeklySessions: { $sum: 1 } } },
+      ]);
+      const byUser = new Map(totals.map((t) => [t._id.toString(), t]));
+
+      const weekly = competitors
+        .map((u) => {
+          const t = byUser.get(u._id.toString());
+          return { user: u, weeklyXp: t ? t.weeklyXp : 0, weeklySessions: t ? t.weeklySessions : 0 };
+        })
+        .sort((a, b) => b.weeklyXp - a.weeklyXp || b.user.xp - a.user.xp);
+
+      const leaderboard = weekly.map((e, index) => ({
+        position:       index + 1,
+        user:           e.user,
+        weeklyXp:       e.weeklyXp,
+        weeklySessions: e.weeklySessions,
+        isMe:           e.user._id.toString() === myId,
+      }));
+      return res.status(200).json({ success: true, period: 'week', since: weekStart, count: leaderboard.length, leaderboard });
+    }
 
     const leaderboard = competitors.map((u, index) => ({
       position: index + 1,

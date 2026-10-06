@@ -96,8 +96,14 @@ export default function WorkoutRecapModal({
   // Tant que la célébration n'est pas passée, le récap montre encore l'ancien
   // niveau (et l'ancien rang) : pas de nouveau rang dévoilé avant l'animation.
   const [revealed, setRevealed] = useState(false);
-  const { user } = useUser();
-  const userInitial = ((user && user.name) || 'A').charAt(0).toUpperCase();
+  const { user, refetch: refetchUser } = useUser();
+  const userInitial = ((user && (user.name || user.pseudo)) || 'A').charAt(0).toUpperCase();
+  // L'initiale de l'avatar (cadre débloqué au changement de rang) vient du
+  // profil, pas toujours chargé quand la séance a été lancée depuis l'Accueil.
+  useEffect(() => {
+    if (visible && !user) refetchUser();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   // ── Dérivations métier ──────────────────────────────────────────────────────
   const safeStats     = stats || {};

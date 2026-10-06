@@ -1,443 +1,460 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator, FlatList } from 'react-native';
+import {
+  View, Text, StyleSheet, Modal, TouchableOpacity, Pressable, ActivityIndicator, ScrollView,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/theme';
-import { createLobby, getLobby, joinLobby, inviteToLobby, readyLobby, unreadyLobby } from '../../services';
-import { getFriendsList } from '../../services';
-import { useUser } from '../../context/UserContext';
+import {
+  createLobby, getLobby, joinLobby, inviteToLobby, readyLobby, unreadyLobby, leaveLobby,
+  getFriendsList,
+} from '../../services';
+import { useMyId } from '../../hooks/useMyId';
+import { getErrorMessage } from '../../utils/errorMessages';
+import UserAvatar from '../social/UserAvatar';
 
 const POLL_MS = 3000;
 const INVITE_COOLDOWN_MS = 30000;
+const MAX_PLAYERS = 5;
 
-const STATUS_META = {
-  waiting:  { icon: 'time-outline',       color: Colors.textMuted },
-  ready:    { icon: 'checkmark-circle',   color: Colors.success },
-  finished: { icon: 'flag',               color: Colors.primary },
-};
-
-// Bonus XP Multi — miroir de computeMultiBonusPercent (back/workoutLobby.controller.js) :
-// généreux à dessein, un groupe de 5 est rare (2 joueurs → 15%, 3 → 25%,
-// 4 → 35%, 5 → 50%).
+// Bonus XP Multi — miroir de computeMultiBonusPercent (back/workoutLobby.controller.js).
 const MULTI_BONUS_BY_COUNT = { 1: 0, 2: 0.15, 3: 0.25, 4: 0.35, 5: 0.50 };
-function computeBonusPercent(memberCount) {
+export function computeBonusPercent(memberCount) {
   if (memberCount >= 5) return MULTI_BONUS_BY_COUNT[5];
   return MULTI_BONUS_BY_COUNT[memberCount] ?? 0;
 }
 
-const BONUS_TABLE = [1, 2, 3, 4, 5].map((n) => ({ count: n, percent: computeBonusPercent(n) }));
-
-// ─── BonusTableModal ──────────────────────────────────────────────────────────
-// Petit tableau expliquant le bonus XP de groupe par effectif — ouvert en
-// appuyant sur le chip de bonus dans MultiLobbyModal.
-function BonusTableModal({ visible, memberCount, onClose }) {
-  return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <View style={styles.tableCard}>
-          <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button" style={styles.closeIcon} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="close" size={20} color={Colors.textMuted} />
-          </TouchableOpacity>
-
-          <View style={styles.iconWrap}>
-            <Ionicons name="flash" size={24} color={Colors.primary} />
-          </View>
-          <Text style={styles.title}>Bonus XP de groupe</Text>
-          <Text style={styles.body}>
-            Plus vous êtes nombreux, plus le bonus grimpe. Réunir 5 personnes, ça se mérite.
-          </Text>
-
-          <View style={styles.tableRows}>
-            {BONUS_TABLE.map((row) => (
-              <View
-                key={row.count}
-                style={[styles.tableRow, row.count === memberCount && styles.tableRowActive]}
-              >
-                <Text style={[styles.tableRowLabel, row.count === memberCount && styles.tableRowLabelActive]}>
-                  {row.count} joueur{row.count > 1 ? 's' : ''}
-                </Text>
-                <Text style={[styles.tableRowPercent, row.count === memberCount && styles.tableRowPercentActive]}>
-                  +{Math.round(row.percent * 100)}%
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
 // ─── MultiLobbyModal ──────────────────────────────────────────────────────────
-// Étape de lancement d'une séance en Multi (Section VII) : crée le lobby (ou
-// rejoint un lobby existant depuis une invitation reçue), permet d'inviter des
-// amis (vraie notification push, avec cooldown anti-spam de 30s), affiche qui
-// a rejoint et son statut ainsi que le bonus XP de groupe, et se ferme
-// automatiquement (onReady) dès que le lobby passe 'active' — c'est-à-dire dès
-// que 100% des membres sont prêts.
+// Salon d'une séance Multi, plein écran, en 3 gestes clairs :
+//   1. inviter des amis (la liste est sous les yeux, pas dans un menu) ;
+//   2. choisir SA séance (chacun fait la sienne, on démarre ensemble) ;
+//   3. « Je suis prêt » — la séance démarre pour tous quand chacun l'est.
+// Fermer le salon le quitte vraiment (sinon les autres attendaient un membre
+// fantôme qui ne serait jamais prêt). Les erreurs (salon complet, déjà
+// démarré, invitation refusée) sont affichées au lieu d'être avalées.
 //
 // Props :
-//   visible         bool
-//   existingLobbyId string | null — rejoint ce lobby au lieu d'en créer un neuf
-//   onClose         () => void — annule (le lobby reste en base, abandonné)
-//   onReady         (lobbyId: string) => void — lobby actif, lance la séance
+//   visible          bool
+//   existingLobbyId  string | null — rejoint ce salon au lieu d'en créer un
+//   workoutOptions   [{ key, name, meta }] — séances proposées
+//   initialWorkoutKey string | null — séance déjà choisie avant d'ouvrir
+//   onClose          () => void
+//   onReady          (lobbyId, workoutKey) => void — tout le monde est prêt
 
-export default function MultiLobbyModal({ visible, existingLobbyId, onClose, onReady }) {
-  const { user } = useUser();
-  const myId = user?._id;
+export default function MultiLobbyModal({
+  visible, existingLobbyId, workoutOptions = [], initialWorkoutKey = null, onClose, onReady,
+}) {
+  const insets = useSafeAreaInsets();
+  const myId = useMyId();
 
   const [lobby, setLobby] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [friends, setFriends] = useState([]);
-  const [invitePanelOpen, setInvitePanelOpen] = useState(false);
   const [readying, setReadying] = useState(false);
-  const [bonusTableVisible, setBonusTableVisible] = useState(false);
-  const [invitedAt, setInvitedAt] = useState({}); // { friendId: timestampMs }
+  const [actionError, setActionError] = useState(null);
+  const [invitedAt, setInvitedAt] = useState({});   // { friendId: ms }
+  const [inviteErrors, setInviteErrors] = useState({}); // { friendId: message }
   const [now, setNow] = useState(Date.now());
-  const pollRef = useRef(null);
-  const cooldownTickRef = useRef(null);
+  const [workoutKey, setWorkoutKey] = useState(initialWorkoutKey);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const firedReadyRef = useRef(false);
+  const lobbyIdRef = useRef(null);
+  const workoutKeyRef = useRef(initialWorkoutKey);
 
+  useEffect(() => { workoutKeyRef.current = workoutKey; }, [workoutKey]);
+
+  const fire = useCallback((id) => {
+    if (firedReadyRef.current) return;
+    firedReadyRef.current = true;
+    lobbyIdRef.current = null; // la séance démarre : ne surtout pas « quitter » en fermant
+    onReady(id, workoutKeyRef.current);
+  }, [onReady]);
+
+  // ── Ouverture : créer ou rejoindre ──
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) return undefined;
+    let cancelled = false;
     firedReadyRef.current = false;
+    setLobby(null);
+    setError(null);
+    setActionError(null);
     setLoading(true);
-    setInvitePanelOpen(false);
     setInvitedAt({});
+    setInviteErrors({});
+    setWorkoutKey(initialWorkoutKey);
+    setPickerOpen(!initialWorkoutKey && !!existingLobbyId);
 
     (async () => {
       try {
         const [lobbyRes, friendsRes] = await Promise.all([
           existingLobbyId ? joinLobby(existingLobbyId) : createLobby(),
-          getFriendsList(),
+          getFriendsList().catch(() => ({ friends: [] })),
         ]);
+        if (cancelled) return;
         setLobby(lobbyRes.lobby);
+        lobbyIdRef.current = lobbyRes.lobby._id;
         setFriends(friendsRes.friends ?? []);
-      } catch (_) {
-        // Best-effort — fermeture silencieuse si la création/jointure échoue.
+      } catch (e) {
+        if (!cancelled) {
+          setError(getErrorMessage(e, existingLobbyId
+            ? 'Impossible de rejoindre cette séance Multi.'
+            : 'Impossible de créer la séance Multi. Vérifie ta connexion.'));
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
-
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, existingLobbyId]);
 
-  // Poll l'état du lobby — pas de websocket, cohérent avec le reste de l'app
-  // (Météo des séances, Groupe de streak...).
+  // ── Suivi du salon (polling, pas de websocket dans l'app) ──
   useEffect(() => {
-    if (!visible || !lobby?._id) return;
-    pollRef.current = setInterval(async () => {
+    if (!visible || !lobby?._id || error) return undefined;
+    const id = lobby._id;
+    const t = setInterval(async () => {
       try {
-        const res = await getLobby(lobby._id);
+        const res = await getLobby(id);
         setLobby(res.lobby);
-        if (res.lobby.status === 'active' && !firedReadyRef.current) {
-          firedReadyRef.current = true;
-          clearInterval(pollRef.current);
-          onReady(res.lobby._id);
+        if (res.lobby.status === 'active') { clearInterval(t); fire(id); }
+      } catch (e) {
+        if (e?.status === 404 || e?.status === 403) {
+          clearInterval(t);
+          lobbyIdRef.current = null;
+          setError('Cette séance Multi n\'existe plus.');
         }
-      } catch (_) {
-        // best-effort
       }
     }, POLL_MS);
-    return () => clearInterval(pollRef.current);
-  }, [visible, lobby?._id, onReady]);
+    return () => clearInterval(t);
+  }, [visible, lobby?._id, error, fire]);
 
-  // Tick pour rafraîchir les cercles de cooldown d'invitation (1x/s).
+  // Décompte des relances d'invitation (1×/s).
   useEffect(() => {
     if (!visible) return undefined;
-    cooldownTickRef.current = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(cooldownTickRef.current);
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
   }, [visible]);
+
+  // Fermer = quitter le salon (best-effort).
+  const close = useCallback(() => {
+    const id = lobbyIdRef.current;
+    lobbyIdRef.current = null;
+    if (id) leaveLobby(id).catch(() => {});
+    onClose();
+  }, [onClose]);
 
   const handleInvite = useCallback(async (friendId) => {
     if (!lobby) return;
     const startedAt = invitedAt[friendId];
     if (startedAt && Date.now() - startedAt < INVITE_COOLDOWN_MS) return;
     setInvitedAt((prev) => ({ ...prev, [friendId]: Date.now() }));
-    try { await inviteToLobby(lobby._id, friendId); } catch (_) {}
+    setInviteErrors((prev) => ({ ...prev, [friendId]: null }));
+    try {
+      await inviteToLobby(lobby._id, friendId);
+    } catch (e) {
+      setInvitedAt((prev) => ({ ...prev, [friendId]: 0 }));
+      setInviteErrors((prev) => ({ ...prev, [friendId]: getErrorMessage(e, 'Invitation non envoyée.') }));
+    }
   }, [lobby, invitedAt]);
 
-  const myMember = (lobby?.members ?? []).find((m) => m.user._id === myId);
+  const members = lobby?.members ?? [];
+  const memberCount = lobby?.memberCount ?? members.length;
+  const myMember = members.find((m) => m.user?._id === myId);
   const isReady = myMember?.status === 'ready';
-  const canReady = (lobby?.memberCount ?? 0) >= 2;
+  const alone = memberCount < 2;
+  const selected = workoutOptions.find((o) => o.key === workoutKey) || null;
+  const notReady = members.filter((m) => m.status !== 'ready' && m.user?._id !== myId).map((m) => m.user?.pseudo);
 
   const handleToggleReady = useCallback(async () => {
     if (!lobby) return;
+    if (!selected && !isReady) { setPickerOpen(true); return; }
     setReadying(true);
+    setActionError(null);
     try {
       const res = isReady ? await unreadyLobby(lobby._id) : await readyLobby(lobby._id);
       setLobby(res.lobby);
-      if (res.lobby.status === 'active' && !firedReadyRef.current) {
-        firedReadyRef.current = true;
-        onReady(res.lobby._id);
-      }
-    } catch (_) {
-      // best-effort
+      if (res.lobby.status === 'active') fire(res.lobby._id);
+    } catch (e) {
+      setActionError(getErrorMessage(e, 'Action impossible pour le moment. Réessaie.'));
     } finally {
       setReadying(false);
     }
-  }, [lobby, isReady, onReady]);
+  }, [lobby, isReady, selected, fire]);
 
-  const memberIds = new Set((lobby?.members ?? []).map((m) => m.user._id));
-  const invitableFriends = friends.filter((f) => !memberIds.has(f.user._id));
-  const bonusPercent = computeBonusPercent(lobby?.memberCount ?? 1);
+  const memberIds = new Set(members.map((m) => m.user?._id));
+  const invitable = friends.filter((f) => !memberIds.has(f.user._id));
+  const bonus = Math.round(computeBonusPercent(memberCount) * 100);
+  const full = memberCount >= MAX_PLAYERS;
+
+  let statusText;
+  if (alone) statusText = 'Invite au moins un ami pour pouvoir démarrer.';
+  else if (!selected && !isReady) statusText = 'Choisis ta séance, puis déclare-toi prêt.';
+  else if (isReady && notReady.length > 0) statusText = `En attente de ${notReady.join(', ')}…`;
+  else if (!isReady) statusText = 'La séance démarre dès que tout le monde est prêt.';
+  else statusText = 'Démarrage…';
 
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <View style={styles.card}>
-          <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button" style={styles.closeIcon} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="close" size={20} color={Colors.textMuted} />
+    <Modal visible={visible} animationType="slide" statusBarTranslucent navigationBarTranslucent onRequestClose={close}>
+      <View style={[styles.root, { paddingTop: insets.top + 8 }]}>
+        {/* ── En-tête ── */}
+        <View style={styles.header}>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Quitter le salon" style={styles.closeBtn} onPress={close}>
+            <Ionicons name="close" size={22} color={Colors.textPrimary} />
           </TouchableOpacity>
+          <Text style={styles.headerTitle} accessibilityRole="header">Séance Multi</Text>
+          <View style={{ width: 42 }} />
+        </View>
 
-          <View style={styles.iconWrap}>
-            <Ionicons name="people" size={26} color={Colors.primary} />
+        {loading ? (
+          <View style={styles.center}><ActivityIndicator size="large" color={Colors.primary} /></View>
+        ) : error ? (
+          <View style={styles.center}>
+            <Ionicons name="alert-circle-outline" size={40} color={Colors.textMuted} />
+            <Text style={styles.errorTitle}>{error}</Text>
+            <TouchableOpacity accessibilityRole="button" style={[styles.cta, styles.ctaGhost, { alignSelf: 'stretch', marginTop: 20 }]} onPress={onClose}>
+              <Text style={styles.ctaTxt}>Fermer</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.title}>Séance en Multi</Text>
-          <Text style={styles.body}>
-            Invite jusqu'à 4 amis. La séance démarre pour tout le monde dès que
-            chacun se déclare prêt.
-          </Text>
+        ) : (
+          <>
+            <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+              <Text style={styles.intro}>
+                Chacun fait sa propre séance, mais vous démarrez et terminez ensemble. Plus vous êtes nombreux, plus le bonus d'XP grimpe.
+              </Text>
 
-          {loading ? (
-            <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
-          ) : (
-            <>
-              <View style={styles.membersRow}>
-                {(lobby?.members ?? []).map((m) => {
-                  const meta = STATUS_META[m.status] ?? STATUS_META.waiting;
-                  return (
-                    <View key={m.user._id} style={styles.memberBubbleWrap}>
-                      <View style={styles.memberBubble}>
-                        <Text style={styles.memberBubbleTxt}>{(m.user.pseudo ?? '?').charAt(0).toUpperCase()}</Text>
-                        <View style={[styles.statusDot, { backgroundColor: meta.color }]}>
-                          <Ionicons name={meta.icon} size={9} color="#fff" />
-                        </View>
+              {/* ── Joueurs ── */}
+              <View style={styles.sectionHead}>
+                <Text style={styles.sectionTitle}>Joueurs <Text style={styles.sectionCount}>{memberCount}/{MAX_PLAYERS}</Text></Text>
+                <View style={styles.bonusPill}>
+                  <Ionicons name="flash" size={13} color={bonus > 0 ? Colors.gold : Colors.textMuted} />
+                  <Text style={[styles.bonusPillTxt, bonus === 0 && { color: Colors.textMuted }]}>+{bonus} % XP</Text>
+                </View>
+              </View>
+
+              <View style={styles.slots}>
+                {Array.from({ length: MAX_PLAYERS }, (_, i) => {
+                  const m = members[i];
+                  if (!m) {
+                    return (
+                      <View key={`empty-${i}`} style={styles.slot}>
+                        <View style={styles.emptySlot}><Ionicons name="add" size={20} color={Colors.textMuted} /></View>
+                        <Text style={styles.slotName}> </Text>
                       </View>
-                      <Text style={styles.memberName} numberOfLines={1}>{m.user.pseudo}</Text>
+                    );
+                  }
+                  const ready = m.status === 'ready';
+                  const me = m.user?._id === myId;
+                  return (
+                    <View key={m.user?._id || i} style={styles.slot} accessible accessibilityLabel={`${me ? 'Toi' : m.user?.pseudo}, ${ready ? 'prêt' : 'pas encore prêt'}`}>
+                      <UserAvatar user={m.user} size={52} />
+                      <Text style={[styles.slotName, me && { color: Colors.primary }]} numberOfLines={1}>{me ? 'Toi' : m.user?.pseudo}</Text>
+                      <View style={[styles.statusChip, ready && styles.statusChipReady]}>
+                        <Text style={[styles.statusChipTxt, ready && styles.statusChipTxtReady]}>{ready ? 'Prêt' : 'Pas prêt'}</Text>
+                      </View>
                     </View>
                   );
                 })}
               </View>
 
-              <TouchableOpacity accessibilityRole="button" style={styles.bonusChip} onPress={() => setBonusTableVisible(true)} activeOpacity={0.8}>
-                <Ionicons name="flash" size={15} color="#fff" style={{ marginRight: 8 }} />
-                <Text style={styles.bonusChipTxt}>Bonus de groupe : +{Math.round(bonusPercent * 100)}% XP</Text>
-                <Ionicons name="information-circle-outline" size={15} color="#fff" style={{ marginLeft: 8 }} />
-              </TouchableOpacity>
+              <Text style={styles.scaleTxt}>
+                {[2, 3, 4, 5].map((n, i) => (
+                  <Text key={n} style={n === memberCount && styles.scaleActive}>
+                    {`${i ? '   ·   ' : ''}${n} : +${Math.round(computeBonusPercent(n) * 100)} %`}
+                  </Text>
+                ))}
+              </Text>
 
-              <TouchableOpacity accessibilityRole="button"
-                style={styles.inviteToggle}
-                onPress={() => setInvitePanelOpen((v) => !v)}
-                activeOpacity={0.8}
+              {/* ── Ta séance ── */}
+              <Text style={[styles.sectionTitle, styles.sectionSpaced]}>Ta séance</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: pickerOpen }}
+                accessibilityLabel={selected ? `Ta séance : ${selected.name}. Changer` : 'Choisir ta séance'}
+                onPress={() => setPickerOpen((v) => !v)}
+                disabled={isReady}
+                style={({ pressed }) => [styles.workoutRow, !selected && styles.workoutRowEmpty, pressed && { opacity: 0.8 }, isReady && { opacity: 0.6 }]}
               >
-                <Ionicons name="person-add" size={15} color={Colors.primary} style={{ marginRight: 8 }} />
-                <Text style={styles.inviteToggleTxt}>Inviter un ami</Text>
-                <Ionicons name={invitePanelOpen ? 'chevron-up' : 'chevron-down'} size={14} color={Colors.textMuted} />
-              </TouchableOpacity>
+                <Ionicons name="barbell" size={18} color={selected ? Colors.primary : Colors.textMuted} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.workoutName, !selected && { color: Colors.textSecondary }]} numberOfLines={1}>
+                    {selected ? selected.name : 'Choisis ta séance'}
+                  </Text>
+                  {selected?.meta ? <Text style={styles.workoutMeta} numberOfLines={1}>{selected.meta}</Text> : null}
+                </View>
+                {!isReady ? <Text style={styles.link}>{pickerOpen ? 'Fermer' : selected ? 'Changer' : 'Choisir'}</Text> : null}
+              </Pressable>
+              {pickerOpen && !isReady ? (
+                <View style={styles.listCard}>
+                  {workoutOptions.map((o, i) => {
+                    const active = o.key === workoutKey;
+                    return (
+                      <Pressable
+                        key={o.key}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: active }}
+                        onPress={() => { setWorkoutKey(o.key); setPickerOpen(false); }}
+                        style={({ pressed }) => [styles.optionRow, i > 0 && styles.rowBorder, pressed && { opacity: 0.75 }]}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.optionName} numberOfLines={1}>{o.name}</Text>
+                          {o.meta ? <Text style={styles.optionMeta} numberOfLines={1}>{o.meta}</Text> : null}
+                        </View>
+                        <Ionicons name={active ? 'radio-button-on' : 'radio-button-off'} size={22} color={active ? Colors.primary : Colors.borderDim} />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
 
-              {invitePanelOpen && (
-                <View style={styles.invitePanel}>
-                  {invitableFriends.length === 0 ? (
-                    <Text style={styles.inviteEmpty}>Tous tes amis sont déjà dans le lobby (ou tu n'as pas d'amis disponibles).</Text>
-                  ) : (
-                    <FlatList
-                      data={invitableFriends}
-                      keyExtractor={(f) => f.user._id}
-                      style={{ maxHeight: 160 }}
-                      renderItem={({ item }) => {
-                        const startedAt = invitedAt[item.user._id];
-                        const elapsedMs = startedAt ? now - startedAt : Infinity;
-                        const onCooldown = elapsedMs < INVITE_COOLDOWN_MS;
-                        const remainingSec = onCooldown ? Math.ceil((INVITE_COOLDOWN_MS - elapsedMs) / 1000) : 0;
-                        return (
-                          <TouchableOpacity accessibilityRole="button"
-                            style={styles.friendRow}
-                            onPress={() => handleInvite(item.user._id)}
-                            activeOpacity={0.75}
-                            disabled={onCooldown}
-                          >
-                            <Text style={styles.friendName}>{item.user.pseudo}</Text>
-                            {onCooldown ? (
-                              <View style={styles.cooldownCircle}>
-                                <Text style={styles.cooldownTxt}>{remainingSec}</Text>
-                              </View>
-                            ) : (
-                              <Ionicons name="paper-plane-outline" size={15} color={Colors.primary} />
-                            )}
-                          </TouchableOpacity>
-                        );
-                      }}
-                    />
-                  )}
+              {/* ── Inviter ── */}
+              <Text style={[styles.sectionTitle, styles.sectionSpaced]}>Inviter des amis</Text>
+              {full ? (
+                <Text style={styles.muted}>Le salon est complet.</Text>
+              ) : invitable.length === 0 ? (
+                <Text style={styles.muted}>
+                  {friends.length === 0 ? 'Ajoute des amis dans l\'onglet Social pour les inviter.' : 'Tous tes amis sont déjà dans le salon.'}
+                </Text>
+              ) : (
+                <View style={styles.listCard}>
+                  {invitable.map((f, i) => {
+                    const started = invitedAt[f.user._id];
+                    const elapsed = started ? now - started : Infinity;
+                    const cooling = elapsed < INVITE_COOLDOWN_MS;
+                    const remaining = cooling ? Math.ceil((INVITE_COOLDOWN_MS - elapsed) / 1000) : 0;
+                    const err = inviteErrors[f.user._id];
+                    return (
+                      <View key={f.user._id} style={[styles.friendRow, i > 0 && styles.rowBorder]}>
+                        <UserAvatar user={f.user} size={40} />
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={styles.optionName} numberOfLines={1}>{f.user.pseudo}</Text>
+                          <Text style={[styles.optionMeta, err && { color: Colors.error }]} numberOfLines={2}>
+                            {err || (started ? (cooling ? `Invité · relance possible dans ${remaining} s` : 'Invité · pas encore là') : `Niv. ${f.user.level ?? 1}`)}
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          accessibilityRole="button"
+                          accessibilityLabel={started ? `Relancer ${f.user.pseudo}` : `Inviter ${f.user.pseudo}`}
+                          style={[styles.inviteBtn, (started || cooling) && styles.inviteBtnSent]}
+                          onPress={() => handleInvite(f.user._id)}
+                          disabled={cooling}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={[styles.inviteBtnTxt, (started || cooling) && { color: Colors.textSecondary }]}>
+                            {cooling ? 'Invité' : started ? 'Relancer' : 'Inviter'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
                 </View>
               )}
+            </ScrollView>
 
-              <TouchableOpacity accessibilityRole="button"
-                style={[
-                  styles.readyBtn,
-                  isReady && styles.unreadyBtn,
-                  !canReady && !isReady && styles.readyBtnDisabled,
-                ]}
+            {/* ── Action ── */}
+            <View style={[styles.footer, { paddingBottom: 16 + insets.bottom }]}>
+              <Text style={[styles.statusTxt, actionError && { color: Colors.error }]} accessibilityLiveRegion="polite">
+                {actionError || statusText}
+              </Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                style={[styles.cta, isReady && styles.ctaGhost, alone && !isReady && styles.ctaDisabled]}
                 onPress={handleToggleReady}
-                disabled={readying || (!canReady && !isReady)}
+                disabled={readying || (alone && !isReady)}
                 activeOpacity={0.85}
               >
-                {readying
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : (
-                    <>
-                      <Ionicons
-                        name={isReady ? 'close-circle' : 'checkmark-circle'}
-                        size={17}
-                        color="#fff"
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text style={styles.readyBtnTxt}>
-                        {isReady ? 'Je ne suis plus prêt' : 'Je suis prêt'}
-                      </Text>
-                    </>
-                  )}
+                {readying ? <ActivityIndicator color="#fff" /> : (
+                  <Text style={styles.ctaTxt}>
+                    {isReady ? 'Je ne suis plus prêt' : selected ? 'Je suis prêt' : 'Choisir ma séance'}
+                  </Text>
+                )}
               </TouchableOpacity>
-              <Text style={styles.waitHint}>
-                {canReady
-                  ? 'En attente que tout le monde soit prêt pour démarrer ensemble…'
-                  : 'Il faut au moins 2 joueurs dans le lobby pour se déclarer prêt.'}
-              </Text>
-            </>
-          )}
-        </View>
+            </View>
+          </>
+        )}
       </View>
-
-      <BonusTableModal
-        visible={bonusTableVisible}
-        memberCount={lobby?.memberCount ?? 1}
-        onClose={() => setBonusTableVisible(false)}
-      />
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex:            1,
-    backgroundColor: 'rgba(0,0,0,0.82)',
-    justifyContent:  'center',
-    alignItems:      'center',
-    paddingHorizontal: 24,
+  root: { flex: 1, backgroundColor: Colors.bgAbyss },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 8 },
+  closeBtn: {
+    width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.cardDeep,
   },
-  card: {
-    width:           '100%',
-    backgroundColor: Colors.bgDeep2,
-    borderRadius:    22,
-    borderWidth:     1,
-    borderColor:     `${Colors.primary}38`,
-    padding:         24,
-    paddingTop:      36,
-    alignItems:      'center',
-    shadowColor:     '#000',
-    shadowOffset:    { width: 0, height: 16 },
-    shadowOpacity:   0.65,
-    shadowRadius:    32,
-    elevation:       20,
-  },
-  closeIcon: { position: 'absolute', top: 14, right: 14, zIndex: 1 },
-  iconWrap: {
-    width: 56, height: 56, borderRadius: 16,
-    backgroundColor: `${Colors.primary}1A`,
-    borderWidth: 1, borderColor: `${Colors.primary}45`,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 14,
-  },
-  title: { color: Colors.textPrimary, fontSize: 18, fontWeight: '800', marginBottom: 8, textAlign: 'center' },
-  body: { color: Colors.textSecondary, fontSize: 13, lineHeight: 19, textAlign: 'center', marginBottom: 18 },
-  membersRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 14, marginBottom: 18, width: '100%' },
-  memberBubbleWrap: { alignItems: 'center', width: 56 },
-  memberBubble: {
-    width: 44, height: 44, borderRadius: 14,
-    backgroundColor: 'rgba(254,116,57,0.14)',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  memberBubbleTxt: { color: Colors.primary, fontSize: 16, fontWeight: '800' },
-  statusDot: {
-    position: 'absolute', bottom: -4, right: -4,
-    width: 16, height: 16, borderRadius: 8,
-    borderWidth: 1.5, borderColor: Colors.bgDeep2,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  memberName: { color: Colors.textMuted, fontSize: 10.5, fontWeight: '600', marginTop: 5, textAlign: 'center' },
-  bonusChip: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    height: 38, width: '100%', borderRadius: 12,
-    backgroundColor: Colors.primary, marginBottom: 12,
-  },
-  bonusChipTxt: { color: '#fff', fontSize: 12.5, fontWeight: '800' },
-  inviteToggle: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    height: 42, width: '100%', borderRadius: 12,
-    borderWidth: 1, borderColor: Colors.borderSubtle,
-    backgroundColor: 'rgba(255,255,255,0.03)', marginBottom: 8, gap: 6,
-  },
-  inviteToggleTxt: { color: Colors.textPrimary, fontSize: 13, fontWeight: '700' },
-  invitePanel: { width: '100%', marginBottom: 12 },
-  inviteEmpty: { color: Colors.textMuted, fontSize: 12, textAlign: 'center', paddingVertical: 10 },
-  friendRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: 10, paddingHorizontal: 4,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
-  friendName: { color: Colors.textPrimary, fontSize: 13.5, fontWeight: '600' },
-  cooldownCircle: {
-    width: 20, height: 20, borderRadius: 10,
-    borderWidth: 1.5, borderColor: Colors.textMuted,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  cooldownTxt: { color: Colors.textMuted, fontSize: 9.5, fontWeight: '700' },
-  readyBtn: {
-    flexDirection: 'row', width: '100%', height: 50, borderRadius: 13,
-    justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.primary,
-    marginTop: 4, shadowColor: Colors.primary, shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4, shadowRadius: 12, elevation: 6,
-  },
-  unreadyBtn: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)',
-    shadowColor: 'transparent', shadowOpacity: 0, elevation: 0,
-  },
-  readyBtnDisabled: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    shadowColor: 'transparent', shadowOpacity: 0, elevation: 0,
-  },
-  readyBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
-  waitHint: { color: Colors.textMuted, fontSize: 11, textAlign: 'center', marginTop: 10 },
+  headerTitle: { flex: 1, textAlign: 'center', color: Colors.textPrimary, fontSize: 18, fontWeight: '800' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  errorTitle: { color: Colors.textPrimary, fontSize: 16, fontWeight: '700', textAlign: 'center', marginTop: 12, lineHeight: 22 },
 
-  // ── BonusTableModal ──────────────────────────────────────────────────────
-  tableCard: {
-    width:           '100%',
-    backgroundColor: Colors.bgDeep2,
-    borderRadius:    22,
-    borderWidth:     1,
-    borderColor:     `${Colors.primary}38`,
-    padding:         24,
-    paddingTop:      36,
-    alignItems:      'center',
-    shadowColor:     '#000',
-    shadowOffset:    { width: 0, height: 16 },
-    shadowOpacity:   0.65,
-    shadowRadius:    32,
-    elevation:       20,
+  scroll: { paddingHorizontal: 16, paddingBottom: 24 },
+  intro: { color: Colors.textSecondary, fontSize: 14.5, lineHeight: 21, marginTop: 4, marginBottom: 18 },
+
+  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  sectionTitle: { color: Colors.textPrimary, fontSize: 17, fontWeight: '800' },
+  sectionCount: { color: Colors.textMuted, fontSize: 15, fontWeight: '700' },
+  sectionSpaced: { marginTop: 24, marginBottom: 10 },
+  bonusPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, height: 30, paddingHorizontal: 11, borderRadius: 15,
+    backgroundColor: 'rgba(255,215,0,0.08)', borderWidth: 1, borderColor: 'rgba(255,215,0,0.25)',
   },
-  tableRows: { width: '100%', gap: 8 },
-  tableRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.03)',
+  bonusPillTxt: { color: Colors.gold, fontSize: 13.5, fontWeight: '800' },
+
+  slots: { flexDirection: 'row', justifyContent: 'space-between' },
+  slot: { width: '19%', alignItems: 'center' },
+  emptySlot: {
+    width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1.5, borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.18)',
   },
-  tableRowActive: {
-    backgroundColor: `${Colors.primary}1A`,
-    borderWidth: 1, borderColor: `${Colors.primary}45`,
+  slotName: { color: Colors.textPrimary, fontSize: 13, fontWeight: '700', marginTop: 6, maxWidth: '100%' },
+  statusChip: {
+    marginTop: 4, paddingHorizontal: 8, height: 22, borderRadius: 11, justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.07)',
   },
-  tableRowLabel: { color: Colors.textSecondary, fontSize: 13.5, fontWeight: '600' },
-  tableRowLabelActive: { color: Colors.textPrimary, fontWeight: '800' },
-  tableRowPercent: { color: Colors.textMuted, fontSize: 14, fontWeight: '800' },
-  tableRowPercentActive: { color: Colors.primary },
+  statusChipReady: { backgroundColor: 'rgba(34,197,94,0.16)' },
+  statusChipTxt: { color: Colors.textMuted, fontSize: 11.5, fontWeight: '700' },
+  statusChipTxtReady: { color: Colors.valid },
+  scaleTxt: { color: Colors.textMuted, fontSize: 12.5, textAlign: 'center', marginTop: 14 },
+  scaleActive: { color: Colors.gold, fontWeight: '800' },
+
+  workoutRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 60, paddingHorizontal: 14, paddingVertical: 10,
+    borderRadius: 16, backgroundColor: Colors.cardDeep, borderWidth: 1, borderColor: 'rgba(254,116,57,0.35)',
+  },
+  workoutRowEmpty: { borderStyle: 'dashed', borderColor: 'rgba(255,255,255,0.18)' },
+  workoutName: { color: Colors.textPrimary, fontSize: 15.5, fontWeight: '700' },
+  workoutMeta: { color: Colors.textSecondary, fontSize: 13, marginTop: 2 },
+  link: { color: Colors.primary, fontSize: 14, fontWeight: '700' },
+
+  listCard: {
+    marginTop: 8, borderRadius: 16, overflow: 'hidden',
+    backgroundColor: Colors.cardDeep, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+  },
+  rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.08)' },
+  optionRow: { flexDirection: 'row', alignItems: 'center', minHeight: 56, paddingHorizontal: 14, paddingVertical: 10, gap: 10 },
+  optionName: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
+  optionMeta: { color: Colors.textSecondary, fontSize: 13, marginTop: 2 },
+  friendRow: { flexDirection: 'row', alignItems: 'center', minHeight: 62, paddingHorizontal: 14, paddingVertical: 10 },
+  inviteBtn: {
+    height: 36, paddingHorizontal: 14, borderRadius: 18, justifyContent: 'center',
+    backgroundColor: Colors.primary,
+  },
+  inviteBtnSent: { backgroundColor: 'rgba(255,255,255,0.07)' },
+  inviteBtnTxt: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  muted: { color: Colors.textMuted, fontSize: 14, lineHeight: 20 },
+
+  footer: {
+    paddingHorizontal: 16, paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: Colors.bgAbyss,
+  },
+  statusTxt: { color: Colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 10, lineHeight: 19 },
+  cta: {
+    height: 54, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.primary,
+  },
+  ctaGhost: { backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
+  ctaDisabled: { backgroundColor: 'rgba(255,255,255,0.06)' },
+  ctaTxt: { color: '#fff', fontSize: 16, fontWeight: '800' },
 });

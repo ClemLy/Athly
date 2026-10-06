@@ -1,58 +1,56 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
-  StatusBar, ActivityIndicator, Animated, RefreshControl, useWindowDimensions } from 'react-native';
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable, TextInput,
+  StatusBar, ActivityIndicator, RefreshControl, Share,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/theme';
 import { useToast } from '../../context/ToastContext';
 import { useUser } from '../../context/UserContext';
+import { useMyId } from '../../hooks/useMyId';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import { ConfirmModal } from '../../components/common';
 import FriendshipLevelUpModal from '../../components/social/FriendshipLevelUpModal';
 import FriendPreviewModal from '../../components/social/FriendPreviewModal';
 import AddFriendModal from '../../components/social/AddFriendModal';
+import ExercisePickerModal from '../../components/social/ExercisePickerModal';
+import UserAvatar from '../../components/social/UserAvatar';
 import {
   searchUsers, sendFriendRequest, acceptFriendRequest, declineFriendRequest,
-  cancelFriendRequest, removeFriend,
+  cancelFriendRequest,
   getFriendsList, getPendingRequests, getLeaderboard, getExerciseLeaderboard,
   getMyGroup, inviteToGroup, respondToGroupInvite, shakeMember, checkGroupStreak, leaveGroup,
+  getLobbyInvites, declineLobbyInvite,
 } from '../../services';
 import { MAJOR_EXERCISES } from '../../data/majorExercises';
 import { getFriendshipTitle } from '../../data/friendshipTitles';
-import ExercisePickerModal from '../../components/social/ExercisePickerModal';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 import { getErrorMessage } from '../../utils/errorMessages';
-import { plural } from '../../utils/format';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-// Podium / classements : positions 1-3 affichées en médaille colorée plutôt
-// qu'en emoji 🥇🥈🥉.
-const MEDAL_COLORS = { 1: Colors.gold, 2: '#C0C0C0', 3: '#CD7F32' };
-
-function MedalBadge({ position, size = 16 }) {
-  const color = MEDAL_COLORS[position];
-  if (!color) return null;
-  return <Ionicons name="medal" size={size} color={color} />;
-}
+import { formatNumber } from '../../utils/format';
 
 const SEGMENTS = [
-  { key: 'friends',     label: 'Amis',       icon: 'people' },
-  { key: 'leaderboard', label: 'Classement', icon: 'podium' },
-  { key: 'group',       label: 'Groupe',     icon: 'flame' },
+  { key: 'friends',     label: 'Amis' },
+  { key: 'leaderboard', label: 'Classement' },
+  { key: 'group',       label: 'Groupe' },
 ];
 
+const MEDAL_COLORS = [Colors.gold, '#C9CED6', '#CD7F32'];
+const MAX_GROUP = 5;
+
 // ─── SocialScreen ─────────────────────────────────────────────────────────────
-// Hub social (Briques III & IV) : amis + demandes + recherche, classement XP,
-// groupe de streak avec bouton Secouer. Chaque segment a ses entrées animées.
+// Le mode en ligne d'Athly : amis (et invitations Multi), classement de la
+// semaine ou total, groupe de streak. Chaque segment répond d'abord à
+// « qu'est-ce que je peux faire maintenant ? » : rejoindre une séance,
+// accepter une demande, relancer un coéquipier, valider la streak.
 
 export default function SocialScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const compactSegments = width < 360;
   const { showToast } = useToast();
   const { user, refetch: refetchUser } = useUser();
+  const myId = useMyId();
   const { addBonusXp } = useWorkoutLogs();
   const [segment, setSegment] = useState('friends');
 
@@ -61,35 +59,28 @@ export default function SocialScreen({ navigation }) {
   const { ref: segmentsRef, onLayout: onSegmentsLayout } = useTutorialTarget('social_segments');
 
   // ── Données ──
-  const [friends,     setFriends]     = useState([]);
-  const [pending,     setPending]     = useState([]);
+  const [friends,      setFriends]      = useState([]);
+  const [pending,      setPending]      = useState([]);
   const [sentRequests, setSentRequests] = useState([]);
-  const [leaderboard, setLeaderboard] = useState([]);
-  const [group,       setGroup]       = useState(null);
+  const [group,        setGroup]        = useState(null);
   const [groupInvites, setGroupInvites] = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [refreshing,  setRefreshing]  = useState(false);
+  const [multiInvites, setMultiInvites] = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [refreshing,   setRefreshing]   = useState(false);
+  const [loadError,    setLoadError]    = useState(false);
 
-  // ── Ajout d'ami par tag exact "Pseudo#1234" (Section III) ──
-  // Point d'entrée unique : bouton "+ Ajouter un ami" → AddFriendModal
-  // (pseudo + # séparés, affiche aussi mon propre tag) → un résultat trouvé
-  // ferme AddFriendModal et ouvre la carte Preview (FriendPreviewModal).
+  // ── Ajout d'ami par tag exact "Pseudo#1234" ──
   const [addFriendVisible, setAddFriendVisible] = useState(false);
   const [searching,    setSearching]    = useState(false);
   const [searchError,  setSearchError]  = useState('');
   const [previewResult, setPreviewResult] = useState(null);
 
-  // ── Confirmation quitter le groupe ──
   const [leaveConfirmVisible, setLeaveConfirmVisible] = useState(false);
 
-  // ── Confirmation retrait d'un ami ──
-  const [removeFriendTarget, setRemoveFriendTarget] = useState(null); // { friendshipId, pseudo }
-
   // ── Célébration montée de niveau d'amitié ──────────────────────────────────
-  // Comparaison du niveau d'amitié de chaque ami entre deux loadAll() : toute
-  // hausse détectée (déclenchée par une validation de streak de groupe) est
-  // mise en file et célébrée une par une. Le tout premier chargement mémorise
-  // sans célébrer (évite un faux déclenchement au démarrage — même garde que
+  // Comparaison du niveau d'amitié de chaque ami entre deux chargements : toute
+  // hausse (validation de streak de groupe) est mise en file et célébrée une
+  // par une. Le tout premier chargement mémorise sans célébrer (même garde que
   // LevelUpCelebration.js).
   const previousFriendshipLevels = useRef(new Map());
   const [levelUpQueue, setLevelUpQueue]   = useState([]);
@@ -98,10 +89,13 @@ export default function SocialScreen({ navigation }) {
   // ── Popup "objet Unique à réclamer" (streak de groupe 30j à 5 membres) ────
   const [bloodSangUnlockedVisible, setBloodSangUnlockedVisible] = useState(false);
 
+  const myTag = user?.pseudo && user?.discriminator ? `${user.pseudo}#${user.discriminator}` : null;
+
   const loadAll = useCallback(async () => {
     try {
-      const [friendsRes, pendingRes, boardRes, groupRes] = await Promise.all([
-        getFriendsList(), getPendingRequests(), getLeaderboard(), getMyGroup(),
+      const [friendsRes, pendingRes, groupRes, invitesRes] = await Promise.all([
+        getFriendsList(), getPendingRequests(), getMyGroup(),
+        getLobbyInvites().catch(() => ({ invites: [] })),
       ]);
       const incomingFriends = friendsRes.friends ?? [];
       const newlyLeveledUp = [];
@@ -112,25 +106,22 @@ export default function SocialScreen({ navigation }) {
         }
         previousFriendshipLevels.current.set(f.friendshipId, f.friendshipLevel);
       }
-      if (newlyLeveledUp.length > 0) {
-        setLevelUpQueue((q) => [...q, ...newlyLeveledUp]);
-      }
+      if (newlyLeveledUp.length > 0) setLevelUpQueue((q) => [...q, ...newlyLeveledUp]);
 
       setFriends(incomingFriends);
       setPending(pendingRes.requests ?? []);
       setSentRequests(pendingRes.sent ?? []);
-      setLeaderboard(boardRes.leaderboard ?? []);
       setGroup(groupRes.group ?? null);
       setGroupInvites(groupRes.invites ?? []);
+      setMultiInvites(invitesRes.invites ?? []);
+      setLoadError(false);
     } catch (error) {
-      if (!error.isSessionExpired) {
-        showToast('Tes amis n\'ont pas pu être chargés. Vérifie ta connexion puis tire l\'écran vers le bas pour réessayer.', 'error');
-      }
+      if (!error.isSessionExpired) setLoadError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [showToast]);
+  }, []);
 
   // Défile la file un item à la fois — jamais deux modales superposées.
   useEffect(() => {
@@ -140,7 +131,13 @@ export default function SocialScreen({ navigation }) {
     }
   }, [activeLevelUp, levelUpQueue]);
 
-  useFocusEffect(useCallback(() => { loadAll(); }, [loadAll]));
+  // Le profil (mon id, mon tag) est nécessaire ici : sans lui, la ligne
+  // « moi » du groupe proposait de me secouer moi-même.
+  useFocusEffect(useCallback(() => {
+    loadAll();
+    if (!user) refetchUser();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadAll]));
 
   useFocusEffect(
     useCallback(() => {
@@ -153,9 +150,8 @@ export default function SocialScreen({ navigation }) {
 
   const onRefresh = () => { setRefreshing(true); loadAll(); };
 
-  // Recherche déclenchée depuis AddFriendModal, avec le tag déjà construit à
-  // partir des 2 champs séparés (pseudo + # à 4 chiffres) — jamais au fil de
-  // la frappe, pour éviter d'ajouter la mauvaise personne.
+  // Recherche déclenchée depuis AddFriendModal (tag exact, jamais au fil de la
+  // frappe, pour éviter d'ajouter la mauvaise personne).
   const onSearchTag = async (fullTag) => {
     setSearchError('');
     setSearching(true);
@@ -175,7 +171,6 @@ export default function SocialScreen({ navigation }) {
     }
   };
 
-  // ── Actions amis ──
   const doAction = async (fn, successMsg) => {
     try {
       await fn();
@@ -187,11 +182,48 @@ export default function SocialScreen({ navigation }) {
     }
   };
 
+  const shareTag = useCallback(async () => {
+    if (!myTag) return;
+    try {
+      await Share.share({ message: `Ajoute-moi sur Athly pour s'entraîner ensemble : ${myTag}` });
+    } catch (_) { /* partage annulé */ }
+  }, [myTag]);
+
+  // ── Multi : lancer ou rejoindre une séance d'équipe ──
+  const startMulti = useCallback(() => {
+    navigation.navigate('Séances', { screen: 'WorkoutList', params: { openMulti: Date.now() } });
+  }, [navigation]);
+
+  const joinMulti = useCallback((lobbyId) => {
+    navigation.navigate('Séances', { screen: 'WorkoutList', params: { pendingLobbyId: lobbyId } });
+  }, [navigation]);
+
+  const ignoreMulti = useCallback((lobbyId) => {
+    setMultiInvites((list) => list.filter((i) => String(i.lobbyId) !== String(lobbyId)));
+    declineLobbyInvite(lobbyId).catch(() => {});
+  }, []);
+
+  const badges = {
+    friends: pending.length + multiInvites.length,
+    group: groupInvites.length,
+  };
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" />
 
-      <Text style={[styles.title, { paddingTop: insets.top + 16 }]} accessibilityRole="header">Social</Text>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <Text style={styles.title} accessibilityRole="header">Social</Text>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Ajouter un ami"
+          style={styles.headerBtn}
+          onPress={() => setAddFriendVisible(true)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="person-add" size={18} color={Colors.textPrimary} />
+        </TouchableOpacity>
+      </View>
 
       {/* ── Segments ── */}
       <View
@@ -203,9 +235,7 @@ export default function SocialScreen({ navigation }) {
       >
         {SEGMENTS.map((s) => {
           const active = segment === s.key;
-          const badge = s.key === 'friends' && pending.length > 0 ? pending.length
-            : s.key === 'group' && groupInvites.length > 0 ? groupInvites.length
-            : null;
+          const badge = badges[s.key] || 0;
           return (
             <TouchableOpacity
               key={s.key}
@@ -214,13 +244,10 @@ export default function SocialScreen({ navigation }) {
               activeOpacity={0.8}
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
-              accessibilityLabel={badge != null ? `${s.label}, ${badge} en attente` : s.label}
+              accessibilityLabel={badge > 0 ? `${s.label}, ${badge} en attente` : s.label}
             >
-              {!compactSegments && (
-                <Ionicons name={active ? s.icon : `${s.icon}-outline`} size={15} color={active ? '#fff' : Colors.textMuted} />
-              )}
               <Text style={[styles.segmentTxt, active && styles.segmentTxtActive]} numberOfLines={1}>{s.label}</Text>
-              {badge != null && (
+              {badge > 0 && (
                 <View style={styles.badge}><Text style={styles.badgeTxt}>{badge}</Text></View>
               )}
             </TouchableOpacity>
@@ -237,30 +264,45 @@ export default function SocialScreen({ navigation }) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
           keyboardShouldPersistTaps="handled"
         >
+          {loadError ? (
+            <View style={styles.errorBanner}>
+              <Ionicons name="cloud-offline-outline" size={18} color={Colors.warningAmber} />
+              <Text style={styles.errorTxt}>Connexion impossible pour le moment. Tire l'écran vers le bas pour réessayer.</Text>
+            </View>
+          ) : null}
+
           {segment === 'friends' && (
             <FriendsSegment
               friends={friends}
               pending={pending}
               sentRequests={sentRequests}
+              multiInvites={multiInvites}
+              myTag={myTag}
+              onShareTag={shareTag}
               onOpenAddFriend={() => setAddFriendVisible(true)}
+              onStartMulti={startMulti}
+              onJoinMulti={joinMulti}
+              onIgnoreMulti={ignoreMulti}
               onAccept={(id)  => doAction(() => acceptFriendRequest(id), 'Vous êtes maintenant amis !')}
               onDecline={(id) => doAction(() => declineFriendRequest(id))}
               onCancelSent={(id) => doAction(() => cancelFriendRequest(id), 'Demande annulée.')}
-              onRemoveFriend={(friendshipId, pseudo) => setRemoveFriendTarget({ friendshipId, pseudo })}
-              onOpenProfile={(friend, friendshipLevel) =>
-                navigation.navigate('FriendProfile', { friendId: friend._id, pseudo: friend.pseudo, friendshipLevel })}
+              onOpenProfile={(f) => navigation.navigate('FriendProfile', {
+                friendId: f.user._id, pseudo: f.user.pseudo, friendshipLevel: f.friendshipLevel, friendshipId: f.friendshipId,
+              })}
             />
           )}
 
-          {segment === 'leaderboard' && <LeaderboardSegment leaderboard={leaderboard} />}
+          {segment === 'leaderboard' && (
+            <LeaderboardSegment hasFriends={friends.length > 0} onOpenAddFriend={() => setAddFriendVisible(true)} />
+          )}
 
           {segment === 'group' && (
             <GroupSegment
               group={group}
-              myId={user?._id}
+              myId={myId}
               invites={groupInvites}
               friends={friends}
-              onInvite={(ids, name) => doAction(() => inviteToGroup(ids, name), 'Demande de Streak de Groupe envoyée')}
+              onInvite={(ids, name) => doAction(() => inviteToGroup(ids, name), 'Invitations envoyées à ton groupe.')}
               onRespond={(groupId, accept) =>
                 doAction(() => respondToGroupInvite(groupId, accept), accept ? 'Bienvenue dans le groupe !' : null)}
               onShake={(groupId, memberId, pseudo) =>
@@ -269,15 +311,12 @@ export default function SocialScreen({ navigation }) {
                 try {
                   const res = await checkGroupStreak(groupId);
                   if (res.allValidated) {
-                    showToast(`Streak jour ${res.currentStreak} ! +${res.groupBonus?.bonusXp ?? 0} XP (x${res.groupBonus?.multiplier ?? 1})`, 'success');
-                    // Le bonus XP peut faire franchir un palier de niveau, refetch
-                    // le profil global pour que LevelUpCelebration le détecte,
-                    // et pousse le même gain dans les logs locaux pour que le
-                    // Profil (calculé localement) se mette à jour immédiatement.
+                    showToast(`Streak validée : jour ${res.currentStreak} ! +${res.groupBonus?.bonusXp ?? 0} XP`, 'success');
+                    // Le bonus XP peut faire franchir un palier : on recharge le
+                    // profil (LevelUpCelebration) et on pousse le gain dans les
+                    // logs locaux pour que le Profil se mette à jour tout de suite.
                     refetchUser();
-                    if (res.groupBonus?.bonusXp > 0) {
-                      addBonusXp('Bonus de groupe', res.groupBonus.bonusXp);
-                    }
+                    if (res.groupBonus?.bonusXp > 0) addBonusXp('Bonus de groupe', res.groupBonus.bonusXp);
                     if (res.bloodSangUnlocked) setBloodSangUnlockedVisible(true);
                   } else if (res.alreadyValidated) {
                     showToast('La streak du groupe est déjà validée aujourd\'hui.', 'success');
@@ -300,7 +339,7 @@ export default function SocialScreen({ navigation }) {
       <ConfirmModal
         visible={leaveConfirmVisible}
         icon="exit-outline"
-        title="Quitter le groupe"
+        title="Quitter le groupe ?"
         body="Tu perdras l'accès à la streak collective de ce groupe. Pour revenir, un membre devra t'inviter à nouveau."
         confirmLabel="Quitter le groupe"
         cancelLabel="Annuler"
@@ -310,22 +349,6 @@ export default function SocialScreen({ navigation }) {
           doAction(() => leaveGroup(), 'Tu as quitté le groupe.');
         }}
         onCancel={() => setLeaveConfirmVisible(false)}
-      />
-
-      <ConfirmModal
-        visible={!!removeFriendTarget}
-        icon="person-remove-outline"
-        title="Retirer cet ami ?"
-        body={`${removeFriendTarget?.pseudo ?? 'Cette personne'} ne fera plus partie de tes amis. Vous pourrez vous réajouter plus tard si besoin.`}
-        confirmLabel="Retirer"
-        cancelLabel="Annuler"
-        destructive
-        onConfirm={() => {
-          const target = removeFriendTarget;
-          setRemoveFriendTarget(null);
-          doAction(() => removeFriend(target.friendshipId), `${target.pseudo} a été retiré de tes amis.`);
-        }}
-        onCancel={() => setRemoveFriendTarget(null)}
       />
 
       <ConfirmModal
@@ -351,7 +374,7 @@ export default function SocialScreen({ navigation }) {
 
       <AddFriendModal
         visible={addFriendVisible}
-        myTag={user?.pseudo && user?.discriminator ? `${user.pseudo}#${user.discriminator}` : null}
+        myTag={myTag}
         searching={searching}
         error={searchError}
         onSearch={onSearchTag}
@@ -362,7 +385,7 @@ export default function SocialScreen({ navigation }) {
         visible={!!previewResult}
         result={previewResult}
         onSend={async () => {
-          await doAction(() => sendFriendRequest(previewResult.user._id), 'Invitation envoyée');
+          await doAction(() => sendFriendRequest(previewResult.user._id), 'Demande d\'ami envoyée.');
           setPreviewResult((prev) => prev && { ...prev, relationStatus: 'pending_sent' });
         }}
         onClose={() => setPreviewResult(null)}
@@ -378,158 +401,299 @@ export default function SocialScreen({ navigation }) {
 // ═══ Segment Amis ═════════════════════════════════════════════════════════════
 
 function FriendsSegment({
-  friends, pending, sentRequests, onOpenAddFriend, onAccept, onDecline, onCancelSent, onRemoveFriend, onOpenProfile,
+  friends, pending, sentRequests, multiInvites, myTag, onShareTag, onOpenAddFriend,
+  onStartMulti, onJoinMulti, onIgnoreMulti, onAccept, onDecline, onCancelSent, onOpenProfile,
 }) {
   return (
     <>
-      {/* ── Point d'entrée unique pour ajouter un ami (Section III) ── */}
-      <TouchableOpacity accessibilityRole="button" style={styles.addFriendBtn} onPress={onOpenAddFriend} activeOpacity={0.85}>
-        <Ionicons name="person-add" size={17} color="#fff" style={{ marginRight: 8 }} />
-        <Text style={styles.addFriendBtnTxt}>Ajouter un nouvel ami</Text>
-      </TouchableOpacity>
+      {/* ── Invitations à une séance Multi (en premier : c'est maintenant) ── */}
+      {multiInvites.map((inv) => (
+        <View key={String(inv.lobbyId)} style={styles.liveCard}>
+          <View style={styles.liveHead}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveKicker}>Séance Multi</Text>
+          </View>
+          <Text style={styles.liveTitle}>
+            {inv.from?.pseudo ?? 'Un ami'} t'invite à s'entraîner ensemble
+          </Text>
+          <Text style={styles.liveMeta}>
+            {inv.memberCount} joueur{inv.memberCount > 1 ? 's' : ''} dans le salon · bonus d'XP pour toute l'équipe
+          </Text>
+          <View style={styles.liveBtns}>
+            <TouchableOpacity accessibilityRole="button" style={styles.ghostBtn} onPress={() => onIgnoreMulti(inv.lobbyId)} activeOpacity={0.8}>
+              <Text style={styles.ghostBtnTxt}>Ignorer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity accessibilityRole="button" style={styles.primaryBtn} onPress={() => onJoinMulti(inv.lobbyId)} activeOpacity={0.85}>
+              <Text style={styles.primaryBtnTxt}>Rejoindre</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ))}
 
-      {/* ── Demandes reçues ── */}
+      {/* ── S'entraîner ensemble ── */}
+      {friends.length > 0 ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={onStartMulti}
+          style={({ pressed }) => [styles.multiCard, pressed && styles.pressed]}
+        >
+          <View style={styles.multiIcon}>
+            <Ionicons name="people" size={22} color={Colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.multiTitle}>S'entraîner ensemble</Text>
+            <Text style={styles.multiSub}>Lance une séance Multi : +15 % d'XP à 2, jusqu'à +50 % à 5.</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={Colors.chevron} />
+        </Pressable>
+      ) : null}
+
+      {/* ── Demandes d'amis reçues ── */}
       {pending.length > 0 && (
         <>
-          <Text style={styles.sectionLabel}>DEMANDES REÇUES</Text>
-          {pending.map((req, i) => (
-            <AnimatedRow key={req._id} index={i}>
-              <UserRow user={req.requester}>
-                <SmallBtn label="" icon="checkmark" color={Colors.valid} onPress={() => onAccept(req._id)} accessibilityLabel={`Accepter la demande de ${req.requester?.pseudo ?? 'cet athlète'}`} />
-                <SmallBtn label="" icon="close" color={Colors.error} onPress={() => onDecline(req._id)} accessibilityLabel={`Refuser la demande de ${req.requester?.pseudo ?? 'cet athlète'}`} />
-              </UserRow>
-            </AnimatedRow>
-          ))}
-        </>
-      )}
-
-      {/* ── Demandes envoyées, en attente de réponse ── */}
-      {(sentRequests ?? []).length > 0 && (
-        <>
-          <Text style={styles.sectionLabel}>DEMANDES ENVOYÉES</Text>
-          {sentRequests.map((req, i) => (
-            <AnimatedRow key={req._id} index={i}>
-              <UserRow user={req.recipient}>
-                <View style={styles.sentTagRow}>
-                  <Ionicons name="time-outline" size={12} color={Colors.textMuted} />
-                  <Text style={styles.sentTag}>En attente</Text>
-                </View>
-                <SmallBtn label="" icon="close" color={Colors.error} onPress={() => onCancelSent(req._id)} accessibilityLabel={`Annuler la demande envoyée à ${req.recipient?.pseudo ?? 'cet athlète'}`} />
-              </UserRow>
-            </AnimatedRow>
+          <SectionTitle title="Demandes d'amis" count={pending.length} />
+          {pending.map((req) => (
+            <View key={req._id} style={styles.card}>
+              <PlayerLine user={req.requester} />
+              <View style={styles.requestBtns}>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={`Refuser la demande de ${req.requester?.pseudo ?? 'cet athlète'}`}
+                  style={styles.ghostBtn}
+                  onPress={() => onDecline(req._id)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.ghostBtnTxt}>Refuser</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={`Accepter la demande de ${req.requester?.pseudo ?? 'cet athlète'}`}
+                  style={styles.primaryBtn}
+                  onPress={() => onAccept(req._id)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.primaryBtnTxt}>Accepter</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           ))}
         </>
       )}
 
       {/* ── Mes amis ── */}
-      <Text style={styles.sectionLabel}>MES AMIS ({friends.length})</Text>
       {friends.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Ionicons name="people-outline" size={34} color={Colors.textMuted} style={{ marginBottom: 10 }} />
-          <Text style={styles.emptyTxt}>Pas encore d'amis.{'\n'}Ajoute un ami avec son tag (Pseudo#1234) pour progresser ensemble.</Text>
-        </View>
-      ) : friends.map((f, i) => (
-        <AnimatedRow key={f.user._id} index={i}>
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Voir le profil de ${f.user.pseudo}`} activeOpacity={0.75} onPress={() => onOpenProfile(f.user, f.friendshipLevel)}>
-            <UserRow user={f.user} subtitle={getFriendshipTitle(f.friendshipLevel).label}>
-              <FriendshipHearts level={f.friendshipLevel ?? 1} />
-              <TouchableOpacity
-                onPress={() => onRemoveFriend(f.friendshipId, f.user.pseudo)}
-                hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-                style={{ marginLeft: 6 }}
-                accessibilityRole="button"
-                accessibilityLabel={`Retirer ${f.user.pseudo} de tes amis`}
-              >
-                <Ionicons name="person-remove-outline" size={17} color={Colors.textMuted} />
-              </TouchableOpacity>
-              <Ionicons name="chevron-forward" size={16} color={Colors.chevron} />
-            </UserRow>
+        <View style={[styles.card, styles.emptyCard]}>
+          <View style={styles.emptyIcon}><Ionicons name="people" size={26} color={Colors.primary} /></View>
+          <Text style={styles.emptyTitle}>Entraîne-toi avec tes amis</Text>
+          <Text style={styles.emptyBody}>
+            Ajoute un ami avec son tag pour comparer vos progrès, former un groupe de streak et lancer des séances à plusieurs.
+          </Text>
+          <TouchableOpacity accessibilityRole="button" style={[styles.primaryBtn, styles.emptyBtn]} onPress={onOpenAddFriend} activeOpacity={0.85}>
+            <Ionicons name="person-add" size={16} color="#fff" />
+            <Text style={styles.primaryBtnTxt}>Ajouter un ami</Text>
           </TouchableOpacity>
-        </AnimatedRow>
-      ))}
+          {myTag ? (
+            <TouchableOpacity accessibilityRole="button" style={styles.tagRow} onPress={onShareTag} activeOpacity={0.8}>
+              <Text style={styles.tagLabel}>Ton tag : </Text>
+              <Text style={styles.tagValue}>{myTag}</Text>
+              <Ionicons name="share-outline" size={15} color={Colors.primary} style={{ marginLeft: 6 }} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : (
+        <>
+          <SectionTitle
+            title="Mes amis"
+            count={friends.length}
+            action={myTag ? { label: 'Partager mon tag', icon: 'share-outline', onPress: onShareTag } : null}
+          />
+          <View style={styles.listCard}>
+            {friends.map((f, i) => {
+              const title = getFriendshipTitle(f.friendshipLevel);
+              return (
+                <Pressable
+                  key={f.user._id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${f.user.pseudo}, niveau ${f.user.level ?? 1}, ${title.label}. Voir son profil`}
+                  onPress={() => onOpenProfile(f)}
+                  style={({ pressed }) => [styles.listRow, i > 0 && styles.listRowBorder, pressed && styles.pressed]}
+                >
+                  <PlayerLine
+                    user={f.user}
+                    extra={(
+                      <View style={styles.friendshipLine}>
+                        <Ionicons name="heart" size={11} color="#FF4D6D" />
+                        <Text style={styles.friendshipTxt} numberOfLines={1}>{` ${f.friendshipLevel ?? 1}/5 · ${title.label}`}</Text>
+                      </View>
+                    )}
+                  />
+                  <Ionicons name="chevron-forward" size={17} color={Colors.chevron} />
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      )}
+
+      {/* ── Demandes envoyées ── */}
+      {(sentRequests ?? []).length > 0 && (
+        <>
+          <SectionTitle title="Demandes envoyées" count={sentRequests.length} />
+          <View style={styles.listCard}>
+            {sentRequests.map((req, i) => (
+              <View key={req._id} style={[styles.listRow, i > 0 && styles.listRowBorder]}>
+                <PlayerLine user={req.recipient} meta="En attente de réponse" />
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={`Annuler la demande envoyée à ${req.recipient?.pseudo ?? 'cet athlète'}`}
+                  onPress={() => onCancelSent(req._id)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Text style={styles.linkTxt}>Annuler</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        </>
+      )}
     </>
   );
 }
 
 // ═══ Segment Classement ═══════════════════════════════════════════════════════
 
-const PODIUM_COLORS = [Colors.gold, '#C0C0C0', '#CD7F32'];
+function LeaderboardSegment({ hasFriends, onOpenAddFriend }) {
+  const [mode, setMode] = useState('xp');        // 'xp' | 'records'
+  const [period, setPeriod] = useState('week');  // 'week' | 'all'
 
-function LeaderboardSegment({ leaderboard }) {
-  const [mode, setMode] = useState('xp'); // 'xp' | 'records'
+  if (!hasFriends) {
+    return (
+      <View style={[styles.card, styles.emptyCard]}>
+        <View style={styles.emptyIcon}><Ionicons name="podium" size={24} color={Colors.primary} /></View>
+        <Text style={styles.emptyTitle}>Compare-toi à tes amis</Text>
+        <Text style={styles.emptyBody}>
+          Le classement se remplit avec tes amis : XP de la semaine, XP totale et records par exercice.
+        </Text>
+        <TouchableOpacity accessibilityRole="button" style={[styles.primaryBtn, styles.emptyBtn]} onPress={onOpenAddFriend} activeOpacity={0.85}>
+          <Ionicons name="person-add" size={16} color="#fff" />
+          <Text style={styles.primaryBtnTxt}>Ajouter un ami</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <>
-      {/* ── Bascule XP / Records ── */}
-      <View style={styles.modeRow}>
-        <TouchableOpacity accessibilityRole="button"
-          style={[styles.modeBtn, mode === 'xp' && styles.modeBtnActive]}
-          onPress={() => setMode('xp')}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="flash" size={13} color={mode === 'xp' ? '#fff' : Colors.textMuted} />
-          <Text style={[styles.modeTxt, mode === 'xp' && styles.modeTxtActive]}>XP</Text>
-        </TouchableOpacity>
-        <TouchableOpacity accessibilityRole="button"
-          style={[styles.modeBtn, mode === 'records' && styles.modeBtnActive]}
-          onPress={() => setMode('records')}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="barbell" size={13} color={mode === 'records' ? '#fff' : Colors.textMuted} />
-          <Text style={[styles.modeTxt, mode === 'records' && styles.modeTxtActive]}>Records</Text>
-        </TouchableOpacity>
+      <View style={styles.pillRow} accessibilityRole="tablist">
+        <Pill label="XP" active={mode === 'xp'} onPress={() => setMode('xp')} />
+        <Pill label="Records" active={mode === 'records'} onPress={() => setMode('records')} />
       </View>
 
-      {mode === 'xp' ? <XpLeaderboard leaderboard={leaderboard} /> : <RecordsLeaderboard />}
+      {mode === 'xp' ? (
+        <>
+          <View style={styles.subPillRow}>
+            <SubPill label="Cette semaine" active={period === 'week'} onPress={() => setPeriod('week')} />
+            <SubPill label="Depuis le début" active={period === 'all'} onPress={() => setPeriod('all')} />
+          </View>
+          <XpLeaderboard period={period} />
+        </>
+      ) : (
+        <RecordsLeaderboard />
+      )}
     </>
   );
 }
 
-function XpLeaderboard({ leaderboard }) {
-  const podium = leaderboard.slice(0, 3);
-  const rest   = leaderboard.slice(3);
+function XpLeaderboard({ period }) {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRows(null);
+    setError(false);
+    getLeaderboard(period)
+      .then((res) => { if (!cancelled) setRows(res.leaderboard ?? []); })
+      .catch(() => { if (!cancelled) { setRows([]); setError(true); } });
+    return () => { cancelled = true; };
+  }, [period]);
+
+  if (rows === null) return <View style={styles.inlineLoading}><ActivityIndicator color={Colors.primary} /></View>;
+  if (error) return <Text style={styles.emptySmall}>Classement indisponible pour le moment.</Text>;
+
+  const valueOf = (e) => (period === 'week' ? (e.weeklyXp ?? 0) : (e.user.xp ?? 0));
+  const nobodyThisWeek = period === 'week' && rows.every((e) => valueOf(e) === 0);
 
   return (
     <>
-      {leaderboard.length < 2 ? (
-        <View style={styles.emptyBox}>
-          <Ionicons name="trophy-outline" size={36} color={Colors.textMuted} style={{ marginBottom: 10 }} />
-          <Text style={styles.emptyTxt}>Ajoute des amis pour lancer la compétition !</Text>
+      <Text style={styles.caption}>
+        {period === 'week'
+          ? 'XP gagnée en séance depuis lundi. Tout le monde repart de zéro chaque semaine.'
+          : 'XP totale cumulée depuis l\'inscription.'}
+      </Text>
+
+      {nobodyThisWeek ? (
+        <View style={[styles.card, styles.emptyCardSmall]}>
+          <Ionicons name="flash-outline" size={22} color={Colors.textMuted} />
+          <Text style={styles.emptyBodySmall}>Personne n'a encore gagné d'XP cette semaine. Une séance suffit pour prendre la tête !</Text>
         </View>
       ) : (
         <>
-          {/* ── Podium ── */}
-          <View style={styles.podiumRow}>
-            {[1, 0, 2].map((idx) => {
-              const entry = podium[idx];
-              if (!entry) return <View key={idx} style={{ flex: 1 }} />;
-              return (
-                <PodiumColumn
-                  key={entry.user._id}
-                  entry={entry}
-                  height={idx === 0 ? 96 : idx === 1 ? 72 : 56}
-                  color={PODIUM_COLORS[idx]}
-                  delay={idx === 0 ? 250 : idx === 1 ? 0 : 450}
-                />
-              );
-            })}
-          </View>
-
-          {/* ── Reste du classement ── */}
-          {rest.map((entry, i) => (
-            <AnimatedRow key={entry.user._id} index={i}>
-              <View style={[styles.boardRow, entry.isMe && styles.boardRowMe]}>
-                <Text style={[styles.boardPos, styles.boardPosTxt]}>#{entry.position}</Text>
-                <Text style={[styles.boardPseudo, entry.isMe && { color: Colors.primary }]} numberOfLines={1}>
-                  {entry.user.pseudo}{entry.isMe ? ' (moi)' : ''}
-                </Text>
-                <Text style={styles.boardXp}>{entry.user.xp} XP</Text>
-              </View>
-            </AnimatedRow>
-          ))}
+          <Podium entries={rows.slice(0, 3)} valueOf={valueOf} />
+          {rows.length > 3 ? (
+            <View style={styles.listCard}>
+              {rows.slice(3).map((e, i) => (
+                <BoardRow key={e.user._id} entry={e} first={i === 0} value={`${formatNumber(valueOf(e))} XP`}
+                  sub={period === 'week' && e.weeklySessions ? `${e.weeklySessions} séance${e.weeklySessions > 1 ? 's' : ''}` : null} />
+              ))}
+            </View>
+          ) : null}
         </>
       )}
     </>
+  );
+}
+
+function Podium({ entries, valueOf }) {
+  // Ordre visuel 2 · 1 · 3, hauteurs décroissantes.
+  const order = [1, 0, 2];
+  const heights = [84, 62, 48];
+  return (
+    <View style={styles.podiumRow}>
+      {order.map((idx) => {
+        const e = entries[idx];
+        if (!e) return <View key={idx} style={{ flex: 1 }} />;
+        const color = MEDAL_COLORS[idx];
+        return (
+          <View key={e.user._id} style={styles.podiumCol} accessible accessibilityLabel={`${idx + 1}e : ${e.user.pseudo}, ${formatNumber(valueOf(e))} XP`}>
+            <UserAvatar user={e.user} size={idx === 0 ? 60 : 50} />
+            <Text style={[styles.podiumPseudo, e.isMe && { color: Colors.primary }]} numberOfLines={1}>
+              {e.isMe ? 'Toi' : e.user.pseudo}
+            </Text>
+            <Text style={styles.podiumXp}>{formatNumber(valueOf(e))} XP</Text>
+            <View style={[styles.podiumBar, { height: heights[idx], backgroundColor: `${color}1F`, borderColor: `${color}66` }]}>
+              <Text style={[styles.podiumPos, { color }]}>{idx + 1}</Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function BoardRow({ entry, first, value, sub }) {
+  return (
+    <View style={[styles.listRow, !first && styles.listRowBorder, entry.isMe && styles.meRow]}>
+      <Text style={styles.boardPos}>{entry.position}</Text>
+      <UserAvatar user={entry.user} size={36} />
+      <View style={{ flex: 1, marginLeft: 10 }}>
+        <Text style={[styles.boardPseudo, entry.isMe && { color: Colors.primary }]} numberOfLines={1}>
+          {entry.isMe ? `${entry.user.pseudo} (toi)` : entry.user.pseudo}
+        </Text>
+        {sub ? <Text style={styles.boardSub}>{sub}</Text> : null}
+      </View>
+      <Text style={styles.boardValue}>{value}</Text>
+    </View>
   );
 }
 
@@ -553,29 +717,22 @@ function RecordsLeaderboard() {
 
   return (
     <>
-      {/* ── Suggestions rapides + accès au catalogue complet (~100+ exercices) ── */}
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel={`Exercice : ${exercise}. Changer d'exercice`}
+        style={styles.exercisePicker}
+        onPress={() => setPickerVisible(true)}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="barbell" size={16} color={Colors.primary} />
+        <Text style={styles.exercisePickerTxt} numberOfLines={1}>{exercise}</Text>
+        <Text style={styles.linkTxt}>Changer</Text>
+      </TouchableOpacity>
+
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.exoChipRow}>
-        <TouchableOpacity accessibilityRole="button"
-          style={[styles.exoChip, styles.exoChipMore]}
-          onPress={() => setPickerVisible(true)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="search" size={13} color={Colors.primary} style={{ marginRight: 4 }} />
-          <Text style={[styles.exoChipTxt, { color: Colors.primary, fontWeight: '800' }]}>Tous les exercices</Text>
-        </TouchableOpacity>
-        {MAJOR_EXERCISES.map((exo) => {
-          const active = exo.name === exercise;
-          return (
-            <TouchableOpacity accessibilityRole="button"
-              key={exo.name}
-              style={[styles.exoChip, active && styles.exoChipActive]}
-              onPress={() => setExercise(exo.name)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.exoChipTxt, active && styles.exoChipTxtActive]}>{exo.name}</Text>
-            </TouchableOpacity>
-          );
-        })}
+        {MAJOR_EXERCISES.map((exo) => (
+          <SubPill key={exo.name} label={exo.name} active={exo.name === exercise} onPress={() => setExercise(exo.name)} />
+        ))}
       </ScrollView>
 
       <ExercisePickerModal
@@ -586,85 +743,48 @@ function RecordsLeaderboard() {
       />
 
       {loading ? (
-        <View style={styles.recordsLoading}><ActivityIndicator size="small" color={Colors.primary} /></View>
+        <View style={styles.inlineLoading}><ActivityIndicator color={Colors.primary} /></View>
       ) : rows.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Ionicons name="barbell-outline" size={36} color={Colors.textMuted} style={{ marginBottom: 10 }} />
-          <Text style={styles.emptyTxt}>
-            Aucun record sur cet exercice dans ton réseau.{'\n'}Sois le premier à poser la barre !
-          </Text>
+        <View style={[styles.card, styles.emptyCardSmall]}>
+          <Ionicons name="barbell-outline" size={22} color={Colors.textMuted} />
+          <Text style={styles.emptyBodySmall}>Aucun record sur cet exercice dans ton réseau. Sois le premier à poser la barre !</Text>
         </View>
-      ) : rows.map((entry, i) => (
-        <AnimatedRow key={entry.user._id} index={i}>
-          <View style={[styles.boardRow, entry.isMe && styles.boardRowMe]}>
-            <View style={styles.boardPos}>
-              {entry.position <= 3
-                ? <MedalBadge position={entry.position} size={17} />
-                : <Text style={styles.boardPosTxt}>#{entry.position}</Text>}
-            </View>
-            <Text style={[styles.boardPseudo, entry.isMe && { color: Colors.primary }]} numberOfLines={1}>
-              {entry.user.pseudo}{entry.isMe ? ' (moi)' : ''}
-            </Text>
-            <Text style={styles.boardKg}>{entry.maxPoids} kg</Text>
-            <Text style={styles.boardReps}>× {entry.maxReps}</Text>
-          </View>
-        </AnimatedRow>
-      ))}
+      ) : (
+        <View style={styles.listCard}>
+          {rows.map((e, i) => (
+            <BoardRow
+              key={e.user._id}
+              entry={e}
+              first={i === 0}
+              value={`${String(e.maxPoids).replace('.', ',')} kg`}
+              sub={`${e.maxReps} rép.`}
+            />
+          ))}
+        </View>
+      )}
     </>
-  );
-}
-
-function PodiumColumn({ entry, height, color, delay }) {
-  const grow = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.spring(grow, { toValue: 1, friction: 6, tension: 50, delay, useNativeDriver: true }).start();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return (
-    <View style={styles.podiumCol}>
-      <Text style={styles.podiumPseudo} numberOfLines={1}>{entry.user.pseudo}</Text>
-      <Text style={[styles.podiumXp, { color }]}>{entry.user.xp} XP</Text>
-      <Animated.View
-        style={[styles.podiumBar, {
-          height,
-          backgroundColor: `${color}22`,
-          borderColor: `${color}66`,
-          transform: [{ scaleY: grow }],
-        }]}
-      >
-        <View style={styles.podiumMedal}>
-          <MedalBadge position={entry.position} size={22} />
-        </View>
-      </Animated.View>
-    </View>
   );
 }
 
 // ═══ Segment Groupe ═══════════════════════════════════════════════════════════
 
 function GroupSegment({ group, myId, invites, friends, onInvite, onRespond, onShake, onCheckStreak, onLeaveGroup }) {
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [groupName, setGroupName]     = useState('');
-
-  const toggle = (id) =>
-    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
-
   return (
     <>
-      {/* ── Invitations reçues ── */}
       {invites.map((inv) => (
-        <View key={inv._id} style={styles.inviteCard}>
-          <View style={styles.inviteTxtRow}>
-            <Ionicons name="flame" size={15} color={Colors.primary} style={{ marginRight: 6 }} />
-            <Text style={styles.inviteTxt}>
-              Demande de Streak de Groupe : <Text style={{ fontWeight: '800' }}>{inv.name || 'Sans nom'}</Text>
-            </Text>
+        <View key={inv._id} style={styles.liveCard}>
+          <View style={styles.liveHead}>
+            <Ionicons name="flame" size={14} color={Colors.primary} />
+            <Text style={styles.liveKicker}>Groupe de streak</Text>
           </View>
-          <View style={styles.inviteBtns}>
-            <SmallBtn label="Rejoindre" icon="checkmark" color={Colors.valid} onPress={() => onRespond(inv._id, true)} />
-            <SmallBtn label="" icon="close" color={Colors.error} onPress={() => onRespond(inv._id, false)} />
+          <Text style={styles.liveTitle}>Invitation à rejoindre « {inv.name || 'Groupe de streak'} »</Text>
+          <View style={styles.liveBtns}>
+            <TouchableOpacity accessibilityRole="button" style={styles.ghostBtn} onPress={() => onRespond(inv._id, false)} activeOpacity={0.8}>
+              <Text style={styles.ghostBtnTxt}>Refuser</Text>
+            </TouchableOpacity>
+            <TouchableOpacity accessibilityRole="button" style={styles.primaryBtn} onPress={() => onRespond(inv._id, true)} activeOpacity={0.85}>
+              <Text style={styles.primaryBtnTxt}>Rejoindre</Text>
+            </TouchableOpacity>
           </View>
         </View>
       ))}
@@ -672,286 +792,332 @@ function GroupSegment({ group, myId, invites, friends, onInvite, onRespond, onSh
       {group ? (
         <GroupCard group={group} myId={myId} onShake={onShake} onCheckStreak={onCheckStreak} onLeaveGroup={onLeaveGroup} />
       ) : (
+        <CreateGroup friends={friends} onInvite={onInvite} />
+      )}
+    </>
+  );
+}
+
+function CreateGroup({ friends, onInvite }) {
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [groupName, setGroupName]     = useState('');
+  const full = selectedIds.length >= MAX_GROUP - 1;
+
+  const toggle = (id) => setSelectedIds((prev) => {
+    if (prev.includes(id)) return prev.filter((x) => x !== id);
+    return prev.length >= MAX_GROUP - 1 ? prev : [...prev, id];
+  });
+
+  return (
+    <>
+      <View style={styles.card}>
+        <View style={styles.groupIntroHead}>
+          <View style={styles.flameBox}><Ionicons name="flame" size={24} color={Colors.primary} /></View>
+          <Text style={styles.cardTitle}>Crée ton groupe de streak</Text>
+        </View>
+        <Rule icon="people" text="Jusqu'à 5 amis, toi compris." />
+        <Rule icon="checkmark-done" text="Chaque jour où tout le monde fait sa séance, la streak du groupe grimpe." />
+        <Rule icon="trending-up" text="Plus le groupe est grand et régulier, plus le bonus d'XP augmente." />
+      </View>
+
+      {friends.length === 0 ? (
+        <Text style={styles.emptySmall}>Ajoute d'abord des amis pour former un groupe.</Text>
+      ) : (
         <>
-          <Text style={styles.sectionLabel}>CRÉER UN GROUPE DE STREAK (MAX 5)</Text>
-          <View style={styles.searchBox}>
-            <Ionicons name="flag" size={15} color={Colors.textMuted} />
-            <TextInput
-              style={styles.searchInput}
-              value={groupName}
-              onChangeText={setGroupName}
-              placeholder="Nom du groupe (ex: Les Warriors)"
-              placeholderTextColor={Colors.textMuted}
-              selectionColor={Colors.primary}
-            />
+          <SectionTitle title="Nom du groupe" />
+          <TextInput
+            style={styles.input}
+            value={groupName}
+            onChangeText={setGroupName}
+            placeholder="Ex : Les Warriors"
+            placeholderTextColor={Colors.textMuted}
+            selectionColor={Colors.primary}
+            maxLength={40}
+          />
+
+          <SectionTitle title="Invite tes amis" count={`${selectedIds.length}/${MAX_GROUP - 1}`} />
+          <View style={styles.listCard}>
+            {friends.map((f, i) => {
+              const selected = selectedIds.includes(f.user._id);
+              const disabled = !selected && full;
+              return (
+                <Pressable
+                  key={f.user._id}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: selected, disabled }}
+                  onPress={() => toggle(f.user._id)}
+                  disabled={disabled}
+                  style={({ pressed }) => [styles.listRow, i > 0 && styles.listRowBorder, pressed && styles.pressed, disabled && { opacity: 0.4 }]}
+                >
+                  <PlayerLine user={f.user} />
+                  <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={24} color={selected ? Colors.primary : Colors.borderDim} />
+                </Pressable>
+              );
+            })}
           </View>
 
-          {friends.length === 0 ? (
-            <Text style={styles.emptySmall}>Ajoute d'abord des amis pour former un groupe.</Text>
-          ) : (
-            <>
-              <Text style={styles.sectionLabel}>SÉLECTIONNE TES AMIS</Text>
-              {friends.map((f) => {
-                const selected = selectedIds.includes(f.user._id);
-                return (
-                  <TouchableOpacity accessibilityRole="button"
-                    key={f.user._id}
-                    style={[styles.selectRow, selected && styles.selectRowActive]}
-                    onPress={() => toggle(f.user._id)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons
-                      name={selected ? 'checkbox' : 'square-outline'}
-                      size={20}
-                      color={selected ? Colors.primary : Colors.borderDim}
-                    />
-                    <Text style={styles.selectPseudo} numberOfLines={1}>{f.user.pseudo}</Text>
-                    <Text style={styles.selectLevel}>Nv. {f.user.level}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-              <TouchableOpacity accessibilityRole="button"
-                style={[styles.ctaBtn, (selectedIds.length === 0 || selectedIds.length > 4) && { opacity: 0.4 }]}
-                disabled={selectedIds.length === 0 || selectedIds.length > 4}
-                onPress={() => { onInvite(selectedIds, groupName.trim() || undefined); setSelectedIds([]); setGroupName(''); }}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="flame" size={16} color="#fff" style={{ marginRight: 7 }} />
-                <Text style={styles.ctaTxt}>
-                  Envoyer la demande ({selectedIds.length + 1}/5 membres)
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
+          <TouchableOpacity
+            accessibilityRole="button"
+            style={[styles.blockBtn, selectedIds.length === 0 && styles.blockBtnOff]}
+            disabled={selectedIds.length === 0}
+            onPress={() => { onInvite(selectedIds, groupName.trim() || undefined); setSelectedIds([]); setGroupName(''); }}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="flame" size={16} color="#fff" />
+            <Text style={styles.primaryBtnTxt}>
+              {selectedIds.length === 0 ? 'Choisis au moins un ami' : `Créer le groupe (${selectedIds.length + 1} membres)`}
+            </Text>
+          </TouchableOpacity>
         </>
       )}
     </>
   );
 }
 
-// Barème de référence (miroir de computeGroupXpBonus côté backend) : à taille
-// et régularité fixées, quel multiplicateur peut-on espérer atteindre.
+// Barème de référence (miroir de computeGroupXpBonus côté backend).
 const SIZE_SCALE = [1, 2, 3, 4, 5].map((n) => ({ n, multiplier: 1 + 0.35 * (n - 1) }));
 const REGULARITY_SCALE = [0, 7, 14, 21, 28, 35, 42, 49, 56].map((days) => ({
   days,
   multiplier: 1 + Math.min(0.6, 0.08 * Math.floor(days / 7)),
 }));
+const fmtMult = (m) => `×${m.toFixed(2).replace('.', ',')}`;
+
+// Météo des séances (getMyGroup → member.weatherStatus), en clair.
+const WEATHER = {
+  done:     { icon: 'checkmark-circle', color: Colors.valid,     label: 'Séance faite' },
+  active:   { icon: 'flash',            color: '#FBBF24',        label: 'En pleine séance' },
+  ready:    { icon: 'time-outline',     color: Colors.textSecondary, label: 'Pas encore entraîné aujourd\'hui' },
+  sleeping: { icon: 'moon-outline',     color: Colors.textMuted, label: 'Pas encore venu aujourd\'hui' },
+};
 
 function GroupCard({ group, myId, onShake, onCheckStreak, onLeaveGroup }) {
-  const flame = useRef(new Animated.Value(1)).current;
-  const [showScale, setShowScale] = useState(false);
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(flame, { toValue: 1.18, duration: 700, useNativeDriver: true }),
-        Animated.timing(flame, { toValue: 1,    duration: 700, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const memberCount = group.members?.length ?? 0;
-  // xpBonus vient du backend (getMyGroup) — source de vérité pour le détail
-  // taille/régularité. Fallback taille-seule si absent (réponse en cache ancienne).
-  const xpBonus = group.xpBonus ?? { sizeMultiplier: 1 + 0.25 * (memberCount - 1), regularityMultiplier: 1, multiplier: 1 + 0.25 * (memberCount - 1) };
+  const [showDetail, setShowDetail] = useState(false);
+  const members = group.members ?? [];
+  const memberCount = members.length;
+  const doneCount = members.filter((m) => m.weatherStatus === 'done').length;
+  const allDone = memberCount > 0 && doneCount === memberCount;
+  const missing = members.filter((m) => m.weatherStatus !== 'done').map((m) => (myId && m._id === myId ? 'toi' : m.pseudo));
+  const xpBonus = group.xpBonus ?? { sizeMultiplier: 1, regularityMultiplier: 1, multiplier: 1 };
+  const streak = group.currentStreak ?? 0;
 
   return (
-    <View style={styles.groupCard}>
-      <View style={styles.groupHeader}>
-        <Animated.View style={[styles.groupFlameWrap, { transform: [{ scale: flame }] }]}>
-          <Ionicons name="flame" size={30} color={Colors.primary} />
-        </Animated.View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.groupName}>{group.name || 'Groupe de Streak'}</Text>
-          <Text style={styles.groupStreak}>
-            Streak : <Text style={{ color: Colors.primary, fontWeight: '800' }}>{plural(group.currentStreak ?? 0, 'jour')}</Text>
-          </Text>
+    <>
+      {/* ── En-tête : streak ── */}
+      <View style={styles.card}>
+        <View style={styles.groupHead}>
+          <View style={styles.flameBox}><Ionicons name="flame" size={26} color={Colors.primary} /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle} numberOfLines={1}>{group.name || 'Groupe de streak'}</Text>
+            <Text style={styles.groupMeta}>{memberCount} membre{memberCount > 1 ? 's' : ''}</Text>
+          </View>
+          <View style={styles.streakBox}>
+            <Text style={styles.streakValue}>{streak}</Text>
+            <Text style={styles.streakLabel}>jour{streak > 1 ? 's' : ''}</Text>
+          </View>
         </View>
+
+        {/* ── Aujourd'hui ── */}
+        <View style={styles.todayBlock}>
+          <View style={styles.todayHead}>
+            <Text style={styles.todayTitle}>Aujourd'hui</Text>
+            <Text style={styles.todayCount}>{doneCount}/{memberCount} séances faites</Text>
+          </View>
+          <View style={styles.todayTrack}>
+            {members.map((m) => (
+              <View key={m._id} style={[styles.todaySeg, m.weatherStatus === 'done' && styles.todaySegDone]} />
+            ))}
+          </View>
+        </View>
+
+        {(group.shameBreakers ?? []).length > 0 && (
+          <View style={styles.shameBanner}>
+            <Ionicons name="snow" size={16} color="#38BDF8" />
+            <Text style={styles.shameTxt}>
+              Streak cassée par{' '}
+              <Text style={styles.shameNames}>{group.shameBreakers.map((b) => b.pseudo).join(', ')}</Text>
+              . Le groupe repart, à vous de jouer !
+            </Text>
+          </View>
+        )}
+
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !allDone }}
+          style={[styles.blockBtn, !allDone && styles.blockBtnOff]}
+          onPress={() => onCheckStreak(group._id)}
+          disabled={!allDone}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="flash" size={16} color={allDone ? '#fff' : Colors.textMuted} />
+          <Text style={[styles.primaryBtnTxt, !allDone && { color: Colors.textMuted }]}>Valider la streak du jour</Text>
+        </TouchableOpacity>
+        <Text style={styles.validateHint}>
+          {allDone
+            ? 'Tout le monde a fait sa séance : valide pour faire grimper la streak.'
+            : `En attente de : ${missing.join(', ')}.`}
+        </Text>
       </View>
 
-      {/* ── Hall of Shame : reste affiché jusqu'à la prochaine streak validée ── */}
-      {(group.shameBreakers ?? []).length > 0 && (
-        <View style={styles.shameBanner}>
-          <Ionicons name="snow" size={16} color="#38BDF8" />
-          <Text style={styles.shameTxt}>
-            Briseur{group.shameBreakers.length > 1 ? 's' : ''} de Streak actuel : {' '}
-            <Text style={styles.shameNames}>
-              {group.shameBreakers.map((b) => b.pseudo).join(', ')}
-            </Text>
-          </Text>
-        </View>
-      )}
+      {/* ── Membres ── */}
+      <SectionTitle title="Membres" count={`${memberCount}/${MAX_GROUP}`} />
+      <View style={styles.listCard}>
+        {members.map((m, i) => {
+          const isMe = !!myId && m._id === myId;
+          const w = WEATHER[m.weatherStatus] ?? WEATHER.sleeping;
+          const canShake = !isMe && (m.weatherStatus === 'ready' || m.weatherStatus === 'sleeping');
+          const shaken = (group.shakenTodayByMe ?? []).includes(m._id);
+          return (
+            <View key={m._id} style={[styles.listRow, i > 0 && styles.listRowBorder]}>
+              <UserAvatar user={m} size={42} />
+              <View style={{ flex: 1, marginLeft: 11 }}>
+                <Text style={styles.playerName} numberOfLines={1}>{isMe ? `${m.pseudo} (toi)` : m.pseudo}</Text>
+                <View style={styles.weatherLine}>
+                  <Ionicons name={w.icon} size={13} color={w.color} />
+                  <Text style={[styles.weatherTxt, { color: w.color }]} numberOfLines={1}>{w.label}</Text>
+                </View>
+              </View>
+              {canShake ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={shaken ? `${m.pseudo} déjà secoué aujourd'hui` : `Secouer ${m.pseudo}`}
+                  style={[styles.shakeBtn, shaken && styles.shakeBtnDone]}
+                  onPress={() => onShake(group._id, m._id, m.pseudo)}
+                  disabled={shaken}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.shakeTxt, shaken && { color: Colors.textMuted }]}>{shaken ? 'Secoué' : 'Secouer'}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
 
-      {/* ── Détail du multiplicateur d'XP ── */}
-      <View style={styles.multiplierCard}>
-        <View style={styles.multiplierHeader}>
-          <Ionicons name="trending-up" size={14} color={Colors.gold} />
-          <Text style={styles.multiplierTitle}>Multiplicateur d'XP</Text>
-          <Text style={styles.multiplierTotal}>×{xpBonus.multiplier.toFixed(2)}</Text>
-        </View>
-        <View style={styles.multiplierRow}>
-          <Ionicons name="people" size={13} color={Colors.textMuted} />
-          <Text style={styles.multiplierLabel}>Taille du groupe ({plural(memberCount, 'membre')})</Text>
-          <Text style={styles.multiplierValue}>×{xpBonus.sizeMultiplier.toFixed(2)}</Text>
-        </View>
-        <View style={styles.multiplierRow}>
-          <Ionicons name="calendar" size={13} color={Colors.textMuted} />
-          <Text style={styles.multiplierLabel}>Régularité ({plural(group.currentStreak ?? 0, 'jour')} de streak)</Text>
-          <Text style={styles.multiplierValue}>×{xpBonus.regularityMultiplier.toFixed(2)}</Text>
-        </View>
-
-        <TouchableOpacity accessibilityRole="button" style={styles.scaleToggle} onPress={() => setShowScale((v) => !v)} activeOpacity={0.75}>
-          <Text style={styles.scaleToggleTxt}>{showScale ? 'Masquer le barème' : 'Voir le barème complet'}</Text>
-          <Ionicons name={showScale ? 'chevron-up' : 'chevron-down'} size={13} color={Colors.gold} />
+      {/* ── Bonus d'XP ── */}
+      <View style={styles.card}>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityState={{ expanded: showDetail }}
+          style={styles.bonusHead}
+          onPress={() => setShowDetail((v) => !v)}
+          activeOpacity={0.8}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle}>Bonus d'XP du groupe</Text>
+            <Text style={styles.groupMeta}>Appliqué à la validation de la streak</Text>
+          </View>
+          <Text style={styles.bonusValue}>{fmtMult(xpBonus.multiplier)}</Text>
+          <Ionicons name={showDetail ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.textMuted} style={{ marginLeft: 8 }} />
         </TouchableOpacity>
 
-        {showScale && (
-          <View style={styles.scaleWrap}>
-            <View style={styles.scaleCol}>
-              <Text style={styles.scaleColTitle}>Taille</Text>
-              {SIZE_SCALE.map((row) => (
-                <View key={row.n} style={styles.scaleRow}>
-                  <Text style={styles.scaleRowLabel}>{row.n} {row.n > 1 ? 'membres' : 'membre'}</Text>
-                  <Text style={styles.scaleRowValue}>×{row.multiplier.toFixed(2)}</Text>
-                </View>
-              ))}
+        {showDetail && (
+          <View style={styles.bonusDetail}>
+            <View style={styles.bonusRow}>
+              <Text style={styles.bonusLabel}>Taille ({memberCount} membre{memberCount > 1 ? 's' : ''})</Text>
+              <Text style={styles.bonusRowValue}>{fmtMult(xpBonus.sizeMultiplier)}</Text>
             </View>
-            <View style={styles.scaleCol}>
-              <Text style={styles.scaleColTitle}>Régularité</Text>
-              {REGULARITY_SCALE.map((row) => (
-                <View key={row.days} style={styles.scaleRow}>
-                  <Text style={styles.scaleRowLabel}>{row.days === 0 ? '0 j' : `${row.days}+ j`}</Text>
-                  <Text style={styles.scaleRowValue}>×{row.multiplier.toFixed(2)}</Text>
-                </View>
-              ))}
+            <View style={styles.bonusRow}>
+              <Text style={styles.bonusLabel}>Régularité ({streak} jour{streak > 1 ? 's' : ''} de streak)</Text>
+              <Text style={styles.bonusRowValue}>{fmtMult(xpBonus.regularityMultiplier)}</Text>
+            </View>
+            <View style={styles.scaleWrap}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.scaleTitle}>Taille</Text>
+                {SIZE_SCALE.map((r) => (
+                  <View key={r.n} style={styles.scaleRow}>
+                    <Text style={[styles.scaleLabel, r.n === memberCount && styles.scaleActive]}>{r.n} membre{r.n > 1 ? 's' : ''}</Text>
+                    <Text style={[styles.scaleValue, r.n === memberCount && styles.scaleActive]}>{fmtMult(r.multiplier)}</Text>
+                  </View>
+                ))}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.scaleTitle}>Régularité</Text>
+                {REGULARITY_SCALE.map((r) => (
+                  <View key={r.days} style={styles.scaleRow}>
+                    <Text style={styles.scaleLabel}>{r.days === 0 ? '0 jour' : `${r.days}+ jours`}</Text>
+                    <Text style={styles.scaleValue}>{fmtMult(r.multiplier)}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
           </View>
         )}
       </View>
 
-      <Text style={styles.sectionLabel}>MEMBRES ({memberCount}/5)</Text>
-      {(group.members ?? []).map((m) => {
-        const isMe = myId && m._id === myId;
-        const alreadyShaken = (group.shakenTodayByMe ?? []).includes(m._id);
-        return (
-          <UserRow key={m._id} user={m}>
-            {!isMe && (
-              <TouchableOpacity accessibilityRole="button"
-                style={[styles.shakeBtn, alreadyShaken && styles.shakeBtnDisabled]}
-                onPress={() => onShake(group._id, m._id, m.pseudo)}
-                activeOpacity={alreadyShaken ? 1 : 0.8}
-                disabled={alreadyShaken}
-              >
-                <Ionicons name="warning" size={12} color={alreadyShaken ? Colors.textMuted : Colors.error} style={{ marginRight: 4 }} />
-                <Text style={[styles.shakeTxt, alreadyShaken && styles.shakeTxtDisabled]}>
-                  {alreadyShaken ? 'Secoué' : 'Secouer'}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </UserRow>
-        );
-      })}
-
-      <TouchableOpacity accessibilityRole="button" style={styles.ctaBtn} onPress={() => onCheckStreak(group._id)} activeOpacity={0.85}>
-        <Ionicons name="flash" size={16} color="#fff" style={{ marginRight: 7 }} />
-        <Text style={styles.ctaTxt}>Valider la streak du jour</Text>
+      <TouchableOpacity accessibilityRole="button" style={styles.leaveLink} onPress={() => onLeaveGroup(group._id)} activeOpacity={0.7}>
+        <Text style={styles.leaveLinkTxt}>Quitter le groupe</Text>
       </TouchableOpacity>
-
-      <TouchableOpacity accessibilityRole="button" style={styles.leaveBtn} onPress={() => onLeaveGroup(group._id)} activeOpacity={0.75}>
-        <Ionicons name="exit-outline" size={15} color={Colors.error} style={{ marginRight: 6 }} />
-        <Text style={styles.leaveBtnTxt}>Quitter le groupe</Text>
-      </TouchableOpacity>
-    </View>
+    </>
   );
 }
 
 // ═══ Composants partagés ══════════════════════════════════════════════════════
 
-function AnimatedRow({ index, children }) {
-  const slide = useRef(new Animated.Value(18)).current;
-  const fade  = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(slide, { toValue: 0, duration: 280, delay: index * 55, useNativeDriver: true }),
-      Animated.timing(fade,  { toValue: 1, duration: 280, delay: index * 55, useNativeDriver: true }),
-    ]).start();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+function SectionTitle({ title, count, action }) {
   return (
-    <Animated.View style={{ opacity: fade, transform: [{ translateY: slide }] }}>
-      {children}
-    </Animated.View>
+    <View style={styles.sectionHead}>
+      <Text style={styles.sectionTitle} accessibilityRole="header">
+        {title}
+        {count != null ? <Text style={styles.sectionCount}>{`  ${count}`}</Text> : null}
+      </Text>
+      {action ? (
+        <TouchableOpacity accessibilityRole="button" onPress={action.onPress} style={styles.sectionAction} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name={action.icon} size={14} color={Colors.primary} />
+          <Text style={styles.linkTxt}>{action.label}</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
   );
 }
 
-// Météo des séances : 4 états stricts remontés par le backend (getMyGroup)
-// dans `member.weatherStatus`. Affiché uniquement quand présent (les listes
-// amis/requêtes n'en portent pas — seuls les membres de groupe en ont un).
-const WEATHER_META = {
-  done:     { icon: 'checkmark-circle', color: Colors.valid, label: 'Séance validée' },
-  active:   { icon: 'flash',            color: '#FBBF24', label: 'Séance active' },
-  ready:    { icon: 'flame',            color: Colors.primary, label: 'Prêt' },
-  sleeping: { icon: 'moon',             color: Colors.textMuted, label: 'En sommeil' },
-};
-
-function UserRow({ user, subtitle, children }) {
-  const weather = user?.weatherStatus ? WEATHER_META[user.weatherStatus] : null;
+function PlayerLine({ user, meta, extra }) {
   return (
-    <View style={styles.userRow}>
-      <View style={styles.avatar}>
-        <Text style={styles.avatarTxt}>{(user?.pseudo ?? '?').charAt(0).toUpperCase()}</Text>
-        {weather && (
-          <View style={styles.weatherBadge} accessibilityLabel={weather.label}>
-            <Ionicons name={weather.icon} size={11} color={weather.color} />
-          </View>
-        )}
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.userPseudo} numberOfLines={1}>{user?.pseudo ?? '-'}</Text>
-        <Text style={styles.userMeta} numberOfLines={1}>
-          Nv. {user?.level ?? 1} · {user?.rank ?? 'Novice'}
-          {weather ? ` · ${weather.label}` : ''}
+    <View style={styles.playerLine}>
+      <UserAvatar user={user} size={44} />
+      <View style={{ flex: 1, marginLeft: 11 }}>
+        <Text style={styles.playerName} numberOfLines={1}>{user?.pseudo ?? '-'}</Text>
+        <Text style={styles.playerMeta} numberOfLines={1}>
+          {meta || `Niv. ${user?.level ?? 1} · ${user?.rank ?? 'Novice'}`}
         </Text>
-        {subtitle ? <Text style={styles.userFriendshipTitle} numberOfLines={1}>{subtitle}</Text> : null}
+        {extra}
       </View>
-      <View style={styles.userActions}>{children}</View>
     </View>
   );
 }
 
-function FriendshipHearts({ level }) {
+function Rule({ icon, text }) {
   return (
-    <View style={styles.hearts}>
-      {Array.from({ length: 5 }, (_, i) => (
-        <Ionicons
-          key={i}
-          name={i < level ? 'heart' : 'heart-outline'}
-          size={11}
-          color={i < level ? '#FF4D6D' : Colors.borderDim}
-          style={{ marginLeft: i === 0 ? 0 : 1 }}
-        />
-      ))}
+    <View style={styles.rule}>
+      <Ionicons name={icon} size={15} color={Colors.primary} style={{ marginTop: 2 }} />
+      <Text style={styles.ruleTxt}>{text}</Text>
     </View>
   );
 }
 
-function SmallBtn({ label, icon, color, onPress, accessibilityLabel }) {
+function Pill({ label, active, onPress }) {
   return (
     <TouchableOpacity
-      style={[styles.smallBtn, { backgroundColor: `${color}1A`, borderColor: `${color}55` }]}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      style={[styles.pill, active && styles.pillActive]}
       onPress={onPress}
       activeOpacity={0.8}
-      hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel || label}
     >
-      <Ionicons name={icon} size={14} color={color} />
-      {label ? <Text style={[styles.smallBtnTxt, { color }]}>{label}</Text> : null}
+      <Text style={[styles.pillTxt, active && styles.pillTxtActive]}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function SubPill({ label, active, onPress }) {
+  return (
+    <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      style={[styles.subPill, active && styles.subPillActive]}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
+      <Text style={[styles.subPillTxt, active && styles.subPillTxtActive]} numberOfLines={1}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -960,243 +1126,231 @@ function SmallBtn({ label, icon, color, onPress, accessibilityLabel }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.bgAbyss },
-  title: {
-    color: Colors.textPrimary, fontSize: 26, fontWeight: '800',
-    letterSpacing: -0.5, paddingHorizontal: 16, paddingBottom: 14,
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 14 },
+  title: { flex: 1, color: Colors.textPrimary, fontSize: 28, fontWeight: '900', letterSpacing: -0.5 },
+  headerBtn: {
+    width: 42, height: 42, borderRadius: 21,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.cardDeep, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
   },
   loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   content: { paddingHorizontal: 16 },
+  pressed: { opacity: 0.75 },
 
-  // ── Segments ──
+  // ── Segments (neutres, comme Stats) ──
   segmentRow: {
-    flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 14,
+    flexDirection: 'row', marginHorizontal: 16, marginBottom: 16, padding: 4,
+    borderRadius: 14, backgroundColor: Colors.cardDeep,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
   },
   segmentBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 5, height: 38, borderRadius: 11,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
+    gap: 6, height: 40, borderRadius: 10,
   },
-  segmentBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  segmentTxt:       { color: Colors.textMuted, fontSize: 12.5, fontWeight: '700' },
-  segmentTxtActive: { color: '#fff' },
+  segmentBtnActive: { backgroundColor: 'rgba(255,255,255,0.10)' },
+  segmentTxt:       { color: Colors.textSecondary, fontSize: 15, fontWeight: '600' },
+  segmentTxtActive: { color: Colors.textPrimary, fontWeight: '800' },
   badge: {
-    backgroundColor: Colors.error, borderRadius: 9, minWidth: 17, height: 17,
-    justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4,
+    backgroundColor: Colors.primary, borderRadius: 10, minWidth: 20, height: 20,
+    justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5,
   },
-  badgeTxt: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  badgeTxt: { color: '#fff', fontSize: 12, fontWeight: '800' },
 
-  sectionLabel: {
-    color: Colors.textMuted, fontSize: 11, fontWeight: '700',
-    letterSpacing: 0.8, marginTop: 20, marginBottom: 8, marginLeft: 4,
+  errorBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    padding: 12, borderRadius: 14, marginBottom: 12,
+    backgroundColor: 'rgba(245,158,11,0.08)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.25)',
   },
+  errorTxt: { flex: 1, color: Colors.textSecondary, fontSize: 13.5, lineHeight: 19 },
 
-  // ── Ajout d'ami ──
-  addFriendBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: Colors.primary,
-    borderRadius: 13, height: 48, marginBottom: 4,
-    shadowColor: Colors.primary, shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35, shadowRadius: 10, elevation: 5,
+  // ── Cartes ──
+  card: {
+    backgroundColor: Colors.cardDeep, borderRadius: 18, padding: 16, marginBottom: 12,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
   },
-  addFriendBtnTxt: { color: '#fff', fontSize: 14.5, fontWeight: '700' },
-  sentTagRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 8 },
-  sentTag:    { color: Colors.textMuted, fontSize: 12, fontWeight: '600' },
+  cardTitle: { color: Colors.textPrimary, fontSize: 17, fontWeight: '800' },
+  listCard: {
+    backgroundColor: Colors.cardDeep, borderRadius: 18, marginBottom: 12, overflow: 'hidden',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+  },
+  listRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, minHeight: 64 },
+  listRowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.08)' },
+  meRow: { backgroundColor: 'rgba(254,116,57,0.07)' },
 
-  // ── Lignes utilisateur ──
-  userRow: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.cardDeep,
-    borderWidth: 1, borderColor: Colors.borderSubtle,
-    borderRadius: 14, padding: 12, marginBottom: 8,
+  sectionHead: { flexDirection: 'row', alignItems: 'center', marginTop: 12, marginBottom: 10 },
+  sectionTitle: { flex: 1, color: Colors.textPrimary, fontSize: 17, fontWeight: '800' },
+  sectionCount: { color: Colors.textMuted, fontSize: 15, fontWeight: '700' },
+  sectionAction: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  linkTxt: { color: Colors.primary, fontSize: 14, fontWeight: '700' },
+  caption: { color: Colors.textMuted, fontSize: 13, lineHeight: 18, marginBottom: 14 },
+
+  // ── Joueur ──
+  playerLine: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  playerName: { color: Colors.textPrimary, fontSize: 15.5, fontWeight: '700' },
+  playerMeta: { color: Colors.textSecondary, fontSize: 13, marginTop: 2 },
+  friendshipLine: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
+  friendshipTxt: { color: Colors.textMuted, fontSize: 12.5, fontWeight: '600', flexShrink: 1 },
+
+  // ── Boutons ──
+  primaryBtn: {
+    flex: 1, flexDirection: 'row', gap: 7, height: 44, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primary,
   },
-  avatar: {
-    width: 40, height: 40, borderRadius: 12,
+  primaryBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  ghostBtn: {
+    flex: 1, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
+  },
+  ghostBtnTxt: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
+  blockBtn: {
+    flexDirection: 'row', gap: 7, alignSelf: 'stretch', height: 50, borderRadius: 14, marginTop: 16,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primary,
+  },
+  blockBtnOff: { backgroundColor: 'rgba(255,255,255,0.06)' },
+  requestBtns: { flexDirection: 'row', gap: 10, marginTop: 14 },
+
+  // ── Invitation en direct (Multi, groupe) ──
+  liveCard: {
+    borderRadius: 18, padding: 16, marginBottom: 12,
+    backgroundColor: 'rgba(254,116,57,0.08)', borderWidth: 1, borderColor: 'rgba(254,116,57,0.35)',
+  },
+  liveHead: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 6 },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.primary },
+  liveKicker: { color: Colors.primary, fontSize: 13, fontWeight: '800' },
+  liveTitle: { color: Colors.textPrimary, fontSize: 16, fontWeight: '800', lineHeight: 21 },
+  liveMeta: { color: Colors.textSecondary, fontSize: 13.5, marginTop: 4 },
+  liveBtns: { flexDirection: 'row', gap: 10, marginTop: 14 },
+
+  // ── Multi ──
+  multiCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    padding: 14, borderRadius: 18, marginBottom: 12,
+    backgroundColor: Colors.cardDeep, borderWidth: 1, borderColor: 'rgba(254,116,57,0.30)',
+  },
+  multiIcon: {
+    width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(254,116,57,0.14)',
-    justifyContent: 'center', alignItems: 'center', marginRight: 11,
   },
-  avatarTxt:  { color: Colors.primary, fontSize: 16, fontWeight: '800' },
-  weatherBadge: {
-    position: 'absolute', bottom: -4, right: -4,
-    width: 18, height: 18, borderRadius: 9,
-    backgroundColor: Colors.cardDeep,
-    borderWidth: 1.5, borderColor: Colors.background,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  userPseudo: { color: Colors.textPrimary, fontSize: 14, fontWeight: '700' },
-  userMeta:   { color: Colors.textMuted, fontSize: 11.5, marginTop: 1 },
-  userFriendshipTitle: { color: Colors.primary, fontSize: 10.5, fontWeight: '700', marginTop: 2 },
-  userActions:{ flexDirection: 'row', alignItems: 'center', gap: 6 },
-  hearts:     { flexDirection: 'row', alignItems: 'center' },
+  multiTitle: { color: Colors.textPrimary, fontSize: 16, fontWeight: '800' },
+  multiSub: { color: Colors.textSecondary, fontSize: 13.5, lineHeight: 18, marginTop: 2 },
 
-  smallBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    borderWidth: 1, borderRadius: 9, paddingHorizontal: 10, height: 32,
+  // ── États vides ──
+  emptyCard: { alignItems: 'center', paddingVertical: 26, paddingHorizontal: 20 },
+  emptyIcon: {
+    width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(254,116,57,0.14)', marginBottom: 12,
   },
-  smallBtnTxt: { fontSize: 12, fontWeight: '700' },
+  emptyTitle: { color: Colors.textPrimary, fontSize: 18, fontWeight: '800', textAlign: 'center' },
+  emptyBody: { color: Colors.textSecondary, fontSize: 14.5, lineHeight: 21, textAlign: 'center', marginTop: 8 },
+  emptyBtn: { flex: 0, alignSelf: 'stretch', height: 48, marginTop: 18 },
+  tagRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14, paddingVertical: 6 },
+  tagLabel: { color: Colors.textMuted, fontSize: 14 },
+  tagValue: { color: Colors.textPrimary, fontSize: 14, fontWeight: '800' },
+  emptyCardSmall: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  emptyBodySmall: { flex: 1, color: Colors.textSecondary, fontSize: 14, lineHeight: 20 },
+  emptySmall: { color: Colors.textMuted, fontSize: 14, marginTop: 8, textAlign: 'center' },
+  inlineLoading: { paddingVertical: 30, alignItems: 'center' },
 
-  // ── Podium ──
-  podiumRow: {
-    flexDirection: 'row', alignItems: 'flex-end', gap: 10,
-    marginTop: 18, marginBottom: 6, paddingHorizontal: 8,
-  },
-  podiumCol:    { flex: 1, alignItems: 'center' },
-  podiumPseudo: { color: Colors.textPrimary, fontSize: 12.5, fontWeight: '700', marginBottom: 2 },
-  podiumXp:     { fontSize: 11, fontWeight: '800', marginBottom: 6 },
-  podiumBar: {
-    width: '100%', borderRadius: 12, borderWidth: 1,
-    justifyContent: 'flex-start', alignItems: 'center', paddingTop: 8,
-  },
-  podiumMedal: { alignItems: 'center', justifyContent: 'center' },
-
-  boardRow: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.cardDeep,
-    borderWidth: 1, borderColor: Colors.borderSubtle,
-    borderRadius: 12, paddingHorizontal: 14, height: 46, marginBottom: 7,
-  },
-  boardRowMe:  { borderColor: 'rgba(254,116,57,0.45)', backgroundColor: 'rgba(254,116,57,0.06)' },
-  boardPos:    { width: 36 },
-  boardPosTxt: { color: Colors.textPrimary, fontSize: 13, fontWeight: '800' },
-  boardPseudo: { flex: 1, color: Colors.textPrimary, fontSize: 13.5, fontWeight: '600' },
-  boardXp:     { color: Colors.textSecondary, fontSize: 12.5, fontWeight: '700' },
-  boardKg:     { color: Colors.primary, fontSize: 13.5, fontWeight: '800' },
-  boardReps:   { color: Colors.textMuted, fontSize: 11.5, fontWeight: '600', marginLeft: 4, width: 34 },
-
-  // ── Bascule XP / Records ──
-  modeRow: { flexDirection: 'row', gap: 8, marginTop: 4, marginBottom: 4 },
-  modeBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 5, height: 34, borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
-  },
-  modeBtnActive: { backgroundColor: Colors.secondaryAccent, borderColor: Colors.secondaryAccent },
-  modeTxt:       { color: Colors.textMuted, fontSize: 12, fontWeight: '700' },
-  modeTxtActive: { color: '#fff' },
-
-  // ── Chips d'exercices ──
-  exoChipRow: { gap: 6, paddingVertical: 10, paddingRight: 4 },
-  exoChip: {
-    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
+  // ── Classement ──
+  pillRow: {
+    flexDirection: 'row', padding: 4, borderRadius: 12, marginBottom: 12,
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  exoChipActive:    { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  exoChipMore:      { flexDirection: 'row', alignItems: 'center', borderColor: `${Colors.primary}50`, backgroundColor: `${Colors.primary}12` },
-  exoChipTxt:       { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' },
-  exoChipTxtActive: { color: '#fff' },
-  recordsLoading:   { paddingVertical: 30, alignItems: 'center' },
+  pill: { flex: 1, height: 36, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  pillActive: { backgroundColor: 'rgba(255,255,255,0.10)' },
+  pillTxt: { color: Colors.textSecondary, fontSize: 14, fontWeight: '600' },
+  pillTxtActive: { color: Colors.textPrimary, fontWeight: '800' },
+  subPillRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  subPill: {
+    height: 36, paddingHorizontal: 14, borderRadius: 18, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)',
+  },
+  subPillActive: { backgroundColor: `${Colors.primary}1F`, borderColor: `${Colors.primary}80` },
+  subPillTxt: { color: Colors.textSecondary, fontSize: 14, fontWeight: '600' },
+  subPillTxtActive: { color: Colors.primary, fontWeight: '800' },
+
+  podiumRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginBottom: 14 },
+  podiumCol: { flex: 1, alignItems: 'center' },
+  podiumPseudo: { color: Colors.textPrimary, fontSize: 14.5, fontWeight: '800', marginTop: 6 },
+  podiumXp: { color: Colors.textSecondary, fontSize: 13, fontWeight: '700', marginTop: 1, marginBottom: 8, fontVariant: ['tabular-nums'] },
+  podiumBar: {
+    width: '100%', borderTopLeftRadius: 12, borderTopRightRadius: 12, borderWidth: 1, borderBottomWidth: 0,
+    alignItems: 'center', paddingTop: 8,
+  },
+  podiumPos: { fontSize: 22, fontWeight: '900' },
+
+  boardPos: { width: 26, color: Colors.textMuted, fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  boardPseudo: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
+  boardSub: { color: Colors.textMuted, fontSize: 12.5, marginTop: 1 },
+  boardValue: { color: Colors.textPrimary, fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'] },
+
+  exercisePicker: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    height: 50, paddingHorizontal: 14, borderRadius: 14, marginBottom: 4,
+    backgroundColor: Colors.cardDeep, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  exercisePickerTxt: { flex: 1, color: Colors.textPrimary, fontSize: 15.5, fontWeight: '700' },
+  exoChipRow: { gap: 8, paddingVertical: 10, paddingRight: 4 },
 
   // ── Groupe ──
-  inviteCard: {
-    backgroundColor: 'rgba(254,116,57,0.07)',
-    borderWidth: 1, borderColor: 'rgba(254,116,57,0.30)',
-    borderRadius: 14, padding: 14, marginBottom: 10,
+  groupIntroHead: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  flameBox: {
+    width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(254,116,57,0.14)',
   },
-  inviteTxtRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  inviteTxt:  { flex: 1, color: Colors.textPrimary, fontSize: 13.5, lineHeight: 19 },
-  inviteBtns: { flexDirection: 'row', gap: 8 },
+  rule: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  ruleTxt: { flex: 1, color: Colors.textSecondary, fontSize: 14, lineHeight: 20 },
+  input: {
+    height: 50, borderRadius: 14, paddingHorizontal: 14,
+    backgroundColor: Colors.cardDeep, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+    color: Colors.textPrimary, fontSize: 15.5,
+  },
 
-  groupCard: {
-    backgroundColor: Colors.cardDeep,
-    borderWidth: 1, borderColor: Colors.borderSubtle,
-    borderRadius: 18, padding: 16, marginTop: 6,
-  },
-  groupHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  groupFlameWrap: {
-    width: 52, height: 52, borderRadius: 16,
-    backgroundColor: 'rgba(254,116,57,0.12)',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  groupName:   { color: Colors.textPrimary, fontSize: 16, fontWeight: '800' },
-  groupStreak: { color: Colors.textSecondary, fontSize: 12.5, marginTop: 3 },
+  groupHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  groupMeta: { color: Colors.textSecondary, fontSize: 13, marginTop: 2 },
+  streakBox: { alignItems: 'center', minWidth: 56 },
+  streakValue: { color: Colors.primary, fontSize: 28, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  streakLabel: { color: Colors.textSecondary, fontSize: 12.5, fontWeight: '700', marginTop: -2 },
 
-  // ── Hall of Shame ──
+  todayBlock: { marginTop: 16 },
+  todayHead: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  todayTitle: { color: Colors.textPrimary, fontSize: 14.5, fontWeight: '700' },
+  todayCount: { color: Colors.textSecondary, fontSize: 14, fontWeight: '600' },
+  todayTrack: { flexDirection: 'row', gap: 4 },
+  todaySeg: { flex: 1, height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.08)' },
+  todaySegDone: { backgroundColor: Colors.valid },
+  validateHint: { color: Colors.textMuted, fontSize: 13, textAlign: 'center', marginTop: 8, lineHeight: 18 },
+
   shameBanner: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    backgroundColor: 'rgba(56,189,248,0.10)',
-    borderWidth:     1,
-    borderColor:     'rgba(56,189,248,0.35)',
-    borderRadius:    12,
-    padding:         10,
-    marginTop:       12,
-    gap:             8,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: 'rgba(56,189,248,0.08)', borderWidth: 1, borderColor: 'rgba(56,189,248,0.30)',
+    borderRadius: 12, padding: 10, marginTop: 14,
   },
-  shameTxt:   { color: Colors.textSecondary, fontSize: 12.5, flex: 1, lineHeight: 18 },
+  shameTxt: { flex: 1, color: Colors.textSecondary, fontSize: 13.5, lineHeight: 19 },
   shameNames: { color: '#38BDF8', fontWeight: '800' },
 
-  // ── Détail multiplicateur ──
-  multiplierCard: {
-    backgroundColor: 'rgba(255,215,0,0.05)',
-    borderWidth: 1, borderColor: 'rgba(255,215,0,0.18)',
-    borderRadius: 14, padding: 12, marginTop: 14,
-  },
-  multiplierHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-  multiplierTitle:  { flex: 1, color: Colors.textPrimary, fontSize: 12.5, fontWeight: '700' },
-  multiplierTotal:  { color: Colors.gold, fontSize: 14, fontWeight: '800' },
-  multiplierRow:    { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  multiplierLabel:  { flex: 1, color: Colors.textMuted, fontSize: 11.5 },
-  multiplierValue:  { color: Colors.textSecondary, fontSize: 11.5, fontWeight: '700' },
-
-  scaleToggle: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-    marginTop: 10, paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,215,0,0.18)',
-  },
-  scaleToggleTxt: { color: Colors.gold, fontSize: 11.5, fontWeight: '700' },
-  scaleWrap: { flexDirection: 'row', gap: 14, marginTop: 12 },
-  scaleCol:  { flex: 1 },
-  scaleColTitle: {
-    color: Colors.textMuted, fontSize: 10.5, fontWeight: '800',
-    letterSpacing: 0.6, marginBottom: 6,
-  },
-  scaleRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingVertical: 3,
-  },
-  scaleRowLabel: { color: Colors.textSecondary, fontSize: 11.5 },
-  scaleRowValue: { color: Colors.textPrimary, fontSize: 11.5, fontWeight: '700' },
-
+  weatherLine: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 3 },
+  weatherTxt: { fontSize: 13, fontWeight: '600', flexShrink: 1 },
   shakeBtn: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(255,77,77,0.10)',
-    borderWidth: 1, borderColor: 'rgba(255,77,77,0.40)',
-    borderRadius: 9, paddingHorizontal: 10, height: 32, justifyContent: 'center',
+    height: 36, paddingHorizontal: 14, borderRadius: 18, justifyContent: 'center',
+    backgroundColor: 'rgba(254,116,57,0.12)', borderWidth: 1, borderColor: 'rgba(254,116,57,0.40)',
   },
-  shakeBtnDisabled: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderColor: Colors.borderSubtle,
-  },
-  shakeTxt: { color: Colors.error, fontSize: 11.5, fontWeight: '800' },
-  shakeTxtDisabled: { color: Colors.textMuted },
+  shakeBtnDone: { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.10)' },
+  shakeTxt: { color: Colors.primary, fontSize: 14, fontWeight: '800' },
 
-  leaveBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    height: 42, borderRadius: 13, marginTop: 10,
-    borderWidth: 1, borderColor: 'rgba(255,77,77,0.30)',
-  },
-  leaveBtnTxt: { color: Colors.error, fontSize: 13, fontWeight: '700' },
+  bonusHead: { flexDirection: 'row', alignItems: 'center' },
+  bonusValue: { color: Colors.gold, fontSize: 20, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  bonusDetail: { marginTop: 14, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.08)' },
+  bonusRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+  bonusLabel: { color: Colors.textSecondary, fontSize: 14 },
+  bonusRowValue: { color: Colors.textPrimary, fontSize: 14, fontWeight: '800' },
+  scaleWrap: { flexDirection: 'row', gap: 16, marginTop: 12 },
+  scaleTitle: { color: Colors.textMuted, fontSize: 13, fontWeight: '700', marginBottom: 6 },
+  scaleRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
+  scaleLabel: { color: Colors.textSecondary, fontSize: 13 },
+  scaleValue: { color: Colors.textPrimary, fontSize: 13, fontWeight: '700' },
+  scaleActive: { color: Colors.gold, fontWeight: '800' },
 
-  selectRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: Colors.cardDeep,
-    borderWidth: 1, borderColor: Colors.borderSubtle,
-    borderRadius: 12, padding: 12, marginBottom: 9,
-  },
-  selectRowActive: { borderColor: 'rgba(254,116,57,0.45)' },
-  selectPseudo:    { flex: 1, color: Colors.textPrimary, fontSize: 13.5, fontWeight: '600' },
-  selectLevel:     { color: Colors.textMuted, fontSize: 12 },
-
-  ctaBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: Colors.primary, borderRadius: 13, height: 48, marginTop: 14,
-  },
-  ctaTxt: { color: '#fff', fontSize: 14, fontWeight: '800' },
-
-  // ── Vide ──
-  emptyBox:   { alignItems: 'center', paddingVertical: 36 },
-  emptyTxt:   { color: Colors.textMuted, fontSize: 13, lineHeight: 20, textAlign: 'center' },
-  emptySmall: { color: Colors.textMuted, fontSize: 12.5, marginTop: 8, marginLeft: 4 },
+  leaveLink: { alignSelf: 'center', paddingVertical: 14, paddingHorizontal: 20, marginTop: 4 },
+  leaveLinkTxt: { color: Colors.error, fontSize: 14.5, fontWeight: '700' },
 });

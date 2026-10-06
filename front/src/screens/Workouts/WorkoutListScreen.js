@@ -131,19 +131,30 @@ export default function WorkoutListScreen({ navigation, route }) {
   // ─── Lancement en Multi (Section VII) ────────────────────────────────────
   const [multiLobbyVisible, setMultiLobbyVisible] = useState(false);
   // Non-null uniquement quand on arrive en rejoignant une invitation reçue
-  // (voir LobbyInviteCheck) — sinon MultiLobbyModal crée un lobby neuf.
+  // (voir LobbyInviteCheck / écran Social) — sinon MultiLobbyModal crée un lobby neuf.
   const [existingLobbyId, setExistingLobbyId] = useState(null);
+  // Séance pré-choisie dans le salon (« Lancer en Multi » depuis une séance).
+  const [multiWorkoutKey, setMultiWorkoutKey] = useState(null);
 
-  // Invitation acceptée depuis la notification (LobbyInviteCheck → navigate) :
-  // ouvre directement MultiLobbyModal en mode "rejoindre" au lieu du parcours
-  // normal (choisir une séance → Lancer en Multi).
+  // Invitation acceptée (popup, notification, écran Social) : ouvre directement
+  // le salon en mode « rejoindre » ; chacun y choisit sa propre séance.
   useEffect(() => {
     const pendingLobbyId = route?.params?.pendingLobbyId;
     if (!pendingLobbyId) return;
     setExistingLobbyId(pendingLobbyId);
+    setMultiWorkoutKey(null);
     setMultiLobbyVisible(true);
     navigation?.setParams({ pendingLobbyId: undefined });
   }, [route?.params?.pendingLobbyId, navigation]);
+
+  // « S'entraîner ensemble » depuis l'écran Social : nouveau salon.
+  useEffect(() => {
+    if (!route?.params?.openMulti) return;
+    setExistingLobbyId(null);
+    setMultiWorkoutKey(null);
+    setMultiLobbyVisible(true);
+    navigation?.setParams({ openMulti: undefined });
+  }, [route?.params?.openMulti, navigation]);
 
   const [deleteSavedTarget, setDeleteSavedTarget] = useState(null);
   const [actionSheetTarget, setActionSheetTarget] = useState(null);
@@ -212,32 +223,45 @@ export default function WorkoutListScreen({ navigation, route }) {
 
   const handleCancelConfirm = useCallback(() => setConfirmItem(null), []);
 
-  // "Lancer en Multi" — garde confirmItem pour savoir quelle séance
-  // instancier une fois le lobby actif (voir MultiLobbyModal → onReady).
-  const handleLaunchMulti = useCallback(() => {
+  // Séances proposées dans le salon Multi : les miennes puis les modèles.
+  const multiOptions = [
+    ...(savedWorkouts || []).map((sw) => ({
+      key: `s:${sw.id}`, name: sw.name || 'Séance', meta: plural((sw.exercises || []).length, 'exercice'), type: 'saved', data: sw,
+    })),
+    ...TEMPLATES.map((t) => ({
+      key: `t:${t.id}`, name: t.name, meta: t.description || plural(t.buildExercises().length, 'exercice'), type: 'template', data: t,
+    })),
+  ];
+
+  // Bouton « Séance Multi » de l'en-tête : salon neuf, séance à choisir dedans.
+  const openMulti = useCallback(() => {
     setExistingLobbyId(null);
+    setMultiWorkoutKey(null);
     setMultiLobbyVisible(true);
   }, []);
 
-  const handleMultiReady = useCallback((lobbyId) => {
+  // « Lancer en Multi » depuis la confirmation : la séance choisie est reprise.
+  const handleLaunchMulti = useCallback(() => {
+    if (confirmItem) {
+      setMultiWorkoutKey(`${confirmItem.type === 'template' ? 't' : 's'}:${confirmItem.data.id}`);
+    }
+    setConfirmItem(null);
+    setExistingLobbyId(null);
+    setMultiLobbyVisible(true);
+  }, [confirmItem]);
+
+  // Tout le monde est prêt : chacun lance SA séance (séries gérées en local).
+  const handleMultiReady = useCallback((lobbyId, workoutKey) => {
     setMultiLobbyVisible(false);
     setExistingLobbyId(null);
     if (!navigation) return;
-    // Cas normal : une séance a été choisie avant "Lancer en Multi". Cas
-    // invitation acceptée (pas de confirmItem, on a rejoint via notification) :
-    // on instancie un template par défaut — chacun gère ses propres
-    // séries/poids côté client, la séance en elle-même n'a pas besoin d'être
-    // identique entre les membres.
-    const workout = !confirmItem
-      ? instantiateWorkout(TEMPLATES[0])
-      : confirmItem.type === 'template'
-        ? instantiateWorkout(confirmItem.data)
-        : instantiateSavedWorkout(confirmItem.data);
+    const option = multiOptions.find((o) => o.key === workoutKey) || multiOptions.find((o) => o.type === 'template');
+    const workout = option.type === 'template' ? instantiateWorkout(option.data) : instantiateSavedWorkout(option.data);
     if (!workout) return;
     loadWorkout(workout);
     navigation.navigate('Workout', { workout, lobbyId });
-    setConfirmItem(null);
-  }, [confirmItem, navigation, loadWorkout]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation, loadWorkout, savedWorkouts]);
 
   const onLongPressSaved = useCallback((saved) => setActionSheetTarget(saved), []);
 
@@ -365,6 +389,15 @@ export default function WorkoutListScreen({ navigation, route }) {
         <View style={styles.headerActions} ref={headerActionsRef} onLayout={onHeaderActionsLayout} collapsable={false}>
           <TouchableOpacity accessibilityRole="button"
             style={styles.iconBtn}
+            onPress={openMulti}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Séance Multi avec des amis"
+          >
+            <Ionicons name="people-outline" size={22} color={Colors.textPrimary} />
+          </TouchableOpacity>
+          <TouchableOpacity accessibilityRole="button"
+            style={styles.iconBtn}
             onPress={onOpenCustomList}
             activeOpacity={0.8}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -438,6 +471,8 @@ export default function WorkoutListScreen({ navigation, route }) {
       <MultiLobbyModal
         visible={multiLobbyVisible}
         existingLobbyId={existingLobbyId}
+        workoutOptions={multiOptions}
+        initialWorkoutKey={multiWorkoutKey}
         onClose={() => { setMultiLobbyVisible(false); setExistingLobbyId(null); }}
         onReady={handleMultiReady}
       />
