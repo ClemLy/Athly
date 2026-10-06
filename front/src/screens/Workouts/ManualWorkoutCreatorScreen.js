@@ -453,6 +453,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
     marginTop: 12,
     paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -461,12 +462,15 @@ const styles = StyleSheet.create({
   targetField: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 1,
+    minWidth: 0,
   },
   targetLabel: {
     color: Colors.textSecondary,
     fontSize: 12,
     fontWeight: '600',
-    marginRight: 10,
+    marginRight: 8,
+    flexShrink: 1,
   },
   stepper: {
     flexDirection: 'row',
@@ -494,10 +498,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     textAlign: 'center',
-    paddingVertical: 6,
+    paddingVertical: 0,
     paddingHorizontal: 0,
     borderRadius: 10,
-    minWidth: 56,
+    width: 56,
+    height: 32,
   },
 
   addBtn: {
