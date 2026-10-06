@@ -4,143 +4,149 @@ import { LineChart } from 'react-native-chart-kit';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { useChartWidth } from '../../hooks/useChartWidth';
+import { shortDate } from '../../services/periodStats';
 
 // ─── WeightProgressChart ──────────────────────────────────────────────────────
-// Double courbe (Section VI) : poids réel (ligne pleine) + objectif (ligne
-// horizontale en pointillés, si `goal` est renseigné), avec un indicateur du
-// delta restant.
+// L'essentiel d'abord, en clair : poids actuel, évolution depuis la première
+// pesée et chemin restant jusqu'à l'objectif. La courbe (poids réel + objectif
+// en pointillés) vient ensuite pour qui veut le détail.
 //
 // `history` : Array<{ weight: number, date: string|Date }> — triée
 // chronologiquement (voir weight.service.js → getWeightHistory).
 // `goal`    : number | null — `poidsCible` du profil utilisateur.
 
-function formatDate(d) {
-  const dt = new Date(d);
-  return `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}`;
-}
+const kg = (n) => `${String(Math.round(Number(n) * 10) / 10).replace('.', ',')} kg`;
 
-export default function WeightProgressChart({ history = [], goal = null, height = 200 }) {
-  const chartW = useChartWidth(72, 220);
+export default function WeightProgressChart({ history = [], goal = null, height = 180 }) {
+  const chartW = useChartWidth(64, 220);
 
-  const { labels, weights, hasData, currentWeight } = useMemo(() => {
-    const arr = (Array.isArray(history) ? history : []).filter((p) => p && Number(p.weight) > 0);
-    if (arr.length === 0) return { labels: [], weights: [], hasData: false, currentWeight: null };
+  const points = useMemo(
+    () => (Array.isArray(history) ? history : [])
+      .filter((p) => p && Number(p.weight) > 0 && !Number.isNaN(new Date(p.date).getTime()))
+      .map((p) => ({ weight: Number(p.weight), date: new Date(p.date) })),
+    [history],
+  );
 
-    const lbls = arr.map((p, i) => {
-      if (i === 0 || i === arr.length - 1 || i === Math.floor(arr.length / 2)) return formatDate(p.date);
-      return '';
-    });
-    const values = arr.map((p) => Number(p.weight));
-    return { labels: lbls, weights: values, hasData: true, currentWeight: values[values.length - 1] };
-  }, [history]);
-
-  if (!hasData) {
+  if (points.length === 0) {
     return (
-      <View style={[styles.empty, { minHeight: height }]}>
-        <Ionicons name="scale-outline" size={30} color={Colors.textMuted} style={{ marginBottom: 10 }} />
+      <View style={[styles.empty, { minHeight: 150 }]}>
+        <Ionicons name="scale-outline" size={28} color={Colors.textMuted} style={{ marginBottom: 10 }} />
         <Text style={styles.emptyText}>Aucune pesée enregistrée</Text>
-        <Text style={styles.emptyHint}>Ajoute ton poids pour voir ta courbe apparaître ici.</Text>
+        <Text style={styles.emptyHint}>Ajoute ton poids pour suivre ton évolution.</Text>
       </View>
     );
   }
 
-  // chart-kit gère mal un seul point : on duplique pour éviter un crash visuel.
-  const weightData = weights.length === 1 ? [weights[0], weights[0]] : weights;
-  const lbls = weights.length === 1 ? [labels[0] || '', labels[0] || ''] : labels;
+  const first = points[0];
+  const last = points[points.length - 1];
+  const change = Math.round((last.weight - first.weight) * 10) / 10;
+  const hasGoal = Number(goal) > 0;
+  const remaining = hasGoal ? Math.round(Math.abs(last.weight - goal) * 10) / 10 : null;
+  const atGoal = hasGoal && remaining < 0.1;
+  // Va dans le bon sens si l'écart à l'objectif s'est réduit depuis la 1re pesée.
+  const towardGoal = hasGoal && Math.abs(last.weight - goal) < Math.abs(first.weight - goal);
+  const progress = hasGoal && first.weight !== goal
+    ? Math.min(1, Math.max(0, (first.weight - last.weight) / (first.weight - goal)))
+    : atGoal ? 1 : 0;
 
-  const datasets = [{ data: weightData, color: () => Colors.primary, strokeWidth: 3 }];
-  if (goal) {
-    datasets.push({
-      data: weightData.map(() => goal),
-      color: () => Colors.gold,
-      strokeWidth: 2,
-      strokeDashArray: [6, 4],
-      withDots: false,
-    });
+  const now = new Date();
+  const labels = points.map((p, i) => (
+    i === 0 || i === points.length - 1 || i === Math.floor(points.length / 2) ? shortDate(p.date) : ''
+  ));
+  // chart-kit gère mal un seul point : on le duplique.
+  const data = points.length === 1 ? [last.weight, last.weight] : points.map((p) => p.weight);
+  const lbls = points.length === 1 ? [labels[0], ''] : labels;
+  const datasets = [{ data, color: () => Colors.primary, strokeWidth: 3 }];
+  if (hasGoal) {
+    datasets.push({ data: data.map(() => Number(goal)), color: () => Colors.gold, strokeWidth: 2, strokeDashArray: [6, 5], withDots: false });
   }
 
-  const delta = goal ? currentWeight - goal : null;
-  const atGoal = delta !== null && Math.abs(delta) < 0.1;
-
   return (
-    <View style={styles.wrap}>
-      <LineChart
-        data={{ labels: lbls, datasets }}
-        width={chartW}
-        height={height}
-        bezier
-        withInnerLines={false}
-        withOuterLines={false}
-        withVerticalLabels
-        withHorizontalLabels
-        fromZero={false}
-        segments={4}
-        yAxisSuffix="kg"
-        chartConfig={CHART_CONFIG}
-        style={styles.chart}
-      />
-
-      {goal != null && (
-        <View style={styles.deltaRow}>
-          <Ionicons name={atGoal ? 'checkmark-circle' : 'flag'} size={15} color={atGoal ? Colors.success : Colors.gold} />
-          <Text style={styles.deltaTxt}>
-            {atGoal
-              ? 'Objectif de poids atteint !'
-              : `Plus que ${Math.abs(delta).toFixed(1)} kg avant ton objectif !`}
-          </Text>
+    <View>
+      {/* ── Résumé ── */}
+      <View style={styles.summary}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.current}>{kg(last.weight)}</Text>
+          <Text style={styles.caption}>Dernière pesée le {shortDate(last.date, now)}</Text>
         </View>
-      )}
+        {points.length > 1 ? (
+          <View style={styles.changeBox}>
+            <Text style={[styles.change, { color: towardGoal ? Colors.valid : Colors.textPrimary }]}>
+              {change > 0 ? '+' : change < 0 ? '−' : ''}{kg(Math.abs(change))}
+            </Text>
+            <Text style={styles.caption}>depuis le {shortDate(first.date, now)}</Text>
+          </View>
+        ) : null}
+      </View>
+
+      {hasGoal ? (
+        <View style={styles.goal}>
+          <View style={styles.goalHead}>
+            <Ionicons name={atGoal ? 'checkmark-circle' : 'flag-outline'} size={15} color={atGoal ? Colors.valid : Colors.gold} />
+            <Text style={styles.goalText}>
+              Objectif {kg(goal)}
+              <Text style={styles.goalRest}>{atGoal ? '  ·  atteint, bravo !' : `  ·  encore ${kg(remaining)}`}</Text>
+            </Text>
+          </View>
+          <View style={styles.goalTrack}>
+            <View style={[styles.goalFill, { width: `${Math.round(progress * 100)}%` }]} />
+          </View>
+        </View>
+      ) : null}
+
+      {/* ── Courbe ── */}
+      {points.length > 1 ? (
+        <View style={styles.chartWrap} accessibilityLabel={`Courbe de poids : de ${kg(first.weight)} à ${kg(last.weight)}`}>
+          <LineChart
+            data={{ labels: lbls, datasets }}
+            width={chartW}
+            height={height}
+            bezier
+            withInnerLines={false}
+            withOuterLines={false}
+            fromZero={false}
+            segments={3}
+            formatYLabel={(v) => String(Math.round(Number(v) * 10) / 10).replace('.', ',')}
+            chartConfig={CHART_CONFIG}
+            style={styles.chart}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const CHART_CONFIG = {
   backgroundGradientFrom: Colors.cardDeep,
+  backgroundGradientFromOpacity: 0,
   backgroundGradientTo: Colors.cardDeep,
+  backgroundGradientToOpacity: 0,
   decimalPlaces: 1,
   color: (opacity = 1) => `rgba(254, 116, 57, ${opacity})`,
   labelColor: () => Colors.textMuted,
-  propsForDots: {
-    r: '4',
-    strokeWidth: '2',
-    stroke: '#0A0A0A',
-  },
-  propsForBackgroundLines: {
-    stroke: '#23232b',
-  },
+  fillShadowGradientOpacity: 0.12,
+  propsForDots: { r: '3.5', strokeWidth: '2', stroke: Colors.backgroundDeep },
+  propsForLabels: { fontSize: 11 },
 };
 
 const styles = StyleSheet.create({
-  wrap: { overflow: 'hidden' },
-  chart: { marginLeft: -10, borderRadius: 12 },
-  deltaRow: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    justifyContent:  'center',
-    gap:             7,
-    marginTop:       12,
-    backgroundColor: 'rgba(255,215,0,0.08)',
-    borderWidth:     1,
-    borderColor:     'rgba(255,215,0,0.25)',
-    borderRadius:    12,
-    paddingVertical: 10,
-  },
-  deltaTxt: { color: Colors.textPrimary, fontSize: 13, fontWeight: '700' },
-  empty: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  emptyText: {
-    color: Colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  emptyHint: {
-    color: Colors.textMuted,
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 6,
-  },
+  summary: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
+  current: { color: Colors.textPrimary, fontSize: 28, fontWeight: '900', letterSpacing: -0.5, fontVariant: ['tabular-nums'] },
+  caption: { color: Colors.textMuted, fontSize: 13, marginTop: 2 },
+  changeBox: { alignItems: 'flex-end' },
+  change: { fontSize: 18, fontWeight: '800', fontVariant: ['tabular-nums'] },
+
+  goal: { marginTop: 16 },
+  goalHead: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 8 },
+  goalText: { color: Colors.textPrimary, fontSize: 14, fontWeight: '700' },
+  goalRest: { color: Colors.textSecondary, fontWeight: '600' },
+  goalTrack: { height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.07)', overflow: 'hidden' },
+  goalFill: { height: '100%', borderRadius: 3, backgroundColor: Colors.gold },
+
+  chartWrap: { marginTop: 14, overflow: 'hidden' },
+  chart: { marginLeft: -12 },
+
+  empty: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 },
+  emptyText: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700', textAlign: 'center' },
+  emptyHint: { color: Colors.textMuted, fontSize: 13.5, textAlign: 'center', marginTop: 6 },
 });
