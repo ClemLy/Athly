@@ -1,5 +1,5 @@
-import React, { useRef, useEffect, useMemo } from 'react';
-import { View, StyleSheet, Animated } from 'react-native';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
+import { View, StyleSheet, Animated, Easing, AccessibilityInfo } from 'react-native';
 import Svg, {
   Defs,
   LinearGradient as SvgGrad,
@@ -76,15 +76,23 @@ export function getFrameBleed(shapeId, colorId, size) {
 
 let gradientSeq = 0;
 
-function FrameSvg({ shapeId, color, size, userInitial }) {
-  // Préfixe d'id unique par instance : plusieurs cadres coexistent à l'écran
-  // (sélecteur) et leurs dégradés ne doivent pas se marcher dessus.
-  const prefix = useRef(`af${(gradientSeq += 1)}`).current;
-  const frame = useMemo(() => buildFrame(shapeId, color, size), [shapeId, color, size]);
-  const grads = useMemo(() => gradientDefs(color.colors, color.glowColor), [color]);
-  const H = frame.R * CANVAS_HALF;
-  const paint = (v) => (v && v.startsWith('url:') ? `url(#${prefix}${v.slice(4)})` : v || 'none');
+// En dessous de cette taille (vignettes du sélecteur), le cadre reste statique :
+// animer des dizaines de petites vignettes coûte cher pour un gain invisible.
+const ANIMATE_MIN_SIZE = 60;
 
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled?.().then((v) => { if (alive) setReduced(!!v); }).catch(() => {});
+    const sub = AccessibilityInfo.addEventListener?.('reduceMotionChanged', (v) => setReduced(!!v));
+    return () => { alive = false; sub?.remove?.(); };
+  }, []);
+  return reduced;
+}
+
+function SvgCanvas({ H, prefix, grads, layers, children }) {
+  const paint = (v) => (v && v.startsWith('url:') ? `url(#${prefix}${v.slice(4)})` : v || 'none');
   return (
     <Svg width={H * 2} height={H * 2} viewBox={`${-H} ${-H} ${H * 2} ${H * 2}`} pointerEvents="none">
       <Defs>
@@ -98,54 +106,83 @@ function FrameSvg({ shapeId, color, size, userInitial }) {
           </SvgGrad>
         )))}
       </Defs>
-      {frame.layers.map((l, i) => (
+      {layers.map((l, i) => (
         <Path
           key={i}
           d={l.d}
           fill={paint(l.fill)}
           fillRule={l.rule}
-          stroke={l.stroke}
+          stroke={l.stroke ? paint(l.stroke) : undefined}
           strokeWidth={l.sw}
           strokeLinejoin="round"
+          strokeLinecap={l.cap}
           opacity={l.op}
         />
       ))}
-      {/* Initiale au centre géométrique exact : centrage parfait pour toutes les formes. */}
-      {userInitial ? (
-        <SvgText
-          x={0}
-          y={0}
-          textAnchor="middle"
-          alignmentBaseline="middle"
-          dominantBaseline="central"
-          fill="#FFFFFF"
-          fontSize={size * 0.4}
-          fontWeight="900"
-        >
-          {userInitial}
-        </SvgText>
-      ) : null}
+      {children}
     </Svg>
   );
 }
 
-// ─── FrameAura — énergie animée des paliers légendaires ──────────────────────
-
-const AURA_SHAPES = new Set(['crown', 'wings', 'divine', 'dragonfang']);
-
-function FrameAura({ R, glowColor }) {
-  const pulse = useRef(new Animated.Value(0.35)).current;
-
+// Boucle d'animation : démarre au montage, s'arrête au démontage.
+function useLoop(enabled, build) {
+  const value = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1,    duration: 1900, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.35, duration: 2600, useNativeDriver: true }),
-      ])
-    );
+    if (!enabled) return undefined;
+    const loop = Animated.loop(build(value));
     loop.start();
     return () => loop.stop();
-  }, [pulse]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, value]);
+  return value;
+}
+
+const breathe = (val, up, down) => Animated.sequence([
+  Animated.timing(val, { toValue: 1, duration: up, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+  Animated.timing(val, { toValue: 0, duration: down, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+]);
+
+// Halo des couleurs « animées » (Élite et au-delà) : respiration lente.
+function BreathingHalo({ animate, children }) {
+  const v = useLoop(animate, (val) => breathe(val, 2200, 2200));
+  const opacity = animate ? v.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }) : 1;
+  return <Animated.View style={[StyleSheet.absoluteFill, { opacity }]} pointerEvents="none">{children}</Animated.View>;
+}
+
+// Étincelles en orbite lente autour de l'anneau (palier 4 : Légende, God, Uniques).
+function sparklePath(x, y, a) {
+  return `M${x},${y - a} Q${x},${y} ${x + a},${y} Q${x},${y} ${x},${y + a} Q${x},${y} ${x - a},${y} Q${x},${y} ${x},${y - a} Z`;
+}
+
+function OrbitingSparkles({ R, H, color, animate }) {
+  const v = useLoop(animate, (val) => Animated.timing(val, { toValue: 1, duration: 14000, easing: Easing.linear, useNativeDriver: true }));
+  const rotate = v.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const sparks = [0, 135, 250].map((a, i) => {
+    const rad = (a * Math.PI) / 180;
+    const k = R * (1.06 + (i % 2) * 0.05);
+    return { x: k * Math.cos(rad), y: k * Math.sin(rad), s: R * (0.09 - i * 0.015) };
+  });
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ rotate }] }]} pointerEvents="none">
+      <Svg width={H * 2} height={H * 2} viewBox={`${-H} ${-H} ${H * 2} ${H * 2}`}>
+        {sparks.map((p, i) => (
+          <Path key={`g${i}`} d={sparklePath(p.x, p.y, p.s * 1.9)} fill={color} opacity={0.35} />
+        ))}
+        {sparks.map((p, i) => (
+          <Path key={`s${i}`} d={sparklePath(p.x, p.y, p.s)} fill="#FFFFFF" opacity={0.95} />
+        ))}
+      </Svg>
+    </Animated.View>
+  );
+}
+
+// ─── FrameAura — particules des formes légendaires ───────────────────────────
+
+const AURA_SHAPES = new Set(['crown', 'wings', 'divine', 'dragonfang', 'spike']);
+
+function FrameAura({ R, glowColor, animate }) {
+  const v = useLoop(animate, (val) => breathe(val, 1900, 2600));
+  const opacity = animate ? v.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }) : 0.7;
 
   const H = R * CANVAS_HALF;
   const particles = useMemo(() => (
@@ -157,7 +194,7 @@ function FrameAura({ R, glowColor }) {
   ), [R]);
 
   return (
-    <Animated.View style={[StyleSheet.absoluteFill, { opacity: pulse }]} pointerEvents="none">
+    <Animated.View style={[StyleSheet.absoluteFill, { opacity }]} pointerEvents="none">
       <Svg width={H * 2} height={H * 2} viewBox={`${-H} ${-H} ${H * 2} ${H * 2}`}>
         {particles.map((p, i) => (
           <SvgCircle key={i} cx={p.x} cy={p.y} r={p.r} fill={glowColor} opacity={p.op} />
@@ -171,31 +208,65 @@ function FrameAura({ R, glowColor }) {
 //
 // Boîte de mise en page = l'anneau (2R × 2R), identique pour toutes les formes :
 // l'avatar garde la même taille et la même position quel que soit le cadre.
-// Le SVG (canevas de 2 × CANVAS_HALF × R) est centré dessus en absolu, et les
-// ornements (couronne, ailes, rayons…) débordent sans affecter la mise en page.
+// Les SVG (canevas de 2 × CANVAS_HALF × R) sont centrés dessus en absolu, et les
+// ornements (couronne, ailes, éclairs…) débordent sans affecter la mise en page.
 // Voir getFrameBleed() pour réserver la place côté écran.
+//
+// Pile : halo (respire si couleur animée) → particules → cadre → étincelles.
 
 export default function AvatarFrame({ shapeId = 'circle', colorId = 'none', size = 90, children, userInitial }) {
   const color = getColorDef(colorId);
   if (!color.colors) return <>{children}</>;
+  const id = getShapeDef(shapeId).id;
   return (
-    <FramedAvatar shapeId={getShapeDef(shapeId).id} color={color} size={size} userInitial={userInitial}>
+    <FramedAvatar key={`${id}-${color.id}`} shapeId={id} color={color} size={size} userInitial={userInitial}>
       {children}
     </FramedAvatar>
   );
 }
 
 function FramedAvatar({ shapeId, color, size, userInitial, children }) {
-  const R = size / 2 + ringWidth(color, size);
+  // Préfixe d'id unique par instance : plusieurs cadres coexistent à l'écran
+  // (sélecteur) et leurs dégradés ne doivent pas se marcher dessus.
+  const prefix = useRef(`af${(gradientSeq += 1)}`).current;
+  const reduced = useReducedMotion();
+  const frame = useMemo(() => buildFrame(shapeId, color, size), [shapeId, color, size]);
+  const grads = useMemo(() => gradientDefs(color.colors, frame.glow), [color, frame.glow]);
+
+  const { R } = frame;
   const H = R * CANVAS_HALF;
   const canvas = { position: 'absolute', left: R - H, top: R - H, width: H * 2, height: H * 2 };
+  const large = size >= ANIMATE_MIN_SIZE;
+  const animate = !reduced && large;
   const showAura = AURA_SHAPES.has(shapeId) && !!color.glowColor;
 
   return (
     <View style={{ width: R * 2, height: R * 2, overflow: 'visible' }}>
       <View style={canvas} pointerEvents="none">
-        {showAura && <FrameAura R={R} glowColor={color.glowColor} />}
-        <FrameSvg key={`${shapeId}-${color.id}`} shapeId={shapeId} color={color} size={size} userInitial={userInitial} />
+        <BreathingHalo animate={animate && !!color.animated}>
+          <SvgCanvas H={H} prefix={`${prefix}h`} grads={grads} layers={frame.halo} />
+        </BreathingHalo>
+        {showAura && <FrameAura R={R} glowColor={color.glowColor} animate={animate} />}
+        <SvgCanvas H={H} prefix={prefix} grads={grads} layers={frame.layers}>
+          {/* Initiale au centre géométrique exact : centrage parfait pour toutes les formes. */}
+          {userInitial ? (
+            <SvgText
+              x={0}
+              y={0}
+              textAnchor="middle"
+              alignmentBaseline="middle"
+              dominantBaseline="central"
+              fill="#FFFFFF"
+              fontSize={size * 0.4}
+              fontWeight="900"
+            >
+              {userInitial}
+            </SvgText>
+          ) : null}
+        </SvgCanvas>
+        {frame.tier >= 4 && large && (
+          <OrbitingSparkles R={R} H={H} color={frame.glow || color.colors[0]} animate={animate} />
+        )}
       </View>
       {!userInitial && (
         <View style={[StyleSheet.absoluteFill, styles.center]} pointerEvents="none">

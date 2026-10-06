@@ -1,8 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
-  StatusBar, ScrollView,
+  KeyboardAvoidingView, Platform,
+  StatusBar, ScrollView, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +11,9 @@ import { Colors } from '../../constants/theme';
 import AuthInput from '../../components/inputs/AuthInput';
 import PasswordGuide, { isPasswordValid, PASSWORD_RULES_MESSAGE } from '../../components/inputs/PasswordGuide';
 import { NotificationBanner } from '../../components/common';
-import { register } from '../../services';
+import { PrimaryButton, useEntrance, useShake } from '../../components/auth/AuthKit';
+import AvatarFrame from '../../components/profile/AvatarFrame';
+import { register, getRank } from '../../services';
 import { haptics } from '../../services';
 import { getErrorMessage } from '../../utils/errorMessages';
 
@@ -96,6 +98,7 @@ export default function RegisterScreen({ navigation }) {
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [referralCode, setReferralCode] = useState('');
+  const [showReferral, setShowReferral] = useState(false);
   const [confirm,  setConfirm]  = useState('');
   const [accepted, setAccepted] = useState(false);
   const [loading,  setLoading]  = useState(false);
@@ -114,6 +117,11 @@ export default function RegisterScreen({ navigation }) {
   const [emailTaken,  setEmailTaken]  = useState(false);
 
   const [pseudoRejectedVisible, setPseudoRejectedVisible] = useState(false);
+
+  // Entrée échelonnée (en-tête → aperçu → formulaire → actions) et secousse
+  // du formulaire quand la validation échoue.
+  const enter = useEntrance(4);
+  const [shakeStyle, shake] = useShake();
 
   // ── Validation UI (erreurs champ par champ, au clic sur "Créer mon compte") ──
   const validate = useCallback(() => {
@@ -151,6 +159,7 @@ export default function RegisterScreen({ navigation }) {
     setEmailTaken(false);
     if (!validate()) {
       haptics.error();
+      shake();
       return;
     }
     try {
@@ -162,10 +171,12 @@ export default function RegisterScreen({ navigation }) {
         password,
         referralCode: referralCode.trim(),
       });
+      haptics.success();
       navigation.navigate('EmailVerification', { email: email.trim() });
     } catch (error) {
       const code = error?.data?.code;
       haptics.error();
+      shake();
       if (code === 'PSEUDO_NOT_ALLOWED') {
         setPseudoErr('Ce pseudo n\'est pas autorisé.');
         setPseudoRejectedVisible(true);
@@ -173,6 +184,7 @@ export default function RegisterScreen({ navigation }) {
         setEmailErr('Un compte existe déjà avec cette adresse.');
         setEmailTaken(true);
       } else if (code === 'REFERRAL_INVALID') {
+        setShowReferral(true);
         setReferralErr(getErrorMessage(error, 'Ce code de parrainage n\'existe pas.'));
       } else {
         setErrType(error?.status === 429 || error?.network ? 'warning' : 'error');
@@ -181,9 +193,10 @@ export default function RegisterScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
-  }, [validate, pseudo, email, password, referralCode, navigation]);
+  }, [validate, pseudo, email, password, referralCode, navigation, shake]);
 
   const openLegal = (doc) => navigation.navigate('Legal', { doc });
+  const initial = (pseudo.trim()[0] || '?').toUpperCase();
 
   return (
     <SafeAreaView style={s.safeArea} edges={['top', 'bottom']}>
@@ -194,175 +207,195 @@ export default function RegisterScreen({ navigation }) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <TouchableOpacity
-            style={s.backBtn}
-            onPress={() => navigation.goBack()}
-            accessibilityRole="button"
-            accessibilityLabel="Retour à la connexion"
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="arrow-back" size={22} color={Colors.textSecondary} />
-          </TouchableOpacity>
-
-          <View style={s.titleBlock}>
-            <Text style={s.title} accessibilityRole="header">Créer un compte</Text>
-            <Text style={s.tagline}>Tes séances, ton XP et tes records, au même endroit.</Text>
-          </View>
-
-          <AuthInput
-            label="Pseudo"
-            icon="person-outline"
-            placeholder="Ton nom d'athlète"
-            value={pseudo}
-            onChangeText={(v) => { setPseudo(v); if (pseudoErr) setPseudoErr(''); }}
-            error={pseudoErr}
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="username"
-            textContentType="username"
-            maxLength={MAX_PSEUDO}
-            enterKeyHint="next"
-          />
-
-          <AuthInput
-            label="Email"
-            icon="mail-outline"
-            placeholder="nom@exemple.fr"
-            value={email}
-            onChangeText={(v) => { setEmail(v); if (emailErr) { setEmailErr(''); setEmailTaken(false); } }}
-            onBlur={() => {
-              const e = email.trim();
-              if (e && !EMAIL_RE.test(e)) setEmailErr('Cette adresse email n\'est pas valide. Exemple : nom@exemple.fr');
-            }}
-            error={emailErr}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="email"
-            textContentType="emailAddress"
-            inputMode="email"
-            enterKeyHint="next"
-          />
-          {emailTaken && (
+          <Animated.View style={enter[0]}>
             <TouchableOpacity
-              onPress={() => navigation.navigate('Auth')}
-              style={s.inlineLink}
-              accessibilityRole="link"
-            >
-              <Text style={s.inlineLinkTxt}>Se connecter avec cette adresse</Text>
-              <Ionicons name="arrow-forward" size={14} color={Colors.primary} />
-            </TouchableOpacity>
-          )}
-
-          <AuthInput
-            label="Mot de passe"
-            icon="lock-closed-outline"
-            placeholder="8 caractères minimum"
-            value={password}
-            onChangeText={(v) => {
-              setPassword(v);
-              if (pwdErr && isPasswordValid(v)) setPwdErr('');
-              if (confirmErr && confirm) {
-                setConfirmErr(v !== confirm ? 'Les deux mots de passe ne sont pas identiques.' : '');
-              }
-            }}
-            isPassword
-            secureTextEntry={!showPwd}
-            showPassword={showPwd}
-            setShowPassword={setShowPwd}
-            error={pwdErr}
-            autoComplete="new-password"
-            textContentType="newPassword"
-            enterKeyHint="next"
-          />
-          <PasswordGuide password={password} />
-
-          <AuthInput
-            label="Confirmer le mot de passe"
-            icon="shield-checkmark-outline"
-            placeholder="Retape ton mot de passe"
-            value={confirm}
-            onChangeText={(v) => {
-              setConfirm(v);
-              if (confirmErr) {
-                setConfirmErr(v !== password ? 'Les deux mots de passe ne sont pas identiques.' : '');
-              }
-            }}
-            isPassword
-            secureTextEntry={!showConfirm}
-            showPassword={showConfirm}
-            setShowPassword={setShowConfirm}
-            error={confirmErr}
-            autoComplete="new-password"
-            textContentType="newPassword"
-          />
-
-          <AuthInput
-            label="Code de parrainage (facultatif)"
-            icon="gift-outline"
-            placeholder="ATH-XXXXX"
-            value={referralCode}
-            onChangeText={(v) => { setReferralCode(v.toUpperCase()); if (referralErr) setReferralErr(''); }}
-            error={referralErr}
-            autoCapitalize="characters"
-            autoCorrect={false}
-            maxLength={20}
-          />
-
-          {/* Consentement explicite (RGPD) : l'app traite poids, taille et date de naissance */}
-          <TouchableOpacity
-            style={s.consentRow}
-            onPress={() => { setAccepted((v) => !v); if (consentErr) setConsentErr(''); }}
-            activeOpacity={0.8}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: accepted }}
-            accessibilityLabel="J'accepte les conditions d'utilisation et la politique de confidentialité"
-          >
-            <View style={[s.checkbox, accepted && s.checkboxActive, consentErr && !accepted && s.checkboxError]}>
-              {accepted && <Ionicons name="checkmark" size={13} color="#fff" />}
-            </View>
-            <Text style={s.consentTxt}>
-              J'accepte les{' '}
-              <Text style={s.consentLink} onPress={() => openLegal('conditions')} accessibilityRole="link">
-                conditions d'utilisation
-              </Text>
-              {' '}et la{' '}
-              <Text style={s.consentLink} onPress={() => openLegal('confidentialite')} accessibilityRole="link">
-                politique de confidentialité
-              </Text>
-              .
-            </Text>
-          </TouchableOpacity>
-          {consentErr ? (
-            <Text style={s.consentErr} accessibilityRole="alert">{consentErr}</Text>
-          ) : null}
-
-          {globalErr ? <NotificationBanner message={globalErr} type={errType} /> : null}
-
-          <TouchableOpacity
-            style={s.primaryBtn}
-            onPress={handleSubmit}
-            disabled={loading}
-            activeOpacity={0.82}
-            accessibilityRole="button"
-            accessibilityState={{ busy: loading, disabled: loading }}
-          >
-            {loading
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={s.btnText}>Créer mon compte</Text>
-            }
-          </TouchableOpacity>
-
-          <View style={s.switchRow}>
-            <Text style={s.switchLabel}>Déjà inscrit ? </Text>
-            <TouchableOpacity
+              style={s.backBtn}
               onPress={() => navigation.goBack()}
-              accessibilityRole="link"
-              hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+              accessibilityRole="button"
+              accessibilityLabel="Retour à la connexion"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={s.linkBold}>Se connecter</Text>
+              <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
             </TouchableOpacity>
-          </View>
+
+            <Text style={s.title} accessibilityRole="header">Crée ton athlète</Text>
+            <Text style={s.tagline}>Niveau 1, cadre Acier. Tout le reste se mérite.</Text>
+          </Animated.View>
+
+          {/* Aperçu en direct : l'initiale suit le pseudo tapé. */}
+          <Animated.View style={[s.preview, enter[1]]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <AvatarFrame shapeId="circle" colorId="iron" size={52} userInitial={initial} />
+            <View style={s.previewInfo}>
+              <Text style={[s.previewName, !pseudo.trim() && s.previewPlaceholder]} numberOfLines={1}>
+                {pseudo.trim() || 'Ton pseudo'}
+              </Text>
+              <Text style={s.previewMeta}>Niv. 1 · {getRank(1).name}</Text>
+            </View>
+            <View style={s.previewXp}>
+              <View style={s.previewXpFill} />
+            </View>
+          </Animated.View>
+
+          <Animated.View style={[enter[2], shakeStyle]}>
+            <AuthInput
+              label="Pseudo"
+              icon="person-outline"
+              placeholder="Ton nom d'athlète"
+              value={pseudo}
+              onChangeText={(v) => { setPseudo(v); if (pseudoErr) setPseudoErr(''); }}
+              error={pseudoErr}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="username"
+              textContentType="username"
+              maxLength={MAX_PSEUDO}
+              enterKeyHint="next"
+            />
+
+            <AuthInput
+              label="Email"
+              icon="mail-outline"
+              placeholder="nom@exemple.fr"
+              value={email}
+              onChangeText={(v) => { setEmail(v); if (emailErr) { setEmailErr(''); setEmailTaken(false); } }}
+              onBlur={() => {
+                const e = email.trim();
+                if (e && !EMAIL_RE.test(e)) setEmailErr('Cette adresse email n\'est pas valide. Exemple : nom@exemple.fr');
+              }}
+              error={emailErr}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
+              inputMode="email"
+              enterKeyHint="next"
+            />
+            {emailTaken && (
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Auth')}
+                style={s.inlineLink}
+                accessibilityRole="link"
+              >
+                <Text style={s.inlineLinkTxt}>Se connecter avec cette adresse</Text>
+                <Ionicons name="arrow-forward" size={14} color={Colors.primary} />
+              </TouchableOpacity>
+            )}
+
+            <AuthInput
+              label="Mot de passe"
+              icon="lock-closed-outline"
+              placeholder="8 caractères minimum"
+              value={password}
+              onChangeText={(v) => {
+                setPassword(v);
+                if (pwdErr && isPasswordValid(v)) setPwdErr('');
+                if (confirmErr && confirm) {
+                  setConfirmErr(v !== confirm ? 'Les deux mots de passe ne sont pas identiques.' : '');
+                }
+              }}
+              isPassword
+              secureTextEntry={!showPwd}
+              showPassword={showPwd}
+              setShowPassword={setShowPwd}
+              error={pwdErr}
+              autoComplete="new-password"
+              textContentType="newPassword"
+              enterKeyHint="next"
+            />
+            <PasswordGuide password={password} />
+
+            <AuthInput
+              label="Confirmer le mot de passe"
+              icon="shield-checkmark-outline"
+              placeholder="Retape ton mot de passe"
+              value={confirm}
+              onChangeText={(v) => {
+                setConfirm(v);
+                if (confirmErr) {
+                  setConfirmErr(v !== password ? 'Les deux mots de passe ne sont pas identiques.' : '');
+                }
+              }}
+              isPassword
+              secureTextEntry={!showConfirm}
+              showPassword={showConfirm}
+              setShowPassword={setShowConfirm}
+              error={confirmErr}
+              autoComplete="new-password"
+              textContentType="newPassword"
+            />
+
+            {/* Parrainage replié : la plupart des inscrits n'en ont pas. */}
+            {showReferral ? (
+              <AuthInput
+                label="Code de parrainage"
+                icon="gift-outline"
+                placeholder="ATH-XXXXX"
+                value={referralCode}
+                onChangeText={(v) => { setReferralCode(v.toUpperCase()); if (referralErr) setReferralErr(''); }}
+                error={referralErr}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={20}
+                autoFocus
+              />
+            ) : (
+              <TouchableOpacity
+                style={s.referralToggle}
+                onPress={() => { haptics.selection(); setShowReferral(true); }}
+                accessibilityRole="button"
+                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+              >
+                <Ionicons name="gift-outline" size={16} color={Colors.textSecondary} />
+                <Text style={s.referralToggleTxt}>J'ai un code de parrainage</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Consentement explicite (RGPD) : l'app traite poids, taille et date de naissance */}
+            <TouchableOpacity
+              style={s.consentRow}
+              onPress={() => { haptics.selection(); setAccepted((v) => !v); if (consentErr) setConsentErr(''); }}
+              activeOpacity={0.8}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: accepted }}
+              accessibilityLabel="J'accepte les conditions d'utilisation et la politique de confidentialité"
+            >
+              <View style={[s.checkbox, accepted && s.checkboxActive, consentErr && !accepted && s.checkboxError]}>
+                {accepted && <Ionicons name="checkmark" size={13} color="#fff" />}
+              </View>
+              <Text style={s.consentTxt}>
+                J'accepte les{' '}
+                <Text style={s.consentLink} onPress={() => openLegal('conditions')} accessibilityRole="link">
+                  conditions d'utilisation
+                </Text>
+                {' '}et la{' '}
+                <Text style={s.consentLink} onPress={() => openLegal('confidentialite')} accessibilityRole="link">
+                  politique de confidentialité
+                </Text>
+                .
+              </Text>
+            </TouchableOpacity>
+            {consentErr ? (
+              <Text style={s.consentErr} accessibilityRole="alert">{consentErr}</Text>
+            ) : null}
+
+            {globalErr ? <NotificationBanner message={globalErr} type={errType} /> : null}
+          </Animated.View>
+
+          <Animated.View style={enter[3]}>
+            <PrimaryButton label="Créer mon compte" onPress={handleSubmit} loading={loading} style={s.primaryBtn} />
+
+            <View style={s.switchRow}>
+              <Text style={s.switchLabel}>Déjà inscrit ? </Text>
+              <TouchableOpacity
+                onPress={() => navigation.goBack()}
+                accessibilityRole="link"
+                hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+              >
+                <Text style={s.linkBold}>Se connecter</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -376,16 +409,37 @@ export default function RegisterScreen({ navigation }) {
 
 const s = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: Colors.backgroundDeep },
-  content:  { paddingHorizontal: 28, paddingTop: 20, paddingBottom: 56 },
+  content:  { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 48 },
 
-  backBtn: { width: 40, height: 40, justifyContent: 'center', marginBottom: 16 },
-
-  titleBlock: { marginBottom: 32 },
-  title: {
-    color: Colors.textPrimary, fontSize: 30, fontWeight: '700',
-    letterSpacing: -0.5, marginBottom: 6,
+  backBtn: {
+    width: 40, height: 40, borderRadius: 12, marginBottom: 18, marginLeft: -6,
+    justifyContent: 'center', alignItems: 'center',
   },
-  tagline: { color: Colors.textMuted, fontSize: 14, letterSpacing: 0.2 },
+
+  title: {
+    color: Colors.textPrimary, fontSize: 30, fontWeight: '800',
+    letterSpacing: -0.8, marginBottom: 6,
+  },
+  tagline: { color: Colors.textSecondary, fontSize: 15, lineHeight: 21 },
+
+  preview: {
+    flexDirection: 'row', alignItems: 'center',
+    marginTop: 22, marginBottom: 24,
+    paddingVertical: 14, paddingHorizontal: 16,
+    borderRadius: 18,
+    backgroundColor: Colors.cardDeep,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+    overflow: 'hidden',
+  },
+  previewInfo: { flex: 1, marginLeft: 14 },
+  previewName: { color: Colors.textPrimary, fontSize: 17, fontWeight: '800', letterSpacing: -0.2 },
+  previewPlaceholder: { color: Colors.textMuted },
+  previewMeta: { color: Colors.textSecondary, fontSize: 12.5, fontWeight: '600', marginTop: 3 },
+  previewXp: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, height: 3,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  previewXpFill: { width: '6%', height: '100%', backgroundColor: Colors.primary },
 
   inlineLink: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -393,28 +447,28 @@ const s = StyleSheet.create({
   },
   inlineLinkTxt: { color: Colors.primary, fontSize: 13.5, fontWeight: '700' },
 
+  referralToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    alignSelf: 'flex-start', paddingVertical: 6, marginBottom: 10,
+  },
+  referralToggleTxt: { color: Colors.textSecondary, fontSize: 14, fontWeight: '600', textDecorationLine: 'underline' },
+
   consentRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 6, paddingVertical: 4 },
   checkbox: {
-    width: 22, height: 22, borderRadius: 6,
-    borderWidth: 1.5, borderColor: Colors.textMuted,
+    width: 22, height: 22, borderRadius: 7,
+    borderWidth: 1.5, borderColor: Colors.borderDim,
     justifyContent: 'center', alignItems: 'center',
     marginRight: 12, marginTop: 1,
   },
   checkboxActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   checkboxError:  { borderColor: Colors.error },
   consentTxt:  { flex: 1, color: Colors.textSecondary, fontSize: 13.5, lineHeight: 20 },
-  consentLink: { color: Colors.primary, fontWeight: '700' },
+  consentLink: { color: Colors.textPrimary, fontWeight: '700', textDecorationLine: 'underline' },
   consentErr:  { color: Colors.error, fontSize: 13, marginTop: 6, marginLeft: 34 },
 
-  primaryBtn: {
-    backgroundColor: Colors.primary, height: 56, borderRadius: 14,
-    justifyContent: 'center', alignItems: 'center', marginTop: 20,
-    shadowColor: Colors.primary, shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4, shadowRadius: 16, elevation: 8,
-  },
-  btnText:      { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.4 },
+  primaryBtn: { marginTop: 22 },
 
-  switchRow:   { flexDirection: 'row', justifyContent: 'center', marginTop: 36 },
+  switchRow:   { flexDirection: 'row', justifyContent: 'center', marginTop: 26 },
   switchLabel: { color: Colors.textMuted, fontSize: 14 },
-  linkBold:    { color: Colors.primary, fontWeight: '700', fontSize: 14 },
+  linkBold:    { color: Colors.primary, fontWeight: '800', fontSize: 14 },
 });
