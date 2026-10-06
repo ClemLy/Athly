@@ -48,17 +48,34 @@ function isStandaloneDisplayMode() {
 // prochain montage du hook via le hash de l'URL de retour, pas via la Promise
 // de promptAsync (qui ne peut pas survivre au rechargement complet de la page).
 
-export function useGoogleAuth() {
-  const isConfigured = Boolean(
-    GOOGLE_EXPO_CLIENT_ID || GOOGLE_IOS_CLIENT_ID || GOOGLE_ANDROID_CLIENT_ID || GOOGLE_WEB_CLIENT_ID,
-  );
+// expo-auth-session lève une erreur au rendu si aucun Client ID n'est fourni
+// pour la plateforme courante (ni son ID dédié, ni `clientId` en repli) — ce
+// qui faisait planter tout l'écran de connexion. La disponibilité ne change
+// jamais pendant la vie de l'app (.env + plateforme), donc on choisit une fois
+// pour toutes, au chargement du module, entre la vraie requête et un hook
+// inerte : l'ordre des hooks reste stable d'un rendu à l'autre.
+const PLATFORM_CLIENT_ID = Platform.select({
+  ios: GOOGLE_IOS_CLIENT_ID,
+  android: GOOGLE_ANDROID_CLIENT_ID,
+  default: GOOGLE_WEB_CLIENT_ID,
+}) || GOOGLE_EXPO_CLIENT_ID;
 
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    clientId: GOOGLE_EXPO_CLIENT_ID || undefined,
-    iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
-    androidClientId: GOOGLE_ANDROID_CLIENT_ID || undefined,
-    webClientId: GOOGLE_WEB_CLIENT_ID || undefined,
-  });
+const GOOGLE_CONFIG = {
+  clientId: GOOGLE_EXPO_CLIENT_ID || undefined,
+  iosClientId: GOOGLE_IOS_CLIENT_ID || undefined,
+  androidClientId: GOOGLE_ANDROID_CLIENT_ID || undefined,
+  webClientId: GOOGLE_WEB_CLIENT_ID || undefined,
+};
+
+const dismissed = async () => ({ type: 'dismiss' });
+const useDisabledRequest = () => [null, null, dismissed];
+const useEnabledRequest = () => Google.useIdTokenAuthRequest(GOOGLE_CONFIG);
+const useGoogleRequest = PLATFORM_CLIENT_ID ? useEnabledRequest : useDisabledRequest;
+
+export function useGoogleAuth() {
+  const isConfigured = Boolean(PLATFORM_CLIENT_ID);
+
+  const [request, response, promptAsync] = useGoogleRequest();
 
   const [redirectIdToken, setRedirectIdToken] = useState(null);
 

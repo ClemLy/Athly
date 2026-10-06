@@ -3,18 +3,10 @@ import { View, Text, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { xpToLevel, getRank } from '../../services';
-import AvatarFrame, { getFrameFootprint } from './AvatarFrame';
+import AvatarFrame, { getFrameBleed } from './AvatarFrame';
 
 const AVATAR_SIZE = 90;
-// Empreinte max tolérée avant de réduire le cadre. Volontairement plus grande
-// que l'espace réservé (avatarWrap, 108×108) : le contenu peut légèrement
-// déborder de cette réserve sans jamais toucher le nom en dessous (marge
-// avatarWrap.marginBottom), et la plupart des formes (jusqu'à Divin/Couronne)
-// rentrent déjà sous ce seuil sans la moindre réduction. Seules les formes
-// les plus extrêmes (Ailes, Croc de Dragon) sont légèrement réduites —
-// beaucoup moins qu'avec un seuil calé strictement sur 108, qui les faisait
-// paraître minuscules.
-const MAX_FRAME_FOOTPRINT = 132;
+const AVATAR_SLOT = 108; // espace réservé à l'avatar (avatarWrap)
 
 export default function HeroLevelCard({
   name = 'Athlète',
@@ -47,12 +39,17 @@ export default function HeroLevelCard({
 
   const pct = Math.max(0, Math.min(1, progress || 0));
 
-  // Réduit proportionnellement les cadres dont l'empreinte réelle dépasse
-  // l'espace réservé sur la carte, plutôt que de laisser déborder.
-  const frameScale = useMemo(() => {
-    const { totalW, totalH } = getFrameFootprint(shapeId, colorId, AVATAR_SIZE);
-    const maxDim = Math.max(totalW, totalH);
-    return maxDim > MAX_FRAME_FOOTPRINT ? MAX_FRAME_FOOTPRINT / maxDim : 1;
+  // L'avatar garde toujours sa taille : on réserve plutôt la place des
+  // ornements qui dépassent (couronne, rayons…) au-dessus et en dessous.
+  const frameSpace = useMemo(() => {
+    const { R, top, bottom } = getFrameBleed(shapeId, colorId, AVATAR_SIZE);
+    const overTop = Math.max(0, R + top - AVATAR_SLOT / 2);
+    const overBottom = Math.max(0, R + bottom - AVATAR_SLOT / 2);
+    return {
+      // Le padding de la carte (22) absorbe déjà une partie du débord haut.
+      marginTop: Math.max(0, overTop - 14),
+      marginBottom: Math.max(22, overBottom + 12),
+    };
   }, [shapeId, colorId]);
 
   const hasGlow     = profileTheme && profileTheme.id !== 'auto' ? profileTheme.hasGlow    : level >= 71;
@@ -104,7 +101,7 @@ export default function HeroLevelCard({
     <View style={cardStyle}>
 
       {/* ── Avatar ── */}
-      <View style={styles.avatarWrap}>
+      <View style={[styles.avatarWrap, frameSpace]}>
         {/* glowHalo only when no frame — the SVG frame provides its own glow ring */}
         {hasGlow && !hasFrame && (
           <View style={[styles.glowHalo, { backgroundColor: rank.glowColor || rank.color }]} />
@@ -114,13 +111,11 @@ export default function HeroLevelCard({
           The children View is kept as fallback for colorId='none' (no-frame case)
           where avatarStyle carries the neon-ring border and glow shadow.
         */}
-        <View style={{ transform: [{ scale: frameScale }] }}>
-          <AvatarFrame shapeId={shapeId} colorId={colorId} size={AVATAR_SIZE} userInitial={(initial || 'U').slice(0, 1).toUpperCase()}>
-            <View style={avatarStyle}>
-              <Text style={styles.avatarText}>{(initial || 'U').slice(0, 1).toUpperCase()}</Text>
-            </View>
-          </AvatarFrame>
-        </View>
+        <AvatarFrame shapeId={shapeId} colorId={colorId} size={AVATAR_SIZE} userInitial={(initial || 'U').slice(0, 1).toUpperCase()}>
+          <View style={avatarStyle}>
+            <Text style={styles.avatarText}>{(initial || 'U').slice(0, 1).toUpperCase()}</Text>
+          </View>
+        </AvatarFrame>
         <View style={[styles.levelChip, { backgroundColor: rank.color }]}>
           <Text style={styles.levelChipText}>{level}</Text>
         </View>
@@ -222,10 +217,7 @@ const styles = StyleSheet.create({
     height: 108,
     alignItems: 'center',
     justifyContent: 'center',
-    // Un peu plus que l'ancienne valeur (14) : les cadres les plus ornés
-    // peuvent légèrement dépasser de la réserve 108×108 (voir
-    // MAX_FRAME_FOOTPRINT) — cette marge absorbe ce débord sans jamais
-    // toucher le nom affiché juste en dessous.
+    // Ajustée dynamiquement (frameSpace) selon le débord des ornements.
     marginBottom: 22,
   },
   glowHalo: {
