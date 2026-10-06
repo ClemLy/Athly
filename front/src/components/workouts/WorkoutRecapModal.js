@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Modal,
   View,
@@ -18,20 +18,9 @@ import * as Haptics from 'expo-haptics';
 import { Colors } from '../../constants/theme';
 import { xpToLevel, getRank } from '../../services';
 import { QUEST_XP, BONUS_XP } from '../../services';
-
-const RANK_ICONS = {
-  novice:      'shield-outline',
-  initiate:    'star-outline',
-  athlete:     'body-outline',
-  competitor:  'trophy-outline',
-  warrior:     'flame',
-  elite:       'ribbon-outline',
-  master:      'medal-outline',
-  grandmaster: 'medal',
-  legend:      'star',
-  god:         'flash',
-};
-function getRankIcon(tier) { return RANK_ICONS[tier] || 'star-outline'; }
+import { useUser } from '../../context/UserContext';
+import { markLevelCelebrated } from '../../services/levelCelebration';
+import LevelUpOverlay from '../profile/LevelUpOverlay';
 
 // 665 → « 665 kg » ; 6 300 → « 6,3 t »
 function formatVolume(v) {
@@ -99,37 +88,16 @@ export default function WorkoutRecapModal({
   // Pulse du label XP (scale) pour accentuer l'animation
   const xpPulse = useRef(new Animated.Value(1)).current;
 
-  // ── Rank-up overlay ──────────────────────────────────────────────────────────
-  const rankOverlayOpacity = useRef(new Animated.Value(0)).current;
-  const rankBadgeScale     = useRef(new Animated.Value(0.05)).current;
-  const rankBadgeOpacity   = useRef(new Animated.Value(0)).current;
-  const glowScale1         = useRef(new Animated.Value(0.5)).current;
-  const glowScale2         = useRef(new Animated.Value(0.5)).current;
-  const glowOpacity1       = useRef(new Animated.Value(0)).current;
-  const glowOpacity2       = useRef(new Animated.Value(0)).current;
-  const rankNamePulse      = useRef(new Animated.Value(1)).current;
-  const tapHintOpacity     = useRef(new Animated.Value(0)).current;
-  const levelBounce        = useRef(new Animated.Value(1)).current;
-  const [rankAnimVisible, setRankAnimVisible] = useState(false);
+  // Rebond de la carte niveau quand la barre se remplit
+  const levelBounce = useRef(new Animated.Value(1)).current;
 
-  // ── Rank-up cinematic overlay ─────────────────────────────────────────────────
-  const rkOverlayOpacity = useRef(new Animated.Value(0)).current;
-  const rkCardY          = useRef(new Animated.Value(80)).current;
-  const rkCardOpacity    = useRef(new Animated.Value(0)).current;
-  const rkCardScale      = useRef(new Animated.Value(0.85)).current;
-  const rkRing1Scale     = useRef(new Animated.Value(0.3)).current;
-  const rkRing1Opacity   = useRef(new Animated.Value(0)).current;
-  const rkRing2Scale     = useRef(new Animated.Value(0.3)).current;
-  const rkRing2Opacity   = useRef(new Animated.Value(0)).current;
-  const rkRing3Scale     = useRef(new Animated.Value(0.3)).current;
-  const rkRing3Opacity   = useRef(new Animated.Value(0)).current;
-  const rkTitleScale     = useRef(new Animated.Value(2.8)).current;
-  const rkTitleOpacity   = useRef(new Animated.Value(0)).current;
-  const rkIconScale      = useRef(new Animated.Value(0)).current;
-  const rkSubtitleOp     = useRef(new Animated.Value(0)).current;
-  const rkTapOpacity     = useRef(new Animated.Value(0)).current;
-  const rkBorderPulse    = useRef(new Animated.Value(0.2)).current;
-  const [rankUpAnimVisible, setRankUpAnimVisible] = useState(false);
+  // Célébration (niveau ou nouveau rang), lancée une fois la barre remplie
+  const [celebrating, setCelebrating] = useState(false);
+  // Tant que la célébration n'est pas passée, le récap montre encore l'ancien
+  // niveau (et l'ancien rang) : pas de nouveau rang dévoilé avant l'animation.
+  const [revealed, setRevealed] = useState(false);
+  const { user } = useUser();
+  const userInitial = ((user && user.name) || 'A').charAt(0).toUpperCase();
 
   // ── Dérivations métier ──────────────────────────────────────────────────────
   const safeStats     = stats || {};
@@ -166,6 +134,33 @@ export default function WorkoutRecapModal({
   const prevRank      = getRank(prevLevel);
   const rankChanged   = newRank.tier !== prevRank.tier;
 
+  // Ce que la carte niveau affiche : l'ancien niveau jusqu'à la célébration.
+  const pending       = leveledUp && !revealed;
+  const shownRank     = pending ? prevRank : newRank;
+  const shownLevel    = pending ? prevLevel : newLevel;
+  const accent        = shownRank.color;
+
+  const finishCelebration = () => {
+    setCelebrating(false);
+    setRevealed(true);
+    // La barre repart de zéro dans le nouveau niveau.
+    progressAnim.setValue(0);
+    Animated.parallel([
+      Animated.timing(progressAnim, {
+        toValue: newLevelData.progress,
+        duration: 650,
+        delay: 250,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }),
+      Animated.sequence([
+        Animated.delay(150),
+        Animated.spring(levelBounce, { toValue: 1.05, friction: 3, tension: 180, useNativeDriver: true }),
+        Animated.spring(levelBounce, { toValue: 1, friction: 4, tension: 120, useNativeDriver: true }),
+      ]),
+    ]).start();
+  };
+
   // ── Anim d'entrée ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!visible) {
@@ -195,166 +190,6 @@ export default function WorkoutRecapModal({
     return undefined;
   }, [visible, fade, bodyScale, xpScale]);
 
-  // ── Rank-up sequence ─────────────────────────────────────────────────────────
-  const dismissRankAnim = useCallback(() => {
-    Animated.timing(rankOverlayOpacity, {
-      toValue: 0, duration: 450, easing: Easing.in(Easing.quad), useNativeDriver: true,
-    }).start(() => setRankAnimVisible(false));
-    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch (e) {}
-  }, [rankOverlayOpacity]);
-
-  useEffect(() => {
-    if (!visible || !leveledUp || rankChanged) {
-      if (!visible) setRankAnimVisible(false);
-      return undefined;
-    }
-    rankOverlayOpacity.setValue(0);
-    rankBadgeScale.setValue(0.05);
-    rankBadgeOpacity.setValue(0);
-    glowScale1.setValue(0.5);
-    glowScale2.setValue(0.5);
-    glowOpacity1.setValue(0);
-    glowOpacity2.setValue(0);
-    rankNamePulse.setValue(1);
-    tapHintOpacity.setValue(0);
-    setRankAnimVisible(true);
-    try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch (e) {}
-
-    Animated.sequence([
-      Animated.delay(650),
-      Animated.timing(rankOverlayOpacity, { toValue: 1, duration: 380, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      Animated.parallel([
-        Animated.spring(rankBadgeScale, { toValue: 1, friction: 4, tension: 70, useNativeDriver: true }),
-        Animated.timing(rankBadgeOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(glowOpacity1, { toValue: 0.65, duration: 800, useNativeDriver: true }),
-        Animated.timing(glowScale1, { toValue: 2.6, duration: 1700, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        Animated.sequence([
-          Animated.delay(220),
-          Animated.parallel([
-            Animated.timing(glowOpacity2, { toValue: 0.38, duration: 900, useNativeDriver: true }),
-            Animated.timing(glowScale2, { toValue: 3.8, duration: 2100, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-          ]),
-        ]),
-      ]),
-      Animated.sequence([
-        Animated.timing(rankNamePulse, { toValue: 1.16, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        Animated.spring(rankNamePulse, { toValue: 1, friction: 3, tension: 280, useNativeDriver: true }),
-      ]),
-      Animated.timing(tapHintOpacity, { toValue: 0.55, duration: 550, useNativeDriver: true }),
-    ]).start();
-
-    const timer = setTimeout(dismissRankAnim, 5500);
-    return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, leveledUp, rankChanged]);
-
-  // ── Rank-up cinematic sequence ───────────────────────────────────────────────
-  const dismissRankUpAnim = useCallback(() => {
-    Animated.timing(rkOverlayOpacity, {
-      toValue: 0, duration: 500, easing: Easing.in(Easing.quad), useNativeDriver: true,
-    }).start(() => setRankUpAnimVisible(false));
-    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch (e) {}
-  }, [rkOverlayOpacity]);
-
-  useEffect(() => {
-    if (!visible || !rankChanged) {
-      if (!visible) setRankUpAnimVisible(false);
-      return undefined;
-    }
-    rkOverlayOpacity.setValue(0);
-    rkCardY.setValue(80); rkCardOpacity.setValue(0); rkCardScale.setValue(0.85);
-    rkRing1Scale.setValue(0.3); rkRing1Opacity.setValue(0);
-    rkRing2Scale.setValue(0.3); rkRing2Opacity.setValue(0);
-    rkRing3Scale.setValue(0.3); rkRing3Opacity.setValue(0);
-    rkTitleScale.setValue(2.8); rkTitleOpacity.setValue(0);
-    rkIconScale.setValue(0); rkSubtitleOp.setValue(0);
-    rkTapOpacity.setValue(0); rkBorderPulse.setValue(0.2);
-    setRankUpAnimVisible(true);
-
-    const timers = [];
-    const at = (ms, fn) => { const id = setTimeout(fn, ms); timers.push(id); };
-
-    // T+600 : overlay fond + 3 anneaux de choc simultanés
-    at(600, () => {
-      try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch (e) {}
-      Animated.timing(rkOverlayOpacity, { toValue: 1, duration: 320, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
-      Animated.parallel([
-        Animated.timing(rkRing1Scale,   { toValue: 5.5, duration: 2200, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-        Animated.sequence([
-          Animated.timing(rkRing1Opacity, { toValue: 0.85, duration: 200, useNativeDriver: true }),
-          Animated.timing(rkRing1Opacity, { toValue: 0, duration: 1800, easing: Easing.in(Easing.quad), useNativeDriver: true }),
-        ]),
-      ]).start();
-    });
-    at(730, () => {
-      Animated.parallel([
-        Animated.timing(rkRing2Scale,   { toValue: 4.0, duration: 1900, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-        Animated.sequence([
-          Animated.timing(rkRing2Opacity, { toValue: 0.65, duration: 200, useNativeDriver: true }),
-          Animated.timing(rkRing2Opacity, { toValue: 0, duration: 1500, easing: Easing.in(Easing.quad), useNativeDriver: true }),
-        ]),
-      ]).start();
-    });
-    at(860, () => {
-      Animated.parallel([
-        Animated.timing(rkRing3Scale,   { toValue: 2.6, duration: 1400, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-        Animated.sequence([
-          Animated.timing(rkRing3Opacity, { toValue: 0.50, duration: 300, useNativeDriver: true }),
-          Animated.timing(rkRing3Opacity, { toValue: 0.15, duration: 900, useNativeDriver: true }),
-        ]),
-      ]).start();
-    });
-
-    // T+800 : carte remonte avec spring + haptic lourd
-    at(800, () => {
-      Animated.parallel([
-        Animated.spring(rkCardY,        { toValue: 0,   friction: 7, tension: 65, useNativeDriver: true }),
-        Animated.timing(rkCardOpacity,  { toValue: 1,   duration: 280,            useNativeDriver: true }),
-        Animated.spring(rkCardScale,    { toValue: 1,   friction: 7, tension: 65, useNativeDriver: true }),
-      ]).start();
-      try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } catch (e) {}
-    });
-
-    // T+1100 : icône rebondit
-    at(1100, () => {
-      Animated.spring(rkIconScale, { toValue: 1, friction: 3, tension: 200, useNativeDriver: true }).start();
-    });
-
-    // T+1380 : nom du rang ZOOM depuis 2.8× → 1× + haptic lourd
-    at(1380, () => {
-      Animated.parallel([
-        Animated.timing(rkTitleScale,   { toValue: 1, duration: 380, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-        Animated.timing(rkTitleOpacity, { toValue: 1, duration: 280,                                   useNativeDriver: true }),
-      ]).start();
-      try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } catch (e) {}
-    });
-
-    // T+1680 : sous-titre (niveau + transition)
-    at(1680, () => {
-      Animated.timing(rkSubtitleOp, { toValue: 1, duration: 450, useNativeDriver: true }).start();
-    });
-
-    // T+1900 : bord pulsant en boucle
-    at(1900, () => {
-      const pulse = () => Animated.sequence([
-        Animated.timing(rkBorderPulse, { toValue: 0.75, duration: 750, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(rkBorderPulse, { toValue: 0.20, duration: 750, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ]).start(({ finished }) => { if (finished) pulse(); });
-      pulse();
-    });
-
-    // T+2500 : invite à appuyer
-    at(2500, () => {
-      Animated.timing(rkTapOpacity, { toValue: 0.55, duration: 700, useNativeDriver: true }).start();
-    });
-
-    // Auto-dismiss à 10s
-    at(10000, dismissRankUpAnim);
-
-    return () => timers.forEach(clearTimeout);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, rankChanged]);
-
   // ── Compteur XP + barre + pulse ─────────────────────────────────────────────
   useEffect(() => {
     if (!visible) {
@@ -363,13 +198,25 @@ export default function WorkoutRecapModal({
       progressAnim.setValue(prevProgress);
       xpPulse.setValue(1);
       levelBounce.setValue(1);
+      setCelebrating(false);
+      setRevealed(false);
       return;
     }
+
+    let celebrateTimer = null;
+    const celebrate = (delay) => {
+      if (!leveledUp) return;
+      celebrateTimer = setTimeout(() => {
+        markLevelCelebrated(newLevel);
+        setCelebrating(true);
+      }, delay);
+    };
 
     if (reducedMotion) {
       setDisplayedXP(xpEarned);
       progressAnim.setValue(newProgress);
-      return undefined;
+      celebrate(400);
+      return () => clearTimeout(celebrateTimer);
     }
 
     const listener = xpCounter.addListener(({ value }) => setDisplayedXP(Math.round(value)));
@@ -402,10 +249,15 @@ export default function WorkoutRecapModal({
           Animated.spring(levelBounce, { toValue: 1.07, friction: 3, tension: 180, useNativeDriver: true }),
           Animated.spring(levelBounce, { toValue: 1, friction: 4, tension: 120, useNativeDriver: true }),
         ]).start();
+        // La barre vient d'atteindre le bout : place à la célébration.
+        celebrate(450);
       }
     });
 
-    return () => xpCounter.removeListener(listener);
+    return () => {
+      xpCounter.removeListener(listener);
+      clearTimeout(celebrateTimer);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, reducedMotion]);
 
@@ -414,7 +266,7 @@ export default function WorkoutRecapModal({
       visible={visible}
       transparent
       animationType="none"
-      onRequestClose={onClose}
+      onRequestClose={celebrating ? finishCelebration : onClose}
       statusBarTranslucent
       navigationBarTranslucent
     >
@@ -434,8 +286,8 @@ export default function WorkoutRecapModal({
 
             {/* ── Emblème + titre ── */}
             <View style={styles.hero}>
-              <View style={[styles.emblem, { borderColor: newRank.color + '55', backgroundColor: newRank.color + '18' }]}>
-                <Ionicons name="checkmark" size={34} color={newRank.color} />
+              <View style={[styles.emblem, { borderColor: accent + '55', backgroundColor: accent + '18' }]}>
+                <Ionicons name="checkmark" size={34} color={accent} />
               </View>
               <Text style={styles.title} accessibilityRole="header">Séance terminée</Text>
               <Text style={styles.subtitle} numberOfLines={1}>
@@ -456,7 +308,7 @@ export default function WorkoutRecapModal({
               ) : (
                 <>
                   <Animated.Text
-                    style={[styles.xpValue, { color: newRank.color, transform: [{ scale: xpPulse }] }]}
+                    style={[styles.xpValue, { color: accent, transform: [{ scale: xpPulse }] }]}
                     accessibilityLabel={`${xpEarned} XP gagnés`}
                   >
                     +{displayedXP.toLocaleString('fr-FR')}
@@ -470,24 +322,31 @@ export default function WorkoutRecapModal({
             {/* ── Niveau ── */}
             <Animated.View style={[styles.card, { transform: [{ scale: levelBounce }] }]}>
               <View style={styles.levelHeader}>
-                <View style={[styles.levelPill, { backgroundColor: newRank.color + '1F' }]}>
-                  <Text style={[styles.levelPillText, { color: newRank.color }]}>Niveau {newLevel}</Text>
+                <View style={[styles.levelPill, { backgroundColor: accent + '1F' }]}>
+                  <Text style={[styles.levelPillText, { color: accent }]}>Niveau {shownLevel}</Text>
                 </View>
-                <Text style={styles.rankName} numberOfLines={1}>{newRank.name}</Text>
+                <Text style={styles.rankName} numberOfLines={1}>{shownRank.name}</Text>
                 <Text style={styles.levelXPText}>
-                  {newLevelData.currentInLevel.toLocaleString('fr-FR')} / {newLevelData.neededForNext.toLocaleString('fr-FR')} XP
+                  {pending
+                    ? `${prevLevelData.neededForNext.toLocaleString('fr-FR')} / ${prevLevelData.neededForNext.toLocaleString('fr-FR')} XP`
+                    : `${newLevelData.currentInLevel.toLocaleString('fr-FR')} / ${newLevelData.neededForNext.toLocaleString('fr-FR')} XP`}
                 </Text>
               </View>
               <View style={styles.levelTrack}>
                 <Animated.View
                   style={[
                     styles.levelFill,
-                    { backgroundColor: newRank.color },
+                    { backgroundColor: accent },
                     { width: progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) },
                   ]}
                 />
               </View>
-              <Text style={styles.levelHint}>
+              {/* Avant la célébration, l'indication reste invisible mais garde sa place. */}
+              <Text
+                style={[styles.levelHint, pending && { opacity: 0 }]}
+                accessibilityElementsHidden={pending}
+                importantForAccessibility={pending ? 'no-hide-descendants' : 'auto'}
+              >
                 {leveledUp
                   ? (rankChanged ? `Nouveau rang débloqué : ${newRank.name} !` : `Niveau ${newLevel} atteint !`)
                   : `Encore ${Math.max(0, newLevelData.neededForNext - newLevelData.currentInLevel).toLocaleString('fr-FR')} XP pour le niveau ${newLevel + 1}`}
@@ -580,108 +439,15 @@ export default function WorkoutRecapModal({
           </TouchableOpacity>
         </View>
 
-        {/* ── Rank-up CINEMATIC overlay ────────────────────────────────────── */}
-        {rankUpAnimVisible ? (
-          <Animated.View style={[styles.rkOverlay, { opacity: rkOverlayOpacity }]}>
-            {/* Anneaux de choc */}
-            <Animated.View style={[styles.rkRing, { borderColor: newRank.color,         transform: [{ scale: rkRing1Scale }], opacity: rkRing1Opacity }]} />
-            <Animated.View style={[styles.rkRing, { borderColor: newRank.color + 'CC', width: 240, height: 240, borderRadius: 120, transform: [{ scale: rkRing2Scale }], opacity: rkRing2Opacity }]} />
-            <Animated.View style={[styles.rkRing, { borderColor: newRank.color + '88', width: 180, height: 180, borderRadius:  90, transform: [{ scale: rkRing3Scale }], opacity: rkRing3Opacity }]} />
-
-            {/* Carte cinématique */}
-            <Animated.View style={[
-              styles.rkCard,
-              { borderColor: newRank.color + '60', shadowColor: newRank.color },
-              { opacity: rkCardOpacity, transform: [{ translateY: rkCardY }, { scale: rkCardScale }] },
-            ]}>
-              {/* Lueur de bord pulsante */}
-              <Animated.View style={[StyleSheet.absoluteFill, styles.rkBorderGlow, { borderColor: newRank.color, opacity: rkBorderPulse }]} pointerEvents="none" />
-
-              {/* Icône rebondissante */}
-              <Animated.View style={[styles.rkIconWrap, { backgroundColor: newRank.color + '1A', borderColor: newRank.color + '44', transform: [{ scale: rkIconScale }] }]}>
-                <Ionicons name={getRankIcon(newRank.tier)} size={44} color={newRank.color} />
-              </Animated.View>
-
-              <Text style={styles.rkKicker}>Nouveau rang débloqué</Text>
-
-              {/* Nom du rang — ZOOM depuis 2.8× + responsive */}
-              <Animated.View style={[styles.rkTitleWrap, { transform: [{ scale: rkTitleScale }], opacity: rkTitleOpacity }]}>
-                <Text
-                  style={[styles.rkRankName, { color: newRank.color }]}
-                  adjustsFontSizeToFit
-                  numberOfLines={1}
-                  minimumFontScale={0.4}
-                >
-                  {newRank.name.toUpperCase()}
-                </Text>
-              </Animated.View>
-
-              {/* Niveau + transition ancien → nouveau rang */}
-              <Animated.Text style={[styles.rkLevelLine, { color: newRank.color + 'CC', opacity: rkSubtitleOp }]}>
-                Niveau {newLevel}
-              </Animated.Text>
-              <Animated.View style={[styles.rkFromRow, { opacity: rkSubtitleOp }]}>
-                <Text style={styles.rkFromOld}>{prevRank.name}</Text>
-                <Ionicons name="arrow-forward" size={11} color="rgba(255,255,255,0.3)" style={{ marginHorizontal: 7 }} />
-                <Text style={[styles.rkFromNew, { color: newRank.color }]}>{newRank.name}</Text>
-              </Animated.View>
-            </Animated.View>
-
-            <Animated.Text style={[styles.rkTap, { opacity: rkTapOpacity }]}>
-              Appuie pour continuer
-            </Animated.Text>
-            <TouchableOpacity accessible={false} style={StyleSheet.absoluteFill} onPress={dismissRankUpAnim} activeOpacity={1} />
-          </Animated.View>
+        {/* ── Gain de niveau / nouveau rang, par-dessus le récap ── */}
+        {celebrating ? (
+          <LevelUpOverlay
+            prevLevel={prevLevel}
+            newLevel={newLevel}
+            userInitial={userInitial}
+            onClose={finishCelebration}
+          />
         ) : null}
-
-        {/* ── Level-up overlay — affiché par-dessus tout ───────────────────── */}
-        {rankAnimVisible ? (
-          <Animated.View style={[styles.rankOverlayWrap, { opacity: rankOverlayOpacity }]}>
-            {/* Anneau de lumière 1 */}
-            <Animated.View style={[
-              styles.glowRing,
-              { borderColor: newRank.color, transform: [{ scale: glowScale1 }], opacity: glowOpacity1 },
-            ]} />
-            {/* Anneau de lumière 2 */}
-            <Animated.View style={[
-              styles.glowRing,
-              { borderColor: newRank.color + '80', transform: [{ scale: glowScale2 }], opacity: glowOpacity2 },
-            ]} />
-
-            {/* Badge central */}
-            <Animated.View style={[
-              styles.rankUpCard,
-              {
-                borderColor: newRank.color + '55',
-                shadowColor: newRank.color,
-                transform: [{ scale: rankBadgeScale }],
-                opacity: rankBadgeOpacity,
-              },
-            ]}>
-              <Text style={styles.rankUpKicker}>Niveau atteint !</Text>
-              <Animated.Text style={[
-                styles.rankUpName,
-                { color: newRank.color, transform: [{ scale: rankNamePulse }] },
-              ]}>
-                {newLevel}
-              </Animated.Text>
-              <Text style={[styles.rankUpLevel, { color: newRank.color + 'CC' }]}>
-                {newRank.name}
-              </Text>
-            </Animated.View>
-
-            <Animated.Text style={[styles.rankUpTap, { opacity: tapHintOpacity }]}>
-              Appuie pour continuer
-            </Animated.Text>
-
-            <TouchableOpacity accessible={false}
-              style={StyleSheet.absoluteFill}
-              onPress={dismissRankAnim}
-              activeOpacity={1}
-            />
-          </Animated.View>
-        ) : null}
-
       </Animated.View>
     </Modal>
   );
@@ -820,160 +586,4 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   ctaText: { color: '#fff', fontSize: 16, fontWeight: '800' },
-
-  // ── Rank-up overlay ───────────────────────────────────────────────────────
-  rankOverlayWrap: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(4, 4, 10, 0.97)',
-  },
-  glowRing: {
-    position: 'absolute',
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    borderWidth: 2.5,
-    backgroundColor: 'transparent',
-  },
-  rankUpCard: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(14, 12, 24, 0.98)',
-    borderWidth: 1.5,
-    borderRadius: 28,
-    paddingVertical: 40,
-    paddingHorizontal: 44,
-    marginHorizontal: 24,
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.9,
-    shadowRadius: 50,
-    elevation: 24,
-  },
-  rankUpKicker: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  rankUpName: {
-    fontSize: 54,
-    fontWeight: '900',
-    letterSpacing: -0.5,
-    textAlign: 'center',
-    marginBottom: 10,
-    textShadowColor: 'rgba(0,0,0,0.7)',
-    textShadowOffset: { width: 0, height: 6 },
-    textShadowRadius: 18,
-  },
-  rankUpLevel: {
-    fontSize: 16,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  rankUpTap: {
-    position: 'absolute',
-    bottom: 56,
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-
-  // ── Rank-up cinematic styles ──────────────────────────────────────────────
-  rkOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(2, 2, 8, 0.98)',
-  },
-  rkRing: {
-    position: 'absolute',
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    borderWidth: 2,
-    backgroundColor: 'transparent',
-  },
-  rkCard: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(8, 6, 18, 0.99)',
-    borderWidth: 1.5,
-    borderRadius: 32,
-    paddingVertical: 44,
-    paddingHorizontal: 36,
-    width: '88%',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1.0,
-    shadowRadius: 70,
-    elevation: 32,
-  },
-  rkBorderGlow: {
-    borderRadius: 32,
-    borderWidth: 3,
-  },
-  rkIconWrap: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    marginBottom: 22,
-  },
-  rkTitleWrap: {
-    width: '100%',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  rkKicker: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  rkRankName: {
-    fontSize: 60,
-    fontWeight: '900',
-    letterSpacing: -1,
-    textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.7)',
-    textShadowOffset: { width: 0, height: 8 },
-    textShadowRadius: 24,
-    marginBottom: 2,
-  },
-  rkLevelLine: {
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-    textAlign: 'center',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  rkFromRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rkFromOld: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  rkFromNew: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  rkTap: {
-    position: 'absolute',
-    bottom: 56,
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-  },
-
 });
