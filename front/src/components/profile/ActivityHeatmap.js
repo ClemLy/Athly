@@ -21,9 +21,11 @@ const INTENSITY_COLOR = {
   4: Colors.primary,   // plein
 };
 
+// Abréviations sans ambiguïté (juin et juillet ne partagent plus un "J").
+const MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+
 function monthLabelFor(dateKey) {
-  const d = new Date(dateKey);
-  return ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'][d.getMonth()];
+  return MONTHS[new Date(dateKey).getMonth()];
 }
 
 export default function ActivityHeatmap({ heatmap = null }) {
@@ -61,17 +63,17 @@ export default function ActivityHeatmap({ heatmap = null }) {
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.headerRow}>
+      <View style={styles.headerRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <Text style={styles.headerTitle}>{totalDays} jour{totalDays > 1 ? 's' : ''} d'activité</Text>
         <View style={styles.legend}>
-          <Text style={styles.legendLabel}>−</Text>
+          <Text style={styles.legendLabel}>Moins</Text>
           {[0, 1, 2, 3, 4].map((i) => (
             <View
               key={`l-${i}`}
               style={[styles.legendCell, { backgroundColor: INTENSITY_COLOR[i] }]}
             />
           ))}
-          <Text style={styles.legendLabel}>+</Text>
+          <Text style={styles.legendLabel}>Plus</Text>
         </View>
       </View>
 
@@ -86,16 +88,17 @@ export default function ActivityHeatmap({ heatmap = null }) {
         accessibilityLabel={`Calendrier d'activité sur 12 mois : ${totalDays} jour${totalDays > 1 ? 's' : ''} d'entraînement`}
       >
         <View>
-          {/* Étiquettes mois */}
-          <View style={styles.monthRow}>
-            {cols.map((_, idx) => {
-              const lbl = monthLabels.find((m) => m.idx === idx);
-              return (
-                <Text key={`m-${idx}`} style={styles.monthLabel}>
-                  {lbl ? lbl.label : ''}
-                </Text>
-              );
-            })}
+          {/* Étiquettes mois, placées sur la colonne du premier jour du mois */}
+          <View style={[styles.monthRow, { width: cols.length * (CELL_SIZE + CELL_GAP) }]}>
+            {monthLabels.map((m) => (
+              <Text
+                key={`m-${m.idx}`}
+                numberOfLines={1}
+                style={[styles.monthLabel, { left: m.idx * (CELL_SIZE + CELL_GAP) }]}
+              >
+                {m.label}
+              </Text>
+            ))}
           </View>
           {/* Grille 7×N */}
           <View style={styles.grid}>
@@ -161,16 +164,15 @@ const styles = StyleSheet.create({
     paddingRight: 6,
   },
   monthRow: {
-    flexDirection: 'row',
-    height: 14,
+    height: 16,
     marginBottom: 4,
   },
   monthLabel: {
-    width: CELL_SIZE + CELL_GAP,
-    color: Colors.textMuted,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.4,
+    position: 'absolute',
+    top: 0,
+    color: Colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '600',
   },
   grid: {
     flexDirection: 'row',
@@ -192,8 +194,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   emptyText: {
-    color: Colors.textMuted,
-    fontSize: 12,
+    color: Colors.textSecondary,
+    fontSize: 13,
     textAlign: 'center',
   },
 });

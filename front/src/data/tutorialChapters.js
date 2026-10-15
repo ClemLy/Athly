@@ -52,8 +52,8 @@ export const TUTORIAL_CHAPTERS = [
       },
       {
         key: 'home_ritual',
-        title: 'Récupération Active',
-        body: "Les jours sans séance, cette carte propose un rituel de récupération (étirements, respiration, yoga…). Complète-le pour gagner 20 XP et maintenir ta streak.",
+        title: 'Récupération active',
+        body: "Les jours sans séance, choisis un rituel de récupération : mobilité, marche, respiration, automassage ou lecture. Va jusqu'au bout pour gagner de l'XP et garder ta série active.",
         targetKey: 'home_ritual', position: 'top', scrollY: 560,
       },
     ],
@@ -129,8 +129,8 @@ export const TUTORIAL_CHAPTERS = [
       },
       {
         key: 'profile_frame',
-        title: 'Personnaliser ton Cadre',
-        body: "Ces boutons te permettent de changer ton cadre (formes, couleurs), consulter la Roadmap des rangs et visiter la Salle des Trophées.",
+        title: 'Tes raccourcis',
+        body: "Ouvre ta salle des trophées, la progression des rangs, tes titres ou change le cadre de ton avatar. Chaque carte t'indique où tu en es.",
         targetKey: 'profile_quickactions', position: 'bottom', scrollY: 0,
       },
       {
@@ -347,8 +347,8 @@ export const TUTORIAL_CHAPTERS = [
       },
       {
         key: 'settings_roadmap',
-        title: 'Roadmap des Rangs',
-        body: "Accède à la Roadmap (bouton Roadmap sur ton profil) pour voir toutes les récompenses visuelles à chaque palier : cadres, formes et effets animés.",
+        title: 'Progression des rangs',
+        body: "Depuis ton profil, la carte Rangs montre les récompenses visuelles de chaque palier : cadres, formes et effets animés.",
         targetKey: null, position: 'center', scrollY: null,
       },
       {

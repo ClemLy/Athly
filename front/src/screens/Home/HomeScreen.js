@@ -282,7 +282,7 @@ export default function HomeScreen({ navigation }) {
 
               {(!hasWorkoutToday || hasRitualToday || forceShowRituals) && !loading ? (
                 <View style={styles.section} ref={ritualRef} onLayout={onRitualLayout} collapsable={false}>
-                  <Text style={styles.sectionTitle}>Récupération Active</Text>
+                  <Text style={styles.sectionTitle}>Récupération active</Text>
                   <RecoveryRitualsCard />
                 </View>
               ) : null}

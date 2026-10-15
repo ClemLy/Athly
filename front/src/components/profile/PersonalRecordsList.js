@@ -17,8 +17,13 @@ import { Colors, MUSCLE_GROUP_COLORS } from '../../constants/theme';
 //     mis en avant) — personnalisable ("Aucun record mis en avant" côté soi,
 //     "Aucun record pour l'instant" côté ami).
 //   - onPressItem : (record) => void  → navigation vers ExerciseStatsScreen
+//   - emptyHint / emptyActionLabel / onEmptyAction : explication et bouton de
+//     l'état vide (uniquement sur son propre profil, pour choisir ses records).
 //
-export default function PersonalRecordsList({ records = [], onPressItem, emptyLabel = 'Aucun record mis en avant' }) {
+export default function PersonalRecordsList({
+  records = [], onPressItem, emptyLabel = 'Aucun record mis en avant',
+  emptyHint = null, emptyActionLabel = null, onEmptyAction = null,
+}) {
   const hasAny = records.some((r) => r.hasData);
 
   if (records.length === 0) {
@@ -26,6 +31,18 @@ export default function PersonalRecordsList({ records = [], onPressItem, emptyLa
       <View style={styles.empty}>
         <Ionicons name="trophy-outline" size={32} color={Colors.textMuted} />
         <Text style={styles.emptyTitle}>{emptyLabel}</Text>
+        {emptyHint ? <Text style={styles.emptyText}>{emptyHint}</Text> : null}
+        {onEmptyAction && emptyActionLabel ? (
+          <TouchableOpacity
+            accessibilityRole="button"
+            style={styles.emptyBtn}
+            onPress={onEmptyAction}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="add" size={16} color={Colors.primary} />
+            <Text style={styles.emptyBtnText}>{emptyActionLabel}</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     );
   }
@@ -61,6 +78,9 @@ function RecordRow({ record, isLast, onPress }) {
   const disabled = !record.hasData;
   return (
     <TouchableOpacity accessibilityRole="button"
+      accessibilityLabel={record.hasData
+        ? `${record.name}, record ${record.prWeight} kilos${record.prEstimate1RM != null ? `, maximum estimé ${record.prEstimate1RM} kilos` : ''}`
+        : `${record.name}, pas encore de record`}
       style={[styles.row, isLast && styles.rowLast]}
       onPress={onPress}
       activeOpacity={disabled ? 1 : 0.85}
@@ -129,7 +149,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   group: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     marginTop: 2,
   },
@@ -143,8 +163,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   valueSub: {
-    color: Colors.textMuted,
-    fontSize: 10,
+    color: Colors.textSecondary,
+    fontSize: 11,
     marginTop: 1,
   },
   valueEmpty: {
@@ -169,10 +189,23 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   emptyText: {
-    color: Colors.textMuted,
-    fontSize: 12,
+    color: Colors.textSecondary,
+    fontSize: 13,
     textAlign: 'center',
     marginTop: 6,
-    lineHeight: 17,
+    lineHeight: 18,
   },
+  emptyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 14,
+    minHeight: 44,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: `${Colors.primary}55`,
+    backgroundColor: `${Colors.primary}14`,
+  },
+  emptyBtnText: { color: Colors.primary, fontSize: 14, fontWeight: '800' },
 });

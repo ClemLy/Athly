@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { xpToLevel, getRank } from '../../services';
 import AvatarFrame, { getFrameBleed } from './AvatarFrame';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 const AVATAR_SIZE = 90;
 const AVATAR_SLOT = 108; // espace réservé à l'avatar (avatarWrap)
@@ -38,6 +39,8 @@ export default function HeroLevelCard({
   }, [profileTheme, realRank]);
 
   const pct = Math.max(0, Math.min(1, progress || 0));
+  const remainingXP = Math.max(0, neededForNext - currentInLevel);
+  const reducedMotion = useReducedMotion();
 
   // L'avatar garde toujours sa taille : on réserve plutôt la place des
   // ornements qui dépassent (couronne, rayons…) au-dessus et en dessous.
@@ -61,10 +64,10 @@ export default function HeroLevelCard({
   const hasShimmer = realRank.shimmer;
   const isGod      = profileTheme && profileTheme.id !== 'auto' ? profileTheme.bgVariant === 'god' : level >= 200;
 
-  // Shimmer pulse pour Légende / Athly God
-  const shimmerAnim = useRef(new Animated.Value(0.4)).current;
+  // Shimmer pulse pour Légende / Athly God (coupé si "Réduire les animations")
+  const shimmerAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
-    if (!hasShimmer) return undefined;
+    if (!hasShimmer || reducedMotion) { shimmerAnim.setValue(1); return undefined; }
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(shimmerAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
@@ -73,7 +76,7 @@ export default function HeroLevelCard({
     );
     loop.start();
     return () => loop.stop();
-  }, [hasShimmer, shimmerAnim]);
+  }, [hasShimmer, reducedMotion, shimmerAnim]);
 
   const cardStyle = [
     styles.card,
@@ -116,9 +119,6 @@ export default function HeroLevelCard({
             <Text style={styles.avatarText}>{(initial || 'U').slice(0, 1).toUpperCase()}</Text>
           </View>
         </AvatarFrame>
-        <View style={[styles.levelChip, { backgroundColor: rank.color }]}>
-          <Text style={styles.levelChipText}>{level}</Text>
-        </View>
       </View>
 
       {/* ── Nom + badge shimmer ── */}
@@ -146,8 +146,8 @@ export default function HeroLevelCard({
       <Text style={[styles.rankName, { color: rank.color }]}>{rank.name}</Text>
 
       {/* ── Niveau central ── */}
-      <View style={styles.levelBlock}>
-        <Text style={styles.levelLabel}>NIVEAU</Text>
+      <View style={styles.levelBlock} accessible accessibilityLabel={`Niveau ${level}`}>
+        <Text style={styles.levelLabel}>Niveau</Text>
         <Text style={[
           styles.levelNumber,
           { color: hasGlow ? rank.color : Colors.textPrimary },
@@ -158,7 +158,13 @@ export default function HeroLevelCard({
       </View>
 
       {/* ── Barre de progression ── */}
-      <View style={styles.barTrack}>
+      <View
+        style={styles.barTrack}
+        accessible
+        accessibilityRole="progressbar"
+        accessibilityLabel="Progression vers le niveau suivant"
+        accessibilityValue={{ min: 0, max: neededForNext, now: currentInLevel }}
+      >
         <View style={[
           styles.barFill,
           { width: `${pct * 100}%`, backgroundColor: rank.color },
@@ -171,10 +177,17 @@ export default function HeroLevelCard({
         ]} />
       </View>
       <View style={styles.xpRow}>
-        <Text style={styles.xpCurrent}>{currentInLevel.toLocaleString('fr-FR')} XP</Text>
-        {level < 200
-          ? <Text style={styles.xpNext}>{neededForNext.toLocaleString('fr-FR')} pour Niv.{level + 1}</Text>
-          : <Text style={[styles.xpNext, { color: rank.color }]}>NIVEAU MAXIMUM</Text>}
+        {level < 200 ? (
+          <>
+            <Text style={styles.xpCurrent}>
+              {currentInLevel.toLocaleString('fr-FR')}
+              <Text style={styles.xpOf}> / {neededForNext.toLocaleString('fr-FR')} XP</Text>
+            </Text>
+            <Text style={styles.xpNext}>{remainingXP.toLocaleString('fr-FR')} XP avant le niveau {level + 1}</Text>
+          </>
+        ) : (
+          <Text style={[styles.xpNext, { color: rank.color }]}>Niveau maximum atteint</Text>
+        )}
       </View>
 
       <View style={styles.divider} />
@@ -194,7 +207,7 @@ export default function HeroLevelCard({
 function Stat({ icon, label, value, color }) {
   return (
     <View style={styles.stat}>
-      <Ionicons name={icon} size={14} color={color} />
+      <Ionicons name={icon} size={14} color={color} accessibilityElementsHidden importantForAccessibility="no" />
       <Text style={styles.statValue} numberOfLines={1}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
@@ -242,25 +255,6 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontWeight: '800',
   },
-  levelChip: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    minWidth: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: Colors.secondaryAccent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#0D0D16',
-    paddingHorizontal: 6,
-  },
-  levelChipText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '900',
-  },
 
   // ── Nom ──────────────────────────────────────────────────────────────────────
   nameRow: {
@@ -291,14 +285,14 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   titleBadgeText: {
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.2,
   },
 
   // ── Rang ──────────────────────────────────────────────────────────────────────
   rankName: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
     letterSpacing: 2.2,
     textTransform: 'uppercase',
@@ -314,8 +308,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   levelLabel: {
-    color: Colors.textMuted,
-    fontSize: 10,
+    color: Colors.textSecondary,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 2.8,
     textTransform: 'uppercase',
@@ -349,13 +343,19 @@ const styles = StyleSheet.create({
   },
   xpCurrent: {
     color: Colors.textPrimary,
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
+  },
+  xpOf: {
+    color: Colors.textSecondary,
+    fontWeight: '600',
   },
   xpNext: {
-    color: Colors.textMuted,
-    fontSize: 11,
+    color: Colors.textSecondary,
+    fontSize: 13,
     fontWeight: '500',
+    fontVariant: ['tabular-nums'],
   },
 
   // ── Séparateur ───────────────────────────────────────────────────────────────
@@ -379,13 +379,14 @@ const styles = StyleSheet.create({
   },
   statValue: {
     color: Colors.textPrimary,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
     marginTop: 4,
+    fontVariant: ['tabular-nums'],
   },
   statLabel: {
-    color: Colors.textMuted,
-    fontSize: 10,
+    color: Colors.textSecondary,
+    fontSize: 12,
     marginTop: 2,
     textAlign: 'center',
     letterSpacing: 0.3,

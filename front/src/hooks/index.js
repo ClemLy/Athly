@@ -8,4 +8,5 @@ export { default as useEffortTimer, formatDuration } from './useEffortTimer';
 export { default as useExerciseSorting, isFiltering } from './useExerciseSorting';
 export { useFeaturedTrophies, MAX_FEATURED } from './useFeaturedTrophies';
 export { useGoogleAuth } from './useGoogleAuth';
+export { useReducedMotion } from './useReducedMotion';
 export { default as useWorkoutState } from './useWorkoutState';

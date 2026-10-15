@@ -6,6 +6,7 @@ import {
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../constants/theme';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 // Certains trophées utilisent une glyphe hors du set Ionicons (ex: "dragon"
 // pour ATHLY UNIQUE — Ionicons n'a pas d'équivalent cornes/dragon correct).
@@ -39,9 +40,10 @@ export const GLOW = {
 export function TrophySlot({ trophy, onPress }) {
   const { icon, label, condition, desc, color, gradientColors, unlocked, tier, glowIntensity } = trophy;
   const gleamX = useRef(new Animated.Value(-56)).current;
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    if (!unlocked) return;
+    if (!unlocked || reducedMotion) { gleamX.setValue(-56); return undefined; }
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(gleamX, { toValue: -56, duration: 1, useNativeDriver: true }),
@@ -52,12 +54,14 @@ export function TrophySlot({ trophy, onPress }) {
     );
     loop.start();
     return () => loop.stop();
-  }, [unlocked, gleamX]);
+  }, [unlocked, reducedMotion, gleamX]);
 
   const glow = GLOW[tier] || GLOW[glowIntensity] || GLOW.bronze;
 
   return (
     <TouchableOpacity accessibilityRole="button"
+      accessibilityLabel={`${label}${unlocked ? '' : ', verrouillé'}`}
+      accessibilityHint="Affiche le détail du trophée"
       style={[styles.slot, unlocked && { borderColor: color + '35', borderTopColor: color + '90', borderWidth: 0.8 }]}
       onPress={onPress}
       activeOpacity={0.82}
@@ -70,12 +74,12 @@ export function TrophySlot({ trophy, onPress }) {
           </LinearGradient>
         ) : (
           <View style={styles.iconLocked}>
-            <Ionicons name="lock-closed" size={18} color="rgba(255,255,255,0.14)" />
+            <Ionicons name="lock-closed" size={18} color={Colors.textMuted} />
           </View>
         )}
       </View>
       <Text style={[styles.label, { color: unlocked ? Colors.textPrimary : Colors.textMuted }]}>{label}</Text>
-      <Text style={[styles.desc, { color: unlocked ? color : 'rgba(255,255,255,0.15)' }]}>
+      <Text style={[styles.desc, { color: unlocked ? color : Colors.textMuted }]}>
         {condition || desc || ''}
       </Text>
     </TouchableOpacity>
@@ -84,14 +88,21 @@ export function TrophySlot({ trophy, onPress }) {
 
 // ─── EmptySlot ────────────────────────────────────────────────────────────────
 
-export function EmptySlot({ onPress, label = 'Choisir', hint = 'Voir tout' }) {
+export function EmptySlot({ onPress, label = 'Ajouter', hint = null }) {
   return (
-    <TouchableOpacity accessibilityRole="button" style={styles.emptySlot} onPress={onPress} activeOpacity={0.7} disabled={!onPress}>
+    <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityLabel={onPress ? 'Ajouter un trophée à la vitrine' : 'Emplacement vide'}
+      style={styles.emptySlot}
+      onPress={onPress}
+      activeOpacity={0.7}
+      disabled={!onPress}
+    >
       <View style={styles.emptyIcon}>
-        <Ionicons name="add" size={22} color="rgba(255,255,255,0.18)" />
+        <Ionicons name="add" size={22} color={Colors.textSecondary} />
       </View>
       <Text style={styles.emptyLabel}>{label}</Text>
-      <Text style={styles.emptyHint}>{hint}</Text>
+      {hint ? <Text style={styles.emptyHint}>{hint}</Text> : null}
     </TouchableOpacity>
   );
 }
@@ -175,12 +186,12 @@ export const styles = StyleSheet.create({
   },
   gleam: { position: 'absolute', top: -8, width: 16, height: 80, backgroundColor: 'rgba(255,255,255,0.30)', borderRadius: 6 },
   iconLocked: { width: 56, height: 56, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center', borderWidth: 0.8, borderColor: 'rgba(255,255,255,0.07)' },
-  label: { fontSize: 12, fontWeight: '800', textAlign: 'center', letterSpacing: 0.3 },
-  desc:  { fontSize: 10, fontWeight: '600', textAlign: 'center', marginTop: 3, letterSpacing: 0.2 },
+  label: { fontSize: 13, fontWeight: '800', textAlign: 'center', letterSpacing: 0.2 },
+  desc:  { fontSize: 11, fontWeight: '600', textAlign: 'center', marginTop: 3, lineHeight: 15 },
 
   emptySlot: {
     flex: 1, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 8, alignItems: 'center',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)', borderStyle: 'dashed',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)', borderStyle: 'dashed',
     backgroundColor: 'rgba(255,255,255,0.02)',
   },
   emptyIcon: {
@@ -189,8 +200,8 @@ export const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
   },
-  emptyLabel: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.22)', letterSpacing: 0.3 },
-  emptyHint:  { fontSize: 10, fontWeight: '500', color: 'rgba(255,255,255,0.14)', marginTop: 3 },
+  emptyLabel: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary },
+  emptyHint:  { fontSize: 11, fontWeight: '500', color: Colors.textMuted, marginTop: 3, textAlign: 'center' },
 
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.74)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
   modalCard: { width: '100%', backgroundColor: 'rgba(20,20,28,0.94)', borderRadius: 28, borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)', borderTopColor: 'rgba(255,255,255,0.22)', shadowColor: '#000', shadowOffset: { width: 0, height: 24 }, shadowOpacity: 0.70, shadowRadius: 48, elevation: 32 },
