@@ -4,8 +4,6 @@ import { TrophySlot, FeaturedModal } from './TrophySlot';
 import { normalizeAchievement } from './AchievementShowcase';
 
 // Vitrine d'un ami : mêmes TrophySlot que la Vitrine de son propre profil.
-// Sans la condition sous le nom : elle est rédigée à la 2e personne ("Tu as…")
-// et ne s'appliquerait pas à l'ami.
 
 export default function FriendShowcaseGrid({ entries = [] }) {
   const [selected, setSelected] = useState(null);
@@ -17,7 +15,7 @@ export default function FriendShowcaseGrid({ entries = [] }) {
     <>
       <View style={styles.row}>
         {trophies.map((trophy) => (
-          <TrophySlot key={trophy.id} trophy={trophy} hideCondition onPress={() => setSelected(trophy)} />
+          <TrophySlot key={trophy.id} trophy={trophy} onPress={() => setSelected(trophy)} />
         ))}
       </View>
       {selected && (

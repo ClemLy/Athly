@@ -23,11 +23,11 @@ import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 import { getAchievements } from '../../services/reward.service';
 import { normalizeAchievement } from '../../components/profile/AchievementShowcase';
-import { TrophyIcon } from '../../components/profile/TrophySlot';
+import { TrophyIcon, TIER_LABELS } from '../../components/profile/TrophySlot';
 import { COLLECTION_CATEGORY, BACKEND_CATEGORY_MAP } from '../../data/backendTrophyCategories';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 
-const TIER_LABELS = { bronze: 'Bronze', silver: 'Argent', gold: 'Or', platinum: 'Platine', diamond: 'Diamant' };
+
 
 // Masque un trophée "secret" tant qu'il n'est pas débloqué — même logique que
 // le masquage backend (buildAchievementsView) appliqué au profil d'un ami :

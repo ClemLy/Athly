@@ -264,7 +264,11 @@ class WorkoutService {
     // ── Anti-cheat temporel ──────────────────────────────────────────────────
     // duration = 0 est traité comme une durée invalide/inconnue → 0 XP.
     let xp = result.xp;
-    if (options.shortSession === true || duration < 300) {
+    const isShort = options.shortSession === true || duration < 300;
+    // La durée réelle et le statut "trop courte" sont enregistrés : ils
+    // décident si la séance compte pour le groupe de streak.
+    await Workout.updateOne({ _id: workout._id }, { $set: { durationSeconds: duration, shortSession: isShort } });
+    if (isShort) {
       xp = 0;
     } else if (duration < 900) {
       xp = Math.round(xp / 10);

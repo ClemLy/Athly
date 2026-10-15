@@ -583,7 +583,7 @@ exports.simulateGroup = async (req, res, next) => {
       if (spec.weather === 'active') {
         await Workout.create({ user: mockUser._id, status: 'in_progress', date: todayAt(12, 0) });
       } else if (spec.weather === 'done') {
-        await Workout.create({ user: mockUser._id, status: 'finished', date: todayAt(8, 0) });
+        await Workout.create({ user: mockUser._id, status: 'finished', durationSeconds: 3300, date: todayAt(8, 0) });
       }
 
       await Friendship.create({ requester: myId, recipient: mockUser._id, status: 'accepted' });

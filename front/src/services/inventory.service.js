@@ -8,50 +8,50 @@ import { Colors } from '../constants/theme';
 // icon = nom Ionicons (pas d'emoji — cohérence avec le reste du design system).
 export const ITEM_CATALOG = {
   ENERGY_DRINK: {
-    name: 'Boisson Énergisante', icon: 'flash', rarity: 'common',
-    description: '+150 XP instantané', usable: true,
+    name: 'Boisson énergisante', icon: 'flash', rarity: 'common',
+    description: 'Te donne 150 XP tout de suite.', effect: '+150 XP', usable: true,
   },
   STREAK_FREEZE: {
-    name: 'Gel de Streak', icon: 'snow', rarity: 'rare',
-    description: 'Charge 1 gel, sauve ta streak en cas de jour manqué', usable: true,
+    name: 'Gel de streak', icon: 'snow', rarity: 'rare',
+    description: 'Charge 1 gel (3 maximum). Un gel sauve ta série si tu manques un jour.', effect: '+1 gel', usable: true, gel: true,
   },
   DOUBLE_XP: {
-    name: 'Boost Double XP', icon: 'flash-outline', rarity: 'rare',
-    description: 'Bonus Double XP sur tes séances', usable: true,
+    name: 'Fiole d\'XP', icon: 'flask-outline', rarity: 'rare',
+    description: 'Te donne 200 XP tout de suite.', effect: '+200 XP', usable: true,
   },
   SUPER_STREAK_FREEZE: {
-    name: 'Super-Gel de Streak', icon: 'snow-outline', rarity: 'epic',
-    description: 'Recharge instantanément tes 3 slots de gels', usable: true,
+    name: 'Super-gel de streak', icon: 'snow-outline', rarity: 'epic',
+    description: 'Remplit d\'un coup tes 3 emplacements de gel.', effect: 'Gels au maximum', usable: true, gel: true,
   },
   TRIPLE_XP: {
-    name: 'Boost Triple XP', icon: 'flame', rarity: 'epic',
-    description: 'Bonus Triple XP sur tes séances', usable: true,
+    name: 'Élixir d\'XP', icon: 'flame', rarity: 'epic',
+    description: 'Te donne 300 XP tout de suite.', effect: '+300 XP', usable: true,
   },
   LEVEL_COUPON: {
-    name: 'Coupon de Niveau', icon: 'ticket', rarity: 'legendary',
-    description: 'Passe instantanément au niveau supérieur', usable: true,
+    name: 'Coupon de niveau', icon: 'ticket', rarity: 'legendary',
+    description: 'Te fait passer directement au niveau suivant.', effect: '+1 niveau', usable: true,
   },
   QUINTUPLE_XP: {
-    name: 'Boost Quintuple XP', icon: 'rocket', rarity: 'legendary',
-    description: 'Bonus Quintuple XP sur tes séances', usable: true,
+    name: 'Météore d\'XP', icon: 'rocket', rarity: 'legendary',
+    description: 'Te donne 500 XP tout de suite.', effect: '+500 XP', usable: true,
   },
   CHEST_KEY: {
     name: 'Coffre', icon: 'cube', rarity: 'common',
-    description: 'Un coffre à ouvrir, que contient-il ?', usable: false,
+    description: 'Contient un objet tiré au hasard.', usable: false,
   },
   PROFILE_FRAME_BLOOD_BOND: {
-    name: 'Cadre "Lien de Sang"', icon: 'shield', rarity: 'unique',
-    description: "Cosmétique Unique (niveau d'amitié 5). Introuvable en coffre.",
+    name: 'Cadre Croc de Dragon', icon: 'shield', rarity: 'unique',
+    description: "Cadre unique, obtenu en atteignant le niveau d'amitié 5. Introuvable en coffre.",
     usable: false, claimable: true,
   },
   FRAME_COLOR_BLOOD_SANG: {
-    name: 'Couleur "Rouge Sang"', icon: 'color-palette', rarity: 'unique',
-    description: "Cosmétique Unique (streak de groupe 30 jours à 5). Introuvable en coffre.",
+    name: 'Couleur Rouge Sang', icon: 'color-palette', rarity: 'unique',
+    description: "Couleur de cadre unique, obtenue avec une streak de groupe de 30 jours à 5. Introuvable en coffre.",
     usable: false, claimable: true,
   },
   THEME_UNLOCK_BLOOD_SANG: {
-    name: 'Thème "Rouge Sang"', icon: 'color-wand', rarity: 'unique',
-    description: "Cosmétique Unique (100 coffres ouverts). Introuvable en coffre.",
+    name: 'Thème Rouge Sang', icon: 'color-wand', rarity: 'unique',
+    description: "Thème de profil unique, obtenu après 100 coffres ouverts. Introuvable en coffre.",
     usable: false, claimable: true,
   },
 };
@@ -59,6 +59,17 @@ export const ITEM_CATALOG = {
 // Couleurs par rareté — alignées sur la palette du jeu (theme.js).
 // unique = Rouge Sang premium (voir Colors.uniqueBlood*), pas or : distingue
 // visuellement le palier ultime de tout ce qui est légendaire/doré.
+// Chances de tirage d'un coffre (miroir de back/services/chest.service.js),
+// affichées dans l'inventaire par transparence.
+export const CHEST_ODDS = [
+  { rarity: 'common', pct: 60 },
+  { rarity: 'rare', pct: 25 },
+  { rarity: 'epic', pct: 12 },
+  { rarity: 'legendary', pct: 3 },
+];
+// Minutes de séance cumulées pour gagner un coffre (back : CHEST_MINUTES_THRESHOLD).
+export const CHEST_MINUTES = 120;
+
 export const RARITY_META = {
   common:    { label: 'Commun',     color: '#9AA0AE' },
   rare:      { label: 'Rare',       color: '#3B82F6' },

@@ -1,3 +1,7 @@
+// "Aujourd'hui" (séance du jour, streaks, secousses) se calcule à l'heure
+// française : Render tourne en UTC, ce qui décalait le jour de 1 à 2 h.
+process.env.TZ = process.env.TZ || "Europe/Paris";
+
 const mongoose = require("mongoose");
 const app = require("./app");
 const config = require("./config/env");

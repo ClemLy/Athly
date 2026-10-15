@@ -156,7 +156,8 @@ async function grantGroupXpBonus(memberId, bonusXp) {
 // ── Météo des séances (Brique IV) ──────────────────────────────────────────
 // 4 états stricts, du plus « chaud » au plus « froid » — le premier qui
 // s'applique gagne :
-//   ✅ done      : séance terminée aujourd'hui (status finished/completed).
+//   ✅ done      : vraie séance terminée aujourd'hui (≥ 5 min, pas shortSession :
+//                  voir COUNTED_SESSION_FILTER dans models/Workout.js).
 //   ⚡ active    : séance en cours aujourd'hui (status draft/in_progress)
 //                  dont le dernier `updatedAt` date de moins de 4h — au-delà,
 //                  on considère la séance oubliée en arrière-plan plutôt que
@@ -178,7 +179,7 @@ async function attachWeatherStatuses(members) {
   const workouts = await Workout.find({
     user: { $in: memberIds },
     date: { $gte: todayStart },
-  }).select('user status updatedAt');
+  }).select('user status updatedAt durationSeconds shortSession');
 
   const workoutsByUser = new Map();
   for (const w of workouts) {
@@ -195,7 +196,7 @@ async function attachWeatherStatuses(members) {
 
     let weatherStatus = 'sleeping';
 
-    const hasFinishedToday = todaysWorkouts.some((w) => w.status === 'finished' || w.status === 'completed');
+    const hasFinishedToday = todaysWorkouts.some(Workout.countsAsSession);
     const hasActiveNow = todaysWorkouts.some((w) => {
       if (w.status !== 'draft' && w.status !== 'in_progress') return false;
       const updatedAt = w.updatedAt ? new Date(w.updatedAt).getTime() : 0;
@@ -242,7 +243,7 @@ async function detectAndApplyStreakBreak(group) {
     memberIds.map((memberId) =>
       Workout.findOne({
         user:   memberId,
-        status: { $in: ['finished', 'completed'] },
+        ...Workout.COUNTED_SESSION_FILTER,
         date:   { $gte: missedDayStart, $lt: missedDayEnd },
       }).select('_id'),
     ),
@@ -531,7 +532,7 @@ exports.shakeMember = async (req, res, next) => {
 
     const workoutDone = await Workout.findOne({
       user:   memberId,
-      status: { $in: ['finished', 'completed'] },
+      ...Workout.COUNTED_SESSION_FILTER,
       date:   { $gte: todayStart, $lt: tomorrow },
     });
 
@@ -631,7 +632,7 @@ exports.checkAndUpdateGroupStreaks = async (req, res, next) => {
       memberIds.map((memberId) =>
         Workout.findOne({
           user:   memberId,
-          status: { $in: ['finished', 'completed'] },
+          ...Workout.COUNTED_SESSION_FILTER,
           date:   { $gte: todayStart, $lt: tomorrow },
         }),
       ),
