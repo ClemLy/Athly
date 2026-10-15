@@ -6,12 +6,26 @@ import RankRoadmapScreen  from '../screens/Profile/RankRoadmapScreen';
 import TrophyRoomScreen   from '../screens/Profile/TrophyRoomScreen';
 import SettingsScreen     from '../screens/Profile/SettingsScreen';
 import InventoryScreen    from '../screens/Profile/InventoryScreen';
+import { View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../constants/theme';
 import { screenTransition } from './transitions';
 
 const Stack = createStackNavigator();
 
 const HEADER_BG = Colors.bgAbyss;
+
+// Même bouton retour que les écrans à en-tête personnalisé (chevron dans un rond).
+function BackChevron() {
+  return (
+    <View style={{
+      width: 40, height: 40, borderRadius: 20, marginLeft: 8,
+      alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.cardDeep,
+    }}>
+      <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
+    </View>
+  );
+}
 
 export default function ProfileStack() {
   return (
@@ -32,6 +46,7 @@ export default function ProfileStack() {
         headerBackTitleVisible: false,
         headerBackTitle: 'Retour',
         headerBackAccessibilityLabel: 'Retour',
+        headerBackImage: () => <BackChevron />,
         headerShadowVisible: false,
         headerTitleAlign: 'center',
         cardStyle: { backgroundColor: HEADER_BG },

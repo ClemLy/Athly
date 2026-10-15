@@ -117,6 +117,8 @@ export default function WorkoutRecapModal({
 
   // ── Détail XP ────────────────────────────────────────────────────────────────
   const dailyCapReached  = !!safeStats.dailyCapReached;
+  // Séance validée en moins de 5 min : enregistrée, mais ni XP ni série.
+  const shortSession  = !!safeStats.shortSession;
   const questXPEarned    = Math.round(Number(safeStats.questXP) || 0);
   const xpMultiplier     = Number(safeStats.xpMultiplier) || 1.0;
   const workoutXP        = xpEarned - questXPEarned;
@@ -292,18 +294,35 @@ export default function WorkoutRecapModal({
 
             {/* ── Emblème + titre ── */}
             <View style={styles.hero}>
-              <View style={[styles.emblem, { borderColor: accent + '55', backgroundColor: accent + '18' }]}>
-                <Ionicons name="checkmark" size={34} color={accent} />
-              </View>
-              <Text style={styles.title} accessibilityRole="header">Séance terminée</Text>
-              <Text style={styles.subtitle} numberOfLines={1}>
-                {workoutName ? `${workoutName} · bien joué !` : 'Bien joué !'}
-              </Text>
+              {shortSession ? (
+                <>
+                  <View style={[styles.emblem, { borderColor: Colors.glassBorder, backgroundColor: Colors.glassBg }]}>
+                    <Ionicons name="time-outline" size={32} color={Colors.textSecondary} />
+                  </View>
+                  <Text style={styles.title} accessibilityRole="header">Séance enregistrée</Text>
+                  <Text style={styles.subtitle} numberOfLines={1}>{workoutName || 'Séance'}</Text>
+                </>
+              ) : (
+                <>
+                  <View style={[styles.emblem, { borderColor: accent + '55', backgroundColor: accent + '18' }]}>
+                    <Ionicons name="checkmark" size={34} color={accent} />
+                  </View>
+                  <Text style={styles.title} accessibilityRole="header">Séance terminée</Text>
+                  <Text style={styles.subtitle} numberOfLines={1}>
+                    {workoutName ? `${workoutName} · bien joué !` : 'Bien joué !'}
+                  </Text>
+                </>
+              )}
             </View>
 
             {/* ── XP gagnée (compteur animé) ── */}
             <Animated.View style={[styles.xpBlock, { transform: [{ scale: xpScale }] }]}>
-              {dailyCapReached ? (
+              {shortSession ? (
+                <View style={styles.capBadge}>
+                  <Ionicons name="information-circle-outline" size={15} color={Colors.textSecondary} />
+                  <Text style={styles.capText}>Moins de 5 minutes : cette séance ne rapporte pas d'XP et ne compte pas pour ta série.</Text>
+                </View>
+              ) : dailyCapReached ? (
                 <>
                   <Text style={[styles.xpValue, { color: Colors.textMuted }]}>+0<Text style={styles.xpUnit}> XP</Text></Text>
                   <View style={styles.capBadge}>

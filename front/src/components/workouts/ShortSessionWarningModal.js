@@ -46,7 +46,7 @@ export default function ShortSessionWarningModal({ visible, onModify, onForce, e
             <Text style={styles.bodyAccent}>{formatTime(elapsedSeconds || 0)}</Text>
             .{'\n'}Il faut au moins{' '}
             <Text style={styles.bodyAccent}>5 minutes</Text>
-            {' '}pour valider des XP.
+            {' '}pour gagner de l'XP.
           </Text>
 
           <View style={styles.warningRow}>

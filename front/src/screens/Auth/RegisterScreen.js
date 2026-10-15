@@ -16,6 +16,7 @@ import AvatarFrame from '../../components/profile/AvatarFrame';
 import { register, getRank } from '../../services';
 import { haptics } from '../../services';
 import { getErrorMessage } from '../../utils/errorMessages';
+import { rememberPendingEmail } from '../../utils/pendingEmail';
 
 const EMAIL_RE   = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_PSEUDO = 30;
@@ -172,6 +173,7 @@ export default function RegisterScreen({ navigation }) {
         referralCode: referralCode.trim(),
       });
       haptics.success();
+      rememberPendingEmail(email.trim());
       navigation.navigate('EmailVerification', { email: email.trim() });
     } catch (error) {
       const code = error?.data?.code;

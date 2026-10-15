@@ -15,6 +15,7 @@ import { login, googleLogin, haptics } from '../../services';
 import { useAuth } from '../../context/AuthContext';
 import { useGoogleAuth } from '../../hooks';
 import { getErrorMessage } from '../../utils/errorMessages';
+import { rememberPendingEmail } from '../../utils/pendingEmail';
 
 const LOGO_ORANGE = require('../../../assets/logo-orange.png');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -30,6 +31,7 @@ export default function LoginScreen({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe]     = useState(true);
   const [emailErr, setEmailErr]         = useState('');
+  const [passwordErr, setPasswordErr]   = useState('');
   const [globalErr, setGlobalErr]       = useState('');
   const [errType, setErrType]           = useState('error');
 
@@ -75,11 +77,9 @@ export default function LoginScreen({ navigation }) {
   };
 
   const handleLogin = async () => {
-    if (!validateEmail() || !password) {
-      if (!password) { setErrType('error'); setGlobalErr('Entre ton mot de passe.'); }
-      fail();
-      return;
-    }
+    const emailOk = validateEmail();
+    setPasswordErr(password ? '' : 'Entre ton mot de passe.');
+    if (!emailOk || !password) { fail(); return; }
     try {
       setLoading(true);
       setGlobalErr('');
@@ -90,6 +90,7 @@ export default function LoginScreen({ navigation }) {
     } catch (error) {
       const status = error?.status;
       if (status === 403 && error?.data?.code === 'EMAIL_NOT_VERIFIED') {
+        rememberPendingEmail(email.trim());
         navigation.navigate('EmailVerification', { email: email.trim(), fromLogin: true });
         return;
       }
@@ -151,7 +152,8 @@ export default function LoginScreen({ navigation }) {
               icon="lock-closed-outline"
               placeholder="Ton mot de passe"
               value={password}
-              onChangeText={(v) => { setPassword(v); if (globalErr) setGlobalErr(''); }}
+              onChangeText={(v) => { setPassword(v); if (passwordErr) setPasswordErr(''); if (globalErr) setGlobalErr(''); }}
+              error={passwordErr}
               isPassword
               secureTextEntry={!showPassword}
               showPassword={showPassword}
