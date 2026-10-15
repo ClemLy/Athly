@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { pluralWord } from '../../utils/format';
 import { getStreakMultiplier, STREAK_MILESTONES } from '../../services';
 import { Colors } from '../../constants/theme';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 // ─── StreakBonusModal — Roadmap des multiplicateurs ───────────────────────────
 
@@ -119,9 +120,10 @@ export default function StreakBadge({ streak = 0, compact = false }) {
   const { multiplier, label, color, tier } = getStreakMultiplier(streak);
   const [modalVisible, setModalVisible] = useState(false);
 
+  const reducedMotion = useReducedMotion();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
-    if (tier === 'base' || streak === 0) return;
+    if (tier === 'base' || streak === 0 || reducedMotion) { pulseAnim.setValue(1); return undefined; }
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.18, duration: 650,  useNativeDriver: true }),
@@ -130,7 +132,7 @@ export default function StreakBadge({ streak = 0, compact = false }) {
     );
     loop.start();
     return () => loop.stop();
-  }, [tier, streak, pulseAnim]);
+  }, [tier, streak, reducedMotion, pulseAnim]);
 
   if (streak === 0) return null;
 
@@ -144,6 +146,7 @@ export default function StreakBadge({ streak = 0, compact = false }) {
         <TouchableOpacity accessibilityRole="button"
           activeOpacity={0.75}
           onPress={openModal}
+          accessibilityLabel={`Série de ${streak} ${pluralWord(streak, 'jour')}${multiplier > 1 ? `, bonus d'XP multiplié par ${multiplier}` : ''}`}
           style={[styles.compact, { borderColor: flameColor + '40', backgroundColor: flameColor + '12' }]}
         >
           <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
@@ -164,6 +167,8 @@ export default function StreakBadge({ streak = 0, compact = false }) {
       <TouchableOpacity accessibilityRole="button"
         activeOpacity={0.8}
         onPress={openModal}
+        accessibilityLabel={`Série de ${streak} ${pluralWord(streak, 'jour')}${multiplier > 1 ? `, bonus d'XP multiplié par ${multiplier}` : ''}`}
+        accessibilityHint="Affiche les paliers de bonus"
         style={[styles.badge, { borderColor: flameColor + '40', backgroundColor: flameColor + '10' }]}
       >
         <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
@@ -225,7 +230,7 @@ const styles = StyleSheet.create({
   },
   multText: { fontSize: 11, fontWeight: '800' },
   label: {
-    fontSize: 10, fontWeight: '700', letterSpacing: 1.2,
+    fontSize: 11, fontWeight: '800', letterSpacing: 1.2,
     textTransform: 'uppercase', marginTop: 2, opacity: 0.85,
   },
 });

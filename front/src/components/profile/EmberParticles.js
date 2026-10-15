@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { View, StyleSheet, Animated } from 'react-native';
 import { Colors } from '../../constants/theme';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 // ─── EmberParticles ───────────────────────────────────────────────────────────
 // Braises ascendantes pour les rangs Légende (171+) et ATHLY GOD (200).
@@ -8,7 +9,8 @@ import { Colors } from '../../constants/theme';
 // Entièrement piloté par Animated + useNativeDriver:true.
 //
 // Props :
-//   visible bool — active/désactive les animations
+//   visible bool — active/désactive les animations (toujours coupées si
+//                  l'appareil demande de réduire les animations)
 //   color   string — couleur de base des braises (#C084FC pour Légende, #FFD700 pour God)
 
 const PARTICLE_COUNT = 8;
@@ -17,7 +19,9 @@ function randomBetween(min, max) {
   return min + Math.random() * (max - min);
 }
 
-export default function EmberParticles({ visible = false, color = Colors.legendAccent }) {
+export default function EmberParticles({ visible: wanted = false, color = Colors.legendAccent }) {
+  const reducedMotion = useReducedMotion();
+  const visible = wanted && !reducedMotion;
   const particles = useRef(
     Array.from({ length: PARTICLE_COUNT }, (_, i) => ({
       y:       new Animated.Value(0),
@@ -56,7 +60,7 @@ export default function EmberParticles({ visible = false, color = Colors.legendA
               Animated.timing(p.opacity, { toValue: 0,    duration: p.duration - 300, useNativeDriver: true }),
             ]),
           ]),
-        ]).start(() => animate()); // boucle infinie
+        ]).start(({ finished }) => { if (finished) animate(); }); // boucle jusqu'à l'arrêt
       };
       animate();
       return p;

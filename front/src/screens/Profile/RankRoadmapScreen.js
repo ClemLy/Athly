@@ -33,7 +33,7 @@ export default function RankRoadmapScreen({ navigation }) {
           <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Roadmap des Rangs</Text>
+          <Text style={styles.headerTitle}>Progression des rangs</Text>
           <Text style={styles.headerSub}>Niveau actuel : {currentLevel}</Text>
         </View>
         <View style={{ width: 38 }} />

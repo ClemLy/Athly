@@ -14,7 +14,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { useAuth } from '../../context/AuthContext';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import { useUser } from '../../context/UserContext';
 import { Colors } from '../../constants/theme';
@@ -49,6 +48,9 @@ import BorderPicker     from '../../components/profile/BorderPicker';
 import TitlePickerModal from '../../components/profile/TitlePickerModal';
 
 
+// Niveaux d'entrée de chaque rang (voir getRank) : sert à annoncer le prochain.
+const RANK_START_LEVELS = [11, 31, 51, 71, 91, 111, 141, 171, 200];
+
 function buildBgGradient(isGod, isLegend, isElite, isBlood) {
   if (isBlood)  return ['#0A0000', '#150202', Colors.bgAbyss, '#0A0000'];
   if (isGod)    return ['#0A0800', '#100D02', Colors.bgAbyss, '#08080E'];
@@ -60,7 +62,6 @@ function buildBgGradient(isGod, isLegend, isElite, isBlood) {
 // ─── ProfileScreen ────────────────────────────────────────────────────────────
 
 export default function ProfileScreen({ navigation }) {
-  const { signOut } = useAuth();
   const { sessionLogs: logs, activityLogs, totalXP, loading: logsLoading } = useWorkoutLogs();
   const { user, loading: profileLoading, refetch: refetchUser } = useUser();
   const [borderPickerVisible, setBorderPickerVisible] = useState(false);
@@ -230,7 +231,17 @@ export default function ProfileScreen({ navigation }) {
   }, [activeTheme, realRank]);
 
   const bgColors = buildBgGradient(isGod, isLegend, isElite, isBlood);
-  const topPad   = insets.top + 16;
+  const topPad   = insets.top + 12;
+
+  const trophyCount = useMemo(() => ({
+    unlocked: evaluatedTrophies.filter((t) => t.unlocked).length,
+    total: evaluatedTrophies.length,
+  }), [evaluatedTrophies]);
+
+  const nextRankLabel = useMemo(() => {
+    const nextLevel = RANK_START_LEVELS.find((l) => l > level);
+    return nextLevel ? `${getRank(nextLevel).name} au niv. ${nextLevel}` : 'Rang maximum atteint';
+  }, [level]);
 
   if (profileLoading && !user && logsLoading) {
     return (
@@ -262,16 +273,6 @@ export default function ProfileScreen({ navigation }) {
       {/* Deep Abyss background */}
       <LinearGradient colors={bgColors} style={StyleSheet.absoluteFill} pointerEvents="none" />
 
-      {/* Gear icon — top-right corner, above scroll content */}
-      <TouchableOpacity accessibilityLabel="Réglages" accessibilityRole="button"
-        style={[styles.gearBtn, { top: insets.top + 8 }]}
-        onPress={() => navigation && navigation.navigate('Settings')}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="settings-outline" size={22} color={Colors.textSecondary} />
-      </TouchableOpacity>
-
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
@@ -279,6 +280,20 @@ export default function ProfileScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         <Animated.View style={{ opacity }}>
+
+          {/* ── En-tête ── */}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle} accessibilityRole="header">Profil</Text>
+            <TouchableOpacity
+              accessibilityLabel="Réglages"
+              accessibilityRole="button"
+              style={styles.gearBtn}
+              onPress={() => navigation && navigation.navigate('Settings')}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="settings-outline" size={20} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
 
           {/* ── Hero Level Card ── */}
           <View style={styles.heroWrapper} ref={heroCRef} onLayout={onHeroCLayout} collapsable={false}>
@@ -306,32 +321,36 @@ export default function ProfileScreen({ navigation }) {
           {/* ── Quick actions ── */}
           <View style={styles.quickActions} ref={quickActRef} onLayout={onQuickActLayout} collapsable={false}>
             <QuickBtn
-              icon="color-palette-outline"
-              label="Cadre"
-              onPress={() => setBorderPickerVisible(true)}
+              icon="trophy-outline"
+              label="Trophées"
+              meta={`${trophyCount.unlocked} sur ${trophyCount.total} débloqués`}
+              onPress={() => navigation && navigation.navigate('TrophyRoom')}
               accentColor={isElite ? rank.color : null}
             />
             <QuickBtn
               icon="map-outline"
-              label="Roadmap"
+              label="Rangs"
+              meta={nextRankLabel}
               onPress={() => navigation && navigation.navigate('RankRoadmap')}
-              accentColor={isElite ? rank.color : null}
-            />
-            <QuickBtn
-              icon="trophy-outline"
-              label="Trophées"
-              onPress={() => navigation && navigation.navigate('TrophyRoom')}
               accentColor={isElite ? rank.color : null}
             />
             <QuickBtn
               icon="ribbon-outline"
               label="Titres"
+              meta={equippedTitleMeta?.label || 'Aucun titre équipé'}
               onPress={() => setTitlePickerVisible(true)}
+              accentColor={isElite ? rank.color : null}
+            />
+            <QuickBtn
+              icon="color-palette-outline"
+              label="Cadre"
+              meta="Personnalise ton avatar"
+              onPress={() => setBorderPickerVisible(true)}
               accentColor={isElite ? rank.color : null}
             />
           </View>
 
-          {/* ── Inventaire (bannière pleine largeur — trop à l'étroit dans quickActions) ── */}
+          {/* ── Inventaire (bannière pleine largeur) ── */}
           <TouchableOpacity accessibilityRole="button"
             style={styles.inventoryBanner}
             onPress={() => navigation && navigation.navigate('Inventory')}
@@ -342,7 +361,7 @@ export default function ProfileScreen({ navigation }) {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.inventoryTitle}>Inventaire</Text>
-              <Text style={styles.inventorySub}>Coffres, objets & récompenses</Text>
+              <Text style={styles.inventorySub}>Coffres, objets et récompenses</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={Colors.chevron} />
           </TouchableOpacity>
@@ -363,7 +382,14 @@ export default function ProfileScreen({ navigation }) {
           {/* ── Records personnels ── */}
           <Section title="Records personnels" onSeeAll={() => setRecordsPickerVisible(true)} seeAllLabel="Choisir">
             <GlassCard>
-              <PersonalRecordsList records={records} onPressItem={onPressRecord} emptyLabel="Aucun record mis en avant" />
+              <PersonalRecordsList
+                records={records}
+                onPressItem={onPressRecord}
+                emptyLabel="Aucun record mis en avant"
+                emptyHint="Choisis jusqu'à 6 exercices à montrer sur ton profil."
+                emptyActionLabel="Choisir mes records"
+                onEmptyAction={() => setRecordsPickerVisible(true)}
+              />
             </GlassCard>
           </Section>
 
@@ -383,11 +409,6 @@ export default function ProfileScreen({ navigation }) {
             >
               <Ionicons name="create-outline" size={16} color="#fff" style={{ marginRight: 8 }} />
               <Text style={styles.editBtnText}>Modifier le profil</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity accessibilityRole="button" style={styles.logoutBtn} onPress={signOut} activeOpacity={0.7}>
-              <Ionicons name="log-out-outline" size={14} color={Colors.error} style={{ marginRight: 6 }} />
-              <Text style={styles.logoutText}>Déconnexion</Text>
             </TouchableOpacity>
           </View>
 
@@ -453,15 +474,21 @@ function GlassCard({ children }) {
   );
 }
 
-function QuickBtn({ icon, label, onPress, accentColor }) {
+function QuickBtn({ icon, label, meta, onPress, accentColor }) {
+  const tone = accentColor || Colors.primary;
   return (
-    <TouchableOpacity accessibilityRole="button"
+    <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityLabel={meta ? `${label}, ${meta}` : label}
       style={[styles.quickBtn, accentColor && { borderColor: accentColor + '28' }]}
       onPress={() => { haptics.success(); if (onPress) onPress(); }}
       activeOpacity={0.82}
     >
-      <Ionicons name={icon} size={15} color={accentColor || Colors.textSecondary} />
-      <Text style={[styles.quickBtnText, accentColor && { color: accentColor }]}>{label}</Text>
+      <View style={[styles.quickIcon, { backgroundColor: tone + '1A' }]}>
+        <Ionicons name={icon} size={18} color={tone} />
+      </View>
+      <Text style={styles.quickBtnText} numberOfLines={1}>{label}</Text>
+      {meta ? <Text style={styles.quickBtnMeta} numberOfLines={2}>{meta}</Text> : null}
     </TouchableOpacity>
   );
 }
@@ -474,13 +501,12 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 20, paddingBottom: 52 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  headerTitle: { flex: 1, color: Colors.textPrimary, fontSize: 28, fontWeight: '900', letterSpacing: -0.5 },
   gearBtn: {
-    position: 'absolute',
-    right: 16,
-    zIndex: 10,
-    width: 40, height: 40, borderRadius: 20,
+    width: 44, height: 44, borderRadius: 22,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(8,9,16,0.72)',
+    backgroundColor: Colors.glassBg,
     borderWidth: 1, borderColor: Colors.glassBorder,
   },
 
@@ -489,18 +515,21 @@ const styles = StyleSheet.create({
 
   quickActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
   quickBtn: {
-    width: '47.5%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
+    flexBasis: '45%',
+    flexGrow: 1,
     backgroundColor: Colors.glassBg,
-    paddingVertical: 11,
-    borderRadius: 14,
+    padding: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: Colors.glassBorder,
   },
-  quickBtnText: { color: Colors.textSecondary, fontSize: 12, fontWeight: '700' },
+  quickIcon: {
+    width: 36, height: 36, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 10,
+  },
+  quickBtnText: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
+  quickBtnMeta: { color: Colors.textSecondary, fontSize: 12, lineHeight: 16, marginTop: 2 },
 
   inventoryBanner: {
     flexDirection: 'row',
@@ -525,7 +554,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   inventoryTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: '700' },
-  inventorySub:   { color: Colors.textMuted, fontSize: 11.5, marginTop: 1 },
+  inventorySub:   { color: Colors.textSecondary, fontSize: 12, marginTop: 1 },
 
   section: { marginTop: 26 },
   sectionRow: {
@@ -533,10 +562,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', marginBottom: 12,
   },
   sectionTitle: {
-    color: Colors.textPrimary, fontSize: 11, fontWeight: '800',
+    color: Colors.textPrimary, fontSize: 12, fontWeight: '800',
     letterSpacing: 1.4, textTransform: 'uppercase',
   },
-  seeAllText: { color: Colors.primary, fontSize: 12, fontWeight: '700' },
+  seeAllText: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
 
   // Glassmorphism wrapper — makes PersonalRecordsList and ActivityHeatmap
   // blend with the Deep Abyss theme without modifying those components.
@@ -548,7 +577,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  actions:     { marginTop: 32, marginBottom: 12 },
+  actions:     { marginTop: 28, marginBottom: 12 },
   editBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -557,13 +586,5 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderRadius: 16,
   },
-  editBtnText: { color: '#fff', fontSize: 14, fontWeight: '800' },
-  logoutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 14,
-    paddingVertical: 12,
-  },
-  logoutText: { color: Colors.error, fontWeight: '700', fontSize: 13, opacity: 0.85 },
+  editBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });
