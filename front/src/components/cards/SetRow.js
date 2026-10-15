@@ -65,7 +65,7 @@ function SetRow({ index, setData = {}, previous, onChange, onToggle, onUsePrevio
 
   const prevLabel = previous
     ? (previous.weight ? `${fmt(previous.weight)} × ${previous.reps}` : `${previous.reps} réps`)
-    : '—';
+    : '–';
 
   const checkScale = pop.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 0.85, 1] });
 

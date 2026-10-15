@@ -60,13 +60,13 @@ export function xpForLevel(n) {
 //   90j  : ×2.0    180j : ×3.0    365j : ×4.5     730j+ : ×7.0 (cap)
 export const STREAK_MILESTONES = [
   { days: 0,   multiplier: 1.0, label: null,               color: null,      tier: 'base'      },
-  { days: 3,   multiplier: 1.1, label: 'On Fire',          color: '#FE7439', tier: 'fire'      },
-  { days: 7,   multiplier: 1.2, label: 'Week Warrior',     color: '#FE7439', tier: 'fire'      },
-  { days: 30,  multiplier: 1.5, label: 'Godly Streak',     color: '#FFD700', tier: 'godly'     },
-  { days: 90,  multiplier: 2.0, label: '3 Mois de Feu',    color: '#8B5CF6', tier: 'quarter'   },
-  { days: 180, multiplier: 3.0, label: 'Semi-Annuel',      color: '#A855F7', tier: 'halfyear'  },
-  { days: 365, multiplier: 4.5, label: 'Streak Annuel',    color: '#C084FC', tier: 'annual'    },
-  { days: 730, multiplier: 7.0, label: 'Streak Légendaire',color: '#FFD700', tier: 'legendary' },
+  { days: 3,   multiplier: 1.1, label: 'En feu',           color: '#FE7439', tier: 'fire'      },
+  { days: 7,   multiplier: 1.2, label: 'Semaine de feu',   color: '#FE7439', tier: 'fire'      },
+  { days: 30,  multiplier: 1.5, label: 'Mois divin',       color: '#FFD700', tier: 'godly'     },
+  { days: 90,  multiplier: 2.0, label: '3 mois de feu',    color: '#8B5CF6', tier: 'quarter'   },
+  { days: 180, multiplier: 3.0, label: 'Semestre de fer',  color: '#A855F7', tier: 'halfyear'  },
+  { days: 365, multiplier: 4.5, label: 'Année complète',   color: '#C084FC', tier: 'annual'    },
+  { days: 730, multiplier: 7.0, label: 'Série légendaire', color: '#FFD700', tier: 'legendary' },
 ];
 
 const _PTS = STREAK_MILESTONES.map((m) => [m.days, m.multiplier]);

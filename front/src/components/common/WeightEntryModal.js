@@ -60,7 +60,7 @@ export default function WeightEntryModal({ visible, onClose, onSaved }) {
               value={value}
               onChangeText={setValue}
               keyboardType="decimal-pad"
-              placeholder="0.0"
+              placeholder="ex : 72,5"
               placeholderTextColor={Colors.textMuted}
               returnKeyType="done"
               autoFocus

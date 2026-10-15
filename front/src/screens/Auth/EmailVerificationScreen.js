@@ -13,14 +13,27 @@ import OTPCodeInput from '../../components/inputs/OTPCodeInput';
 import { verifyEmail, resendVerificationEmail } from '../../services';
 import { useAuth } from '../../context/AuthContext';
 import { getErrorMessage } from '../../utils/errorMessages';
+import AuthInput from '../../components/inputs/AuthInput';
+import { readPendingEmail, clearPendingEmail } from '../../utils/pendingEmail';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const CODE_LENGTH  = 6;
 const RESEND_DELAY = 60; // secondes, aligné sur l'anti-spam serveur
 
 // ─── Écran ────────────────────────────────────────────────────────────────────
 export default function EmailVerificationScreen({ navigation, route }) {
-  const email     = route?.params?.email || '';
+  // L'adresse vient de l'écran précédent, ou du stockage après un
+  // rechargement de la page ; sinon on la demande.
+  const [email, setEmail] = useState(route?.params?.email || '');
+  const [askEmail, setAskEmail] = useState(false);
   const fromLogin = route?.params?.fromLogin || false;
+
+  useEffect(() => {
+    if (email) return;
+    readPendingEmail().then((saved) => { if (saved) setEmail(saved); else setAskEmail(true); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const { signIn } = useAuth();
 
   const [code,      setCode]      = useState('');
@@ -40,6 +53,11 @@ export default function EmailVerificationScreen({ navigation, route }) {
 
   const handleVerify = async (submitted = code) => {
     const cleanCode = submitted.replace(/[^0-9]/g, '');
+    if (!EMAIL_RE.test(email.trim())) {
+      setErrType('error');
+      setError('Entre l\'adresse email de ton compte.');
+      return;
+    }
     if (cleanCode.length < CODE_LENGTH) {
       setErrType('error');
       setError('Entre les 6 chiffres du code reçu par email.');
@@ -48,8 +66,9 @@ export default function EmailVerificationScreen({ navigation, route }) {
     try {
       setLoading(true);
       setError('');
-      const res = await verifyEmail(email, cleanCode);
+      const res = await verifyEmail(email.trim(), cleanCode);
       if (res?.token) {
+        clearPendingEmail();
         await signIn(res.token, true);
       } else {
         navigation.navigate('Auth');
@@ -74,7 +93,12 @@ export default function EmailVerificationScreen({ navigation, route }) {
       setResending(true);
       setError('');
       setSuccess('');
-      await resendVerificationEmail(email);
+      if (!EMAIL_RE.test(email.trim())) {
+        setErrType('error');
+        setError('Entre l\'adresse email de ton compte pour recevoir un code.');
+        return;
+      }
+      await resendVerificationEmail(email.trim());
       setCode('');
       setSuccess('Nouveau code envoyé. Seul le dernier code reçu fonctionne.');
       setCountdown(RESEND_DELAY);
@@ -103,10 +127,30 @@ export default function EmailVerificationScreen({ navigation, route }) {
           </View>
 
           <Text style={s.title} accessibilityRole="header">Confirme ton email</Text>
-          <Text style={s.subtitle}>
-            Entre le code à 6 chiffres envoyé à{'\n'}
-            <Text style={s.emailHighlight}>{email}</Text>
-          </Text>
+          {askEmail ? (
+            <>
+              <Text style={s.subtitle}>Entre ton adresse et le code à 6 chiffres reçu par email.</Text>
+              <View style={s.emailField}>
+                <AuthInput
+                  label="Email"
+                  icon="mail-outline"
+                  placeholder="nom@exemple.fr"
+                  value={email}
+                  onChangeText={(v) => { setEmail(v); if (error) setError(''); }}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="email"
+                  inputMode="email"
+                />
+              </View>
+            </>
+          ) : (
+            <Text style={s.subtitle}>
+              Entre le code à 6 chiffres envoyé à{'\n'}
+              <Text style={s.emailHighlight}>{email}</Text>
+            </Text>
+          )}
 
           {fromLogin && (
             <NotificationBanner
@@ -121,7 +165,7 @@ export default function EmailVerificationScreen({ navigation, route }) {
             onComplete={(full) => handleVerify(full)}
             disabled={loading}
             hasError={!!error && errType === 'error'}
-            autoFocus
+            autoFocus={!askEmail}
           />
 
           {error   ? <NotificationBanner message={error} type={errType} /> : null}
@@ -199,9 +243,10 @@ const s = StyleSheet.create({
     letterSpacing: -0.5, textAlign: 'center', marginBottom: 12,
   },
   subtitle: {
-    color: Colors.textMuted, fontSize: 15, textAlign: 'center', lineHeight: 22,
+    color: Colors.textSecondary, fontSize: 15, textAlign: 'center', lineHeight: 22,
   },
   emailHighlight: { color: Colors.textPrimary, fontWeight: '600' },
+  emailField: { alignSelf: 'stretch', marginTop: 18 },
 
   primaryBtn: {
     width: '100%', backgroundColor: Colors.primary, height: 56, borderRadius: 14,

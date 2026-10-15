@@ -153,7 +153,7 @@ export default function ForgotPasswordScreen({ navigation, route }) {
             accessibilityLabel={step === 2 ? 'Modifier l\'adresse email' : 'Retour à la connexion'}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons name="arrow-back" size={22} color={Colors.textSecondary} />
+            <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
           </TouchableOpacity>
 
           {step === 1 && (

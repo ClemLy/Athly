@@ -19,7 +19,9 @@ export default function XPProgressBar({ totalXP = 0, compact = false }) {
         <View style={styles.right}>
           <Text style={styles.xpTotal}>{totalXP.toLocaleString('fr-FR')} XP</Text>
           <Text style={styles.xpHint}>
-            {currentInLevel} / {neededForNext} pour Niv. {level + 1}
+            {level < 200
+              ? `${Math.max(0, neededForNext - currentInLevel).toLocaleString('fr-FR')} XP avant le niveau ${level + 1}`
+              : 'Niveau maximum atteint'}
           </Text>
         </View>
       </View>

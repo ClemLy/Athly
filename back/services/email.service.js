@@ -41,45 +41,69 @@ transporter.verify((err) => {
 const FROM = `"Athly" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`;
 
 // ── Templates HTML ────────────────────────────────────────────────────────────
+// Tables + styles en ligne (seul format fiable dans Gmail, Outlook, Apple Mail).
+// Contrastes ≥ 4,5:1 sur fond sombre. Le code est un seul bloc de texte :
+// copiable d'un geste et reconnu par la saisie automatique des codes sur iOS.
 
-function baseTemplate(title, bodyHtml) {
+const C = {
+  page: "#0D1018", card: "#16161F", line: "#2A2A39",
+  text: "#FFFFFF", soft: "#B4B9C5", muted: "#9AA0AE",
+};
+
+function baseTemplate({ title, preheader, accent, heading, intro, codeLabel, code, footnote }) {
   return `<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="supported-color-schemes" content="dark light" />
   <title>${title}</title>
 </head>
-<body style="margin:0;padding:0;background-color:#0D1018;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0D1018;padding:40px 16px;">
+<body style="margin:0;padding:0;background-color:${C.page};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <!-- Aperçu affiché dans la liste des emails -->
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:${C.page};">${preheader}&#8199;&#847;&#8199;&#847;&#8199;&#847;</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="${C.page}" style="background-color:${C.page};padding:32px 16px;">
     <tr>
       <td align="center">
-        <table width="100%" style="max-width:520px;">
-
-          <!-- Logo / En-tête -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;">
           <tr>
-            <td align="center" style="padding-bottom:32px;">
-              <img src="cid:logo_athly" alt="Athly" style="width:200px;height:auto;display:block;margin:0 auto 20px;" />
+            <td align="center" style="padding-bottom:24px;">
+              <img src="cid:logo_athly" alt="Athly" width="140" style="width:140px;height:auto;display:block;margin:0 auto;" />
             </td>
           </tr>
-
-          <!-- Carte principale -->
           <tr>
-            <td style="background-color:#16161F;border-radius:20px;border:1px solid #2A2A39;overflow:hidden;">
-              ${bodyHtml}
+            <td bgcolor="${C.card}" style="background-color:${C.card};border-radius:20px;border:1px solid ${C.line};">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr><td style="height:4px;background-color:${accent};border-radius:20px 20px 0 0;font-size:0;line-height:0;">&nbsp;</td></tr>
+                <tr>
+                  <td style="padding:32px 32px 8px;text-align:center;">
+                    <h1 style="margin:0;font-size:24px;line-height:1.25;font-weight:700;color:${C.text};">${heading}</h1>
+                    <p style="margin:12px 0 0;font-size:15px;line-height:1.6;color:${C.soft};">${intro}</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:24px 32px 28px;text-align:center;">
+                    <p style="margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:${C.muted};">${codeLabel}</p>
+                    <div style="display:inline-block;padding:14px 12px 14px 22px;border-radius:14px;background-color:${C.page};border:1.5px solid ${accent};font-family:'SF Mono',Menlo,Consolas,'Courier New',monospace;font-size:34px;line-height:1;font-weight:700;letter-spacing:10px;color:${C.text};">${code}</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:18px 32px 28px;text-align:center;border-top:1px solid ${C.line};">
+                    <p style="margin:0;font-size:14px;line-height:1.6;color:${C.soft};">${footnote}</p>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
-
-          <!-- Footer -->
           <tr>
-            <td align="center" style="padding-top:28px;">
-              <p style="margin:0;font-size:12px;color:#4A4F5C;line-height:1.6;">
-                Si tu n'es pas à l'origine de cette demande, ignore simplement cet email.<br/>
-                Athly, application de sport gamifiée.
+            <td align="center" style="padding:24px 8px 0;">
+              <p style="margin:0;font-size:13px;line-height:1.6;color:${C.muted};">
+                Tu reçois cet email car une action a été faite avec cette adresse sur Athly.<br/>
+                Si ce n'est pas toi, ignore-le : rien ne changera sur ton compte.
               </p>
             </td>
           </tr>
-
         </table>
       </td>
     </tr>
@@ -89,65 +113,29 @@ function baseTemplate(title, bodyHtml) {
 }
 
 function verificationTemplate(code) {
-  const digits = code.split("").map(d =>
-    `<span style="display:inline-block;width:44px;height:52px;line-height:52px;text-align:center;background:#0D1018;border:1.5px solid #FE7439;border-radius:10px;font-size:24px;font-weight:700;color:#FFFFFF;margin:0 4px;">${d}</span>`
-  ).join("");
-
-  const body = `
-    <!-- Titre -->
-    <div style="padding:36px 36px 0;text-align:center;">
-      <h1 style="margin:0;font-size:24px;font-weight:700;color:#FFFFFF;letter-spacing:-0.5px;">Confirme ton adresse email</h1>
-      <p style="margin:10px 0 0;font-size:15px;color:#9AA0AE;line-height:1.6;">
-        Entre ce code dans l'application pour activer ton compte&nbsp;Athly.<br/>
-        Il expire dans <strong style="color:#FFFFFF;">10&nbsp;minutes</strong>.
-      </p>
-    </div>
-
-    <!-- Code OTP -->
-    <div style="padding:28px 36px;text-align:center;border-top:1px solid #2A2A39;margin-top:24px;">
-      <p style="margin:0 0 16px;font-size:11px;font-weight:600;letter-spacing:1.5px;color:#6D7382;text-transform:uppercase;">Code de vérification</p>
-      <div>${digits}</div>
-    </div>
-
-    <!-- Avertissement -->
-    <div style="padding:20px 36px 32px;text-align:center;border-top:1px solid #2A2A39;">
-      <p style="margin:0;font-size:13px;color:#6D7382;">
-        Ce code ne fonctionne qu'une fois. Ne le partage avec personne.
-      </p>
-    </div>`;
-
-  return baseTemplate("Confirme ton adresse email", body);
+  return baseTemplate({
+    title: "Confirme ton adresse email",
+    preheader: `Ton code Athly : ${code}. Il expire dans 10 minutes.`,
+    accent: "#FE7439",
+    heading: "Confirme ton adresse email",
+    intro: `Entre ce code dans Athly pour activer ton compte. Il expire dans <strong style="color:${C.text};">10&nbsp;minutes</strong>.`,
+    codeLabel: "Ton code",
+    code,
+    footnote: "Le code ne fonctionne qu'une fois. Ne le partage avec personne, Athly ne te le demandera jamais.",
+  });
 }
 
 function resetPasswordTemplate(code) {
-  const digits = code.split("").map(d =>
-    `<span style="display:inline-block;width:44px;height:52px;line-height:52px;text-align:center;background:#0D1018;border:1.5px solid #6E6AF0;border-radius:10px;font-size:24px;font-weight:700;color:#FFFFFF;margin:0 4px;">${d}</span>`
-  ).join("");
-
-  const body = `
-    <!-- Titre -->
-    <div style="padding:36px 36px 0;text-align:center;">
-      <h1 style="margin:0;font-size:24px;font-weight:700;color:#FFFFFF;letter-spacing:-0.5px;">Nouveau mot de passe</h1>
-      <p style="margin:10px 0 0;font-size:15px;color:#9AA0AE;line-height:1.6;">
-        Entre ce code dans l'application pour choisir un nouveau mot de passe.<br/>
-        Il expire dans <strong style="color:#FFFFFF;">15&nbsp;minutes</strong>.
-      </p>
-    </div>
-
-    <!-- Code OTP -->
-    <div style="padding:28px 36px;text-align:center;border-top:1px solid #2A2A39;margin-top:24px;">
-      <p style="margin:0 0 16px;font-size:11px;font-weight:600;letter-spacing:1.5px;color:#6D7382;text-transform:uppercase;">Code de réinitialisation</p>
-      <div>${digits}</div>
-    </div>
-
-    <!-- Sécurité -->
-    <div style="padding:20px 36px 32px;text-align:center;border-top:1px solid #2A2A39;">
-      <p style="margin:0;font-size:13px;color:#6D7382;">
-        Tu n'as rien demandé&nbsp;? Ignore cet email, ton mot de passe actuel reste inchangé.
-      </p>
-    </div>`;
-
-  return baseTemplate("Ton code pour changer de mot de passe", body);
+  return baseTemplate({
+    title: "Ton code pour changer de mot de passe",
+    preheader: `Ton code : ${code}. Il expire dans 15 minutes.`,
+    accent: "#7B77F3",
+    heading: "Choisis un nouveau mot de passe",
+    intro: `Entre ce code dans Athly pour définir ton nouveau mot de passe. Il expire dans <strong style="color:${C.text};">15&nbsp;minutes</strong>.`,
+    codeLabel: "Ton code",
+    code,
+    footnote: "Tu n'as rien demandé&nbsp;? Ignore cet email : ton mot de passe actuel reste inchangé.",
+  });
 }
 
 // ── Fonction interne d'envoi avec logs détaillés ─────────────────────────────
@@ -202,4 +190,4 @@ async function sendResetPasswordEmail(email, code) {
   );
 }
 
-module.exports = { sendVerificationEmail, sendResetPasswordEmail };
+module.exports = { sendVerificationEmail, sendResetPasswordEmail, verificationTemplate, resetPasswordTemplate };

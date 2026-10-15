@@ -8,11 +8,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '../../constants/theme';
 import { xpToLevel } from '../../services';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
-import { FRAME_DEFS } from '../../components/profile/AvatarFrame';
 import { RANKS } from '../../constants/ranks';
 
 // ─── RankRoadmapScreen ────────────────────────────────────────────────────────
@@ -20,6 +18,8 @@ import { RANKS } from '../../constants/ranks';
 export default function RankRoadmapScreen({ navigation }) {
   const { totalXP } = useWorkoutLogs();
   const { level: currentLevel } = useMemo(() => xpToLevel(totalXP), [totalXP]);
+  const currentIndex = RANKS.reduce((acc, r, i) => (currentLevel >= r.minLevel ? i : acc), 0);
+  const next = RANKS[currentIndex + 1] || null;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -28,15 +28,14 @@ export default function RankRoadmapScreen({ navigation }) {
         <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button"
           onPress={() => navigation && navigation.goBack()}
           style={styles.backBtn}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Progression des rangs</Text>
-          <Text style={styles.headerSub}>Niveau actuel : {currentLevel}</Text>
+          <Text style={styles.headerTitle} accessibilityRole="header">Progression des rangs</Text>
+          <Text style={styles.headerSub}>Niveau {currentLevel}</Text>
         </View>
-        <View style={{ width: 38 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       <ScrollView
@@ -44,24 +43,20 @@ export default function RankRoadmapScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.intro}>
-          Chaque rang débloque des effets visuels exclusifs. Progresse pour transformer ton interface.
+          {next
+            ? `Encore ${next.minLevel - currentLevel} niveau${next.minLevel - currentLevel > 1 ? 'x' : ''} avant ${next.name}. Chaque rang débloque de nouveaux cadres et effets.`
+            : 'Tu as atteint le rang le plus haut. Tous les cadres et effets sont à toi.'}
         </Text>
 
-        {RANKS.map((rank, index) => {
-          const isReached  = currentLevel >= rank.minLevel;
-          const isCurrent  = currentLevel >= rank.minLevel && (index === RANKS.length - 1 || currentLevel < RANKS[index + 1].minLevel);
-          const frameDef   = FRAME_DEFS.find((f) => f.id === rank.frameId);
-
-          return (
-            <RankCard
-              key={rank.name}
-              rank={rank}
-              frameDef={frameDef}
-              isReached={isReached}
-              isCurrent={isCurrent}
-            />
-          );
-        })}
+        {RANKS.map((rank, index) => (
+          <RankCard
+            key={rank.name}
+            rank={rank}
+            state={index < currentIndex ? 'past' : index === currentIndex ? 'current' : 'future'}
+            level={currentLevel}
+            nextMin={RANKS[index + 1]?.minLevel ?? null}
+          />
+        ))}
 
         <View style={{ height: 20 }} />
       </ScrollView>
@@ -70,56 +65,64 @@ export default function RankRoadmapScreen({ navigation }) {
 }
 
 // ─── RankCard ─────────────────────────────────────────────────────────────────
+// Passé : sobre (déjà acquis). Actuel : mis en avant avec la progression vers
+// le rang suivant. À venir : neutre, avec son niveau de déblocage.
 
-function RankCard({ rank, frameDef, isReached, isCurrent }) {
+function RankCard({ rank, state, level, nextMin }) {
+  const reached = state !== 'future';
+  const current = state === 'current';
+  const pct = current && nextMin ? Math.min(1, (level - rank.minLevel) / (nextMin - rank.minLevel)) : 1;
+
   return (
-    <View style={[styles.card, isCurrent && { borderColor: rank.color + '60' }]}>
-      {/* Gradient subtil en fond */}
-      <LinearGradient
-        colors={isReached ? rank.gradientColors : ['#0D0D14', '#0D0D14']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-        borderRadius={16}
-      />
-
+    <View
+      style={[styles.card, current && { borderColor: rank.color + '80', backgroundColor: rank.color + '12' }]}
+      accessible
+      accessibilityLabel={`${rank.name}, ${rank.levelRange}, ${current ? 'rang actuel' : reached ? 'atteint' : `se débloque au niveau ${rank.minLevel}`}`}
+    >
       <View style={styles.cardContent}>
-        {/* Icône + nom + range */}
         <View style={styles.cardLeft}>
-          <View style={[styles.iconBox, { backgroundColor: rank.color + '18', borderColor: rank.color + '30' }]}>
-            <Ionicons name={rank.icon} size={22} color={isReached ? rank.color : Colors.textMuted} />
+          <View style={[styles.iconBox, reached
+            ? { backgroundColor: rank.color + '1F', borderColor: rank.color + '40' }
+            : styles.iconBoxLocked]}>
+            <Ionicons name={reached ? rank.icon : 'lock-closed'} size={reached ? 22 : 18} color={reached ? rank.color : Colors.textMuted} />
           </View>
           <View style={styles.cardText}>
             <View style={styles.nameRow}>
-              <Text style={[styles.rankName, { color: isReached ? rank.color : Colors.textMuted }]}>
+              <Text style={[styles.rankName, { color: reached ? Colors.textPrimary : Colors.textSecondary }]}>
                 {rank.name}
               </Text>
-              {isCurrent && (
-                <View style={[styles.currentBadge, { backgroundColor: rank.color + '25', borderColor: rank.color + '50' }]}>
-                  <Text style={[styles.currentBadgeText, { color: rank.color }]}>Actuel</Text>
+              {current && (
+                <View style={[styles.currentBadge, { backgroundColor: rank.color + '25', borderColor: rank.color + '60' }]}>
+                  <Text style={[styles.currentBadgeText, { color: rank.color }]}>Rang actuel</Text>
                 </View>
               )}
             </View>
-            <Text style={styles.rankRange}>{rank.levelRange}</Text>
+            <Text style={styles.rankRange}>
+              {reached ? rank.levelRange : `Se débloque au niveau ${rank.minLevel}`}
+            </Text>
           </View>
         </View>
-
-        {/* Indicateur atteint */}
-        <View style={[styles.reachDot, { backgroundColor: isReached ? rank.color : 'rgba(255,255,255,0.10)' }]}>
-          {isReached && <Ionicons name="checkmark" size={12} color="#000" />}
-        </View>
+        {state === 'past' ? <Ionicons name="checkmark-circle" size={22} color={rank.color} /> : null}
       </View>
 
-      {/* Perks */}
+      {current && nextMin ? (
+        <View style={styles.progressWrap}>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${pct * 100}%`, backgroundColor: rank.color }]} />
+          </View>
+          <Text style={styles.progressTxt}>Niveau {level} sur {nextMin - 1}</Text>
+        </View>
+      ) : null}
+
       <View style={styles.perks}>
         {rank.perks.map((perk, i) => (
           <View key={i} style={styles.perkRow}>
             <Ionicons
-              name={isReached ? 'checkmark-circle' : 'ellipse-outline'}
-              size={12}
-              color={isReached ? rank.color : Colors.textMuted}
+              name={reached ? 'checkmark' : 'ellipse-outline'}
+              size={14}
+              color={reached ? rank.color : Colors.textMuted}
             />
-            <Text style={[styles.perkText, { color: isReached ? Colors.textSecondary : Colors.textMuted }]}>
+            <Text style={[styles.perkText, { color: reached ? Colors.textSecondary : Colors.textMuted }]}>
               {perk}
             </Text>
           </View>
@@ -145,12 +148,12 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   backBtn: {
-    width: 38,
-    height: 38,
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.cardDeep,
-    borderRadius: 12,
+    borderRadius: 22,
   },
   headerCenter: {
     flex: 1,
@@ -162,8 +165,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   headerSub: {
-    color: Colors.textMuted,
-    fontSize: 11,
+    color: Colors.textSecondary,
+    fontSize: 13,
     fontWeight: '600',
     marginTop: 2,
   },
@@ -175,7 +178,7 @@ const styles = StyleSheet.create({
   },
   intro: {
     color: Colors.textSecondary,
-    fontSize: 13,
+    fontSize: 14,
     lineHeight: 20,
     marginBottom: 4,
     textAlign: 'center',
@@ -186,9 +189,15 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
+    borderColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: Colors.cardDeep,
     overflow: 'hidden',
   },
+  iconBoxLocked: { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.08)' },
+  progressWrap: { paddingHorizontal: 14, paddingBottom: 10 },
+  progressTrack: { height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 3 },
+  progressTxt: { color: Colors.textSecondary, fontSize: 12, marginTop: 6, fontVariant: ['tabular-nums'] },
   cardContent: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -228,22 +237,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   currentBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.5,
   },
   rankRange: {
-    color: Colors.textMuted,
-    fontSize: 12,
+    color: Colors.textSecondary,
+    fontSize: 13,
     fontWeight: '600',
     marginTop: 2,
-  },
-  reachDot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 
   // ── Perks ─────────────────────────────────────────────────────────────────
@@ -258,7 +259,7 @@ const styles = StyleSheet.create({
     gap: 7,
   },
   perkText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '500',
     flex: 1,
   },

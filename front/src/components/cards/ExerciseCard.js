@@ -93,21 +93,16 @@ function ExerciseCard({
 
   const status = isDone ? 'Terminé' : sets.length ? `${doneSets}/${sets.length} séries` : '';
 
+  // Deux zones sœurs (et non imbriquées) : la vignette ouvre la démo, le reste
+  // de la carte ouvre l'exercice. Un bouton dans un bouton est invalide.
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${name}${status ? `, ${status}` : ''}`}
-      accessibilityHint="Appui long pour plus d'options"
-      style={({ pressed }) => [
+    <View
+      style={[
         styles.card,
         inSuperset && styles.cardInSuperset,
         started && styles.cardStarted,
         isDone && styles.cardDone,
-        pressed && styles.cardPressed,
       ]}
-      onPress={onPress}
-      onLongPress={showActions}
-      delayLongPress={280}
     >
       <View style={styles.row}>
         <Pressable
@@ -134,6 +129,15 @@ function ExerciseCard({
           ) : null}
         </Pressable>
 
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${name}${status ? `, ${status}` : ''}`}
+          accessibilityHint="Appui long pour plus d'options"
+          style={({ pressed }) => [styles.mainArea, pressed && styles.mainPressed]}
+          onPress={onPress}
+          onLongPress={showActions}
+          delayLongPress={280}
+        >
         <View style={styles.content}>
           <Text style={[styles.title, isDone && styles.titleDone]} numberOfLines={1}>{name}</Text>
 
@@ -162,6 +166,7 @@ function ExerciseCard({
         </View>
 
         <Ionicons name="chevron-forward" size={20} color={Colors.chevron} />
+        </Pressable>
       </View>
 
       <ActionSheetModal
@@ -178,7 +183,7 @@ function ExerciseCard({
         onClose={() => setInfoModal(null)}
       />
       {demo ? <ExerciseDemoModal visible={demoVisible} exercise={item} onClose={() => setDemoVisible(false)} /> : null}
-    </Pressable>
+    </View>
   );
 }
 
@@ -200,7 +205,8 @@ const styles = StyleSheet.create({
   },
   cardStarted: { borderColor: 'rgba(254,116,57,0.35)' },
   cardDone: { opacity: 0.62 },
-  cardPressed: { backgroundColor: 'rgba(255,255,255,0.06)' },
+  mainArea: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14, alignSelf: 'stretch', borderRadius: 12 },
+  mainPressed: { opacity: 0.7 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14 },
 
   thumb: {

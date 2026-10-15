@@ -15,7 +15,7 @@ export const TUTORIAL_CHAPTERS = [
   // ─── CHAPITRE 1 : Le Dashboard ─────────────────────────────────────────────
   {
     id: 'dashboard',
-    title: 'Le Dashboard',
+    title: 'L\'accueil',
     subtitle: 'Chapitre 1',
     icon: 'home-outline',
     tabName: 'Accueil',
@@ -28,25 +28,25 @@ export const TUTORIAL_CHAPTERS = [
       },
       {
         key: 'header_level',
-        title: 'Ton Niveau en Temps Réel',
+        title: 'Ton niveau en temps réel',
         body: "Cette puce affiche ton niveau actuel, calculé à partir de ton XP cumulé. Chaque séance terminée te fait progresser.",
         targetKey: 'home_level_chip', position: 'bottom', scrollY: 0,
       },
       {
         key: 'hero_session',
-        title: 'Séance Recommandée',
+        title: 'Séance recommandée',
         body: "Athly analyse ton historique et te suggère le groupe musculaire le moins travaillé. Appuie sur 'Démarrer' pour lancer la séance.",
         targetKey: 'home_herosession', position: 'bottom', scrollY: 0,
       },
       {
         key: 'quick_stats',
-        title: 'Stats de la Semaine',
+        title: 'Ta semaine',
         body: "Ta semaine en un coup d'œil : les jours où tu t'es entraîné, tes séances, ton volume et ta série en cours.",
         targetKey: 'home_quickstats', position: 'bottom', scrollY: 180,
       },
       {
         key: 'quests',
-        title: 'Quêtes Quotidiennes',
+        title: 'Quêtes du jour',
         body: "Accomplis tes 3 quêtes du jour pour gagner de l'XP bonus. Complète-les toutes pour déclencher le bonus de combo !",
         targetKey: 'home_quests', position: 'top', scrollY: 380,
       },
@@ -69,37 +69,37 @@ export const TUTORIAL_CHAPTERS = [
     steps: [
       {
         key: 'workout_intro',
-        title: "Ton Espace Entraînement",
-        body: "Ici tu retrouves tes séances sauvegardées et les templates prêts à l'emploi.",
+        title: "Ton espace entraînement",
+        body: "Ici tu retrouves tes séances enregistrées et les séances prêtes à lancer.",
         targetKey: null, position: 'center', scrollY: 0,
       },
       {
         key: 'workout_header',
-        title: 'Créer une Séance',
+        title: 'Créer une séance',
         body: "Le bouton '+' crée une séance sur-mesure avec le Workout Builder.",
         targetKey: 'workout_header_actions', position: 'bottom', scrollY: 0,
       },
       {
         key: 'workout_start',
-        title: 'Lancer un Template',
-        body: "Appuie sur n'importe quel template pour le lancer directement. La séance démarre avec tous les exercices pré-configurés.",
+        title: 'Lancer une séance prête',
+        body: "Appuie sur une séance prête pour la lancer directement : tous les exercices sont déjà en place.",
         targetKey: null, position: 'center', scrollY: null,
       },
       {
         key: 'workout_sets',
-        title: 'Valider tes Séries',
+        title: 'Valider tes séries',
         body: "Dans une séance active, entre le poids et les répétitions, puis coche pour valider. Chaque série rapporte de l'XP !",
         targetKey: null, position: 'center', scrollY: null,
       },
       {
         key: 'workout_anticheat',
-        title: 'Séances Sérieuses Uniquement',
+        title: 'Seules les vraies séances comptent',
         body: "Athly récompense l'effort réel : une séance de moins de 5 minutes ne rapporte aucun XP. Tu peux quand même l'enregistrer, mais seules les séances complètes comptent pour ta streak.",
         targetKey: null, position: 'center', scrollY: null,
       },
       {
         key: 'workout_complete',
-        title: 'Terminer la Séance',
+        title: 'Terminer la séance',
         body: "Appuie sur 'Terminer' pour calculer ton XP, détecter tes records et mettre à jour ta progression.",
         targetKey: null, position: 'center', scrollY: null,
       },
@@ -109,7 +109,7 @@ export const TUTORIAL_CHAPTERS = [
   // ─── CHAPITRE 3 : Le Profil & la Vitrine ───────────────────────────────────
   {
     id: 'profile',
-    title: 'Profil & Vitrine',
+    title: 'Profil et vitrine',
     subtitle: 'Chapitre 3',
     icon: 'person-outline',
     tabName: 'ProfileTab',
@@ -117,13 +117,13 @@ export const TUTORIAL_CHAPTERS = [
     steps: [
       {
         key: 'profile_intro',
-        title: "Ton Profil d'Athlète",
+        title: "Ton profil d'athlète",
         body: "Chaque séance te fait gagner de l'XP. Monte de niveau pour débloquer des cadres, formes et thèmes exclusifs.",
         targetKey: null, position: 'center', scrollY: 0,
       },
       {
         key: 'profile_herocard',
-        title: 'Carte de Niveau',
+        title: 'Carte de niveau',
         body: "La barre de progression indique ta position entre le niveau actuel et le suivant. Ton rang évolue au fil des niveaux : Novice, Initié, Athlète, Compétiteur, Warrior, et bien plus.",
         targetKey: 'profile_herocard', position: 'bottom', scrollY: 0,
       },
@@ -135,13 +135,13 @@ export const TUTORIAL_CHAPTERS = [
       },
       {
         key: 'profile_vitrine',
-        title: 'Ta Vitrine de Trophées',
+        title: 'Ta vitrine de trophées',
         body: "Ces 3 slots affichent tes trophées préférés. Appuie sur un slot vide pour choisir dans la Salle des Trophées.",
         targetKey: 'profile_vitrine', position: 'top', scrollY: 260,
       },
       {
         key: 'profile_titles',
-        title: 'Tes Titres RPG',
+        title: 'Tes titres',
         body: "Via le bouton 'Titres', équipe un titre affiché sous ton pseudo. 17 titres se débloquent en accomplissant des défis (records, séances Multi, entraide…).",
         targetKey: null, position: 'center', scrollY: 0,
       },
@@ -151,7 +151,7 @@ export const TUTORIAL_CHAPTERS = [
   // ─── CHAPITRE 4 : La Salle des Trophées ────────────────────────────────────
   {
     id: 'trophies',
-    title: 'Salle des Trophées',
+    title: 'Salle des trophées',
     subtitle: 'Chapitre 4',
     icon: 'trophy-outline',
     tabName: 'ProfileTab',
@@ -159,25 +159,25 @@ export const TUTORIAL_CHAPTERS = [
     steps: [
       {
         key: 'trophies_intro',
-        title: 'La Salle des Trophées',
+        title: 'La salle des trophées',
         body: "60 trophées à débloquer, répartis en 9 catégories : Héritage, Force, Exploration, Secret, Corps, Régularité, Social, Spécial et Collection.",
         targetKey: null, position: 'center', scrollY: 0,
       },
       {
         key: 'trophies_filters',
-        title: 'Filtrer par Catégorie',
-        body: "Fais défiler les onglets 'Force', 'Endurance', 'Social & Multi', 'Coffres & Raretés' et 'Spécial' pour filtrer les trophées. Les trophées verrouillés montrent leur condition.",
+        title: 'Filtrer par catégorie',
+        body: "Fais défiler les onglets 'Force', 'Endurance', 'Social & Multi', 'Coffres et raretés' et 'Spécial' pour filtrer les trophées. Les trophées verrouillés montrent leur condition.",
         targetKey: 'trophies_filters', position: 'bottom', scrollY: 0,
       },
       {
         key: 'trophies_ultimate',
-        title: 'Le Trophée Ultime',
+        title: 'Le trophée ultime',
         body: "Le 'Souverain Absolu' se débloque automatiquement quand les 60 autres trophées sont obtenus. Un accomplissement absolu.",
         targetKey: 'trophies_ultimate', position: 'bottom', scrollY: 0,
       },
       {
         key: 'trophies_pin',
-        title: 'Mettre en Vitrine',
+        title: 'Mettre en vitrine',
         body: "Appuie sur n'importe quel trophée débloqué puis choisis 'Mettre en avant sur le profil'. Jusqu'à 3 trophées simultanément dans ta vitrine.",
         targetKey: null, position: 'center', scrollY: null,
       },
@@ -187,7 +187,7 @@ export const TUTORIAL_CHAPTERS = [
   // ─── CHAPITRE 5 : Inventaire, Coffres & Raretés ────────────────────────────
   {
     id: 'inventory',
-    title: 'Coffres & Raretés',
+    title: 'Coffres et raretés',
     subtitle: 'Chapitre 5',
     icon: 'cube-outline',
     tabName: 'ProfileTab',
@@ -201,19 +201,19 @@ export const TUTORIAL_CHAPTERS = [
       },
       {
         key: 'inventory_chest',
-        title: 'Coffres à l\'Effort',
+        title: 'Des coffres à l\'effort',
         body: "Tu gagnes un coffre toutes les 2 h de séance cumulées (débloqué au rang Initié, niveau 11). Ouvre-le pour tirer un objet au hasard.",
         targetKey: 'inventory_chest', position: 'bottom', scrollY: 0,
       },
       {
         key: 'inventory_rarities',
-        title: '5 Raretés',
+        title: '5 raretés',
         body: "Du Commun (gris) au Légendaire (orange), en passant par Rare (bleu) et Épique (violet) : plus c'est rare, plus l'objet est puissant.",
         targetKey: null, position: 'center', scrollY: null,
       },
       {
         key: 'inventory_unique',
-        title: 'Le Rouge Sang Unique',
+        title: 'Le Rouge Sang, rareté unique',
         body: "La rareté ultime : les cosmétiques Uniques Rouge Sang (cadre, couleur, thème) se méritent par des exploits rares et se réclament ici. Le prestige absolu.",
         targetKey: null, position: 'center', scrollY: null,
       },
@@ -223,7 +223,7 @@ export const TUTORIAL_CHAPTERS = [
   // ─── CHAPITRE 6 : Social, Groupes & Multi ──────────────────────────────────
   {
     id: 'social',
-    title: 'Amis, Groupes & Multi',
+    title: 'Amis, groupes et Multi',
     subtitle: 'Chapitre 6',
     icon: 'people-outline',
     tabName: 'SocialTab',
@@ -231,43 +231,43 @@ export const TUTORIAL_CHAPTERS = [
     steps: [
       {
         key: 'social_intro',
-        title: 'Progresse en Meute',
+        title: 'Progresse en meute',
         body: "Athly est bien plus fort à plusieurs. Ajoute tes amis, compare-toi, et entraîne-toi en équipe.",
         targetKey: null, position: 'center', scrollY: 0,
       },
       {
         key: 'social_segments',
-        title: 'Amis, Classement, Groupe',
+        title: 'Amis, classement, groupe',
         body: "Ces trois onglets réunissent ton réseau : tes amis, les classements (XP et records par exercice), et ton Groupe de Streak.",
         targetKey: 'social_segments', position: 'bottom', scrollY: 0,
       },
       {
         key: 'social_add',
-        title: 'Ajouter un Ami',
+        title: 'Ajouter un ami',
         body: "Chaque joueur a un tag unique (ex : Player#1234). Appuie sur l'icône en haut à droite et saisis le tag de ton ami pour lui envoyer une demande.",
         targetKey: null, position: 'center', scrollY: null,
       },
       {
         key: 'social_group',
-        title: 'Groupes de Streak & Météo',
+        title: 'Groupes de streak et météo',
         body: "Forme un groupe de 5 amis maximum : si tout le monde fait sa séance du jour, la streak collective grimpe. Chaque membre affiche son statut : séance faite, en pleine séance ou pas encore entraîné.",
         targetKey: null, position: 'center', scrollY: null,
       },
       {
         key: 'social_shame',
-        title: 'Hall of Shame & Secouer',
+        title: 'Hall of Shame et secousses',
         body: "Si la streak de groupe casse, le dernier Briseur s'affiche dans le Hall of Shame. Le bouton 'Secouer' envoie une notif troll aux retardataires pour les motiver.",
         targetKey: null, position: 'center', scrollY: null,
       },
       {
         key: 'social_friendship_titles',
-        title: "Titres d'Amitié",
+        title: "Titres d'amitié",
         body: "Chaque jour de streak de groupe validé à plusieurs renforce ton lien avec chaque coéquipier. De 'Nouveaux Partenaires' à 'Âmes Sœurs de Muscle' au niveau 5 maximum, un Titre d'Amitié affiche l'histoire que vous avez construite ensemble.",
         targetKey: null, position: 'center', scrollY: null,
       },
       {
         key: 'social_multi',
-        title: 'Le Mode Multi',
+        title: 'Le mode Multi',
         body: "Invite des amis dans un Lobby Multi : vous démarrez la séance ensemble, chacun sur son écran. Terminer à plusieurs débloque un bonus d'XP de groupe (+15% à 2, jusqu'à +50% à 5).",
         targetKey: null, position: 'center', scrollY: null,
       },
@@ -277,7 +277,7 @@ export const TUTORIAL_CHAPTERS = [
   // ─── CHAPITRE 7 : Les Statistiques ─────────────────────────────────────────
   {
     id: 'stats',
-    title: 'Les Statistiques',
+    title: 'Les statistiques',
     subtitle: 'Chapitre 7',
     icon: 'stats-chart-outline',
     tabName: 'Stats',
@@ -286,7 +286,7 @@ export const TUTORIAL_CHAPTERS = [
     steps: [
       {
         key: 'stats_intro',
-        title: 'Tes Stats, Ton Miroir',
+        title: 'Tes stats, ton miroir',
         body: "Cet écran agrège toutes tes performances. Pour te montrer à quoi ça ressemble, on a injecté de vraies fausses données !",
         targetKey: null, position: 'center', scrollY: 0,
       },
@@ -298,7 +298,7 @@ export const TUTORIAL_CHAPTERS = [
       },
       {
         key: 'stats_volume',
-        title: 'Graphique de Volume',
+        title: 'Graphique de volume',
         body: "Chaque barre, c'est le volume soulevé sur un jour, une semaine ou un mois. Appuie sur une barre pour voir son détail.",
         targetKey: 'stats_volume_chart', position: 'top', scrollY: 180,
       },
@@ -310,13 +310,13 @@ export const TUTORIAL_CHAPTERS = [
       },
       {
         key: 'stats_weight',
-        title: 'Suivi de Poids',
+        title: 'Suivi du poids',
         body: "Ton poids actuel, ton évolution et le chemin restant jusqu'à ton objectif. Appuie sur « Pesée » pour ajouter une mesure.",
         targetKey: 'stats_weight_chart', position: 'top', scrollY: 60,
       },
       {
         key: 'stats_history',
-        title: "L'Historique des Séances",
+        title: "L'historique des séances",
         body: "L'onglet Historique regroupe chaque séance avec le détail de tes séries. Appuie sur un jour du calendrier pour retrouver ses séances.",
         targetKey: 'stats_tab_history', position: 'bottom', scrollY: 0,
         autoAction: 'switchToHistory',
@@ -327,7 +327,7 @@ export const TUTORIAL_CHAPTERS = [
   // ─── CHAPITRE 8 : Réglages ──────────────────────────────────────────────────
   {
     id: 'settings',
-    title: 'Réglages & Compte',
+    title: 'Réglages et compte',
     subtitle: 'Chapitre 8',
     icon: 'settings-outline',
     tabName: 'ProfileTab',
@@ -335,13 +335,13 @@ export const TUTORIAL_CHAPTERS = [
     steps: [
       {
         key: 'settings_intro',
-        title: 'Réglages & Compte',
+        title: 'Réglages et compte',
         body: "Personnalise tes unités, modifie ton profil et explore les thèmes visuels débloqués avec ta progression.",
         targetKey: null, position: 'center', scrollY: 0,
       },
       {
         key: 'settings_themes',
-        title: 'Thèmes de Profil',
+        title: 'Thèmes de profil',
         body: "Choisis un thème pour personnaliser la couleur d'accent. Les thèmes avancés (Warrior, Élite, Légende…) nécessitent le niveau correspondant.",
         targetKey: 'settings_themes', position: 'bottom', scrollY: 200,
       },

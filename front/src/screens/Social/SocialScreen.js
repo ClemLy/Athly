@@ -22,7 +22,7 @@ import {
   cancelFriendRequest,
   getFriendsList, getPendingRequests, getLeaderboard, getExerciseLeaderboard,
   getMyGroup, inviteToGroup, respondToGroupInvite, shakeMember, checkGroupStreak, leaveGroup,
-  getLobbyInvites, declineLobbyInvite,
+  getLobbyInvites, declineLobbyInvite, getRank,
 } from '../../services';
 import { MAJOR_EXERCISES } from '../../data/majorExercises';
 import { getFriendshipTitle } from '../../data/friendshipTitles';
@@ -1077,7 +1077,7 @@ function PlayerLine({ user, meta, extra }) {
       <View style={{ flex: 1, marginLeft: 11 }}>
         <Text style={styles.playerName} numberOfLines={1}>{user?.pseudo ?? '-'}</Text>
         <Text style={styles.playerMeta} numberOfLines={1}>
-          {meta || `Niv. ${user?.level ?? 1} · ${user?.rank ?? 'Novice'}`}
+          {meta || `Niv. ${user?.level ?? 1} · ${getRank(user?.level ?? 1).name}`}
         </Text>
         {extra}
       </View>
