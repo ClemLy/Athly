@@ -247,6 +247,10 @@ function FramedAvatar({ shapeId, color, size, userInitial, children }) {
           <SvgCanvas H={H} prefix={`${prefix}h`} grads={grads} layers={frame.halo} />
         </BreathingHalo>
         {showAura && <FrameAura R={R} glowColor={color.glowColor} animate={animate} />}
+        {/* Positionné comme les calques du dessous : sur le web, un élément
+            positionné passe devant un élément statique quel que soit l'ordre,
+            et le halo venait voiler le cadre et l'avatar. */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <SvgCanvas H={H} prefix={prefix} grads={grads} layers={frame.layers}>
           {/* Initiale au centre géométrique exact : centrage parfait pour toutes les formes. */}
           {userInitial ? (
@@ -264,6 +268,7 @@ function FramedAvatar({ shapeId, color, size, userInitial, children }) {
             </SvgText>
           ) : null}
         </SvgCanvas>
+        </View>
         {frame.tier >= 4 && large && (
           <OrbitingSparkles R={R} H={H} color={frame.glow || color.colors[0]} animate={animate} />
         )}

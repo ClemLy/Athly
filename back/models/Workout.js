@@ -47,6 +47,9 @@ const WorkoutSchema = new mongoose.Schema(
     notes: { type: String, default: "" },
     status: { type: String, enum: ["draft", "in_progress", "finished", "completed"], default: "in_progress" },
     completedAt: { type: Date },
+    // Séance validée en moins de 5 min (0 XP) : ne compte ni pour la série
+    // personnelle ni pour le groupe de streak.
+    shortSession: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
@@ -74,6 +77,18 @@ WorkoutSchema.methods.computeTotals = function () {
 };
 
 const FINAL_STATUSES = ["finished", "completed"];
+
+// Une "vraie" séance du jour : terminée, d'au moins 5 min, non marquée trop
+// courte. Même règle que la série personnelle côté app (shortSession exclue).
+const MIN_COUNTED_SECONDS = 300;
+const COUNTED_SESSION_FILTER = {
+  status: { $in: FINAL_STATUSES },
+  shortSession: { $ne: true },
+  durationSeconds: { $gte: MIN_COUNTED_SECONDS },
+};
+function countsAsSession(w) {
+  return FINAL_STATUSES.includes(w.status) && w.shortSession !== true && (w.durationSeconds || 0) >= MIN_COUNTED_SECONDS;
+}
 
 /**
  * Réserve atomiquement la clôture de la séance : passe le statut à `nextStatus`
@@ -128,3 +143,5 @@ WorkoutSchema.index({ user: 1, status: 1, date: -1 });
 
 module.exports = mongoose.model("Workout", WorkoutSchema);
 module.exports.FINAL_STATUSES = FINAL_STATUSES;
+module.exports.COUNTED_SESSION_FILTER = COUNTED_SESSION_FILTER;
+module.exports.countsAsSession = countsAsSession;

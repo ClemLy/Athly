@@ -33,7 +33,7 @@ export const SHAPE_BLEED = {
   crown:      { top: 1.68, bottom: 1.02, side: 1.02 },
   wings:      { top: 1.22, bottom: 1.06, side: 1.68 },
   divine:     { top: 1.68, bottom: 1.68, side: 1.68 },
-  dragonfang: { top: 1.58, bottom: 1.32, side: 1.34 },
+  dragonfang: { top: 1.58, bottom: 1.52, side: 1.34 },
 };
 
 // Demi-côté du canevas SVG, en multiples de R : couvre le plus grand débord
@@ -677,8 +677,8 @@ function neonRing(shapeFn, c) {
 }
 
 // ─── Croc de Dragon ──────────────────────────────────────────────────────────
-// Écu écaillé, tenu par deux pattes griffues dont les serres se referment
-// sur le bord, cornes annelées derrière, et un œil de dragon serti au sommet.
+// Écu écaillé, cornes annelées et crête derrière, mâchoire de crocs qui se
+// referme sous la pointe, et un œil de dragon serti au sommet.
 
 function dragonBack(c) {
   const u = c.R;
@@ -733,7 +733,7 @@ function dragonCrest(shapeFn, c) {
   const u = c.R;
   const edge = shapeFn(c.R);
   const ds = [], shades = [];
-  [[-90, 1.5, 0], [-74, 1.34, 1], [-106, 1.34, -1], [-60, 1.2, 1], [-120, 1.2, -1]].forEach(([a, len, side]) => {
+  [[-90, 1.48, 0], [-72, 1.3, 1], [-108, 1.3, -1]].forEach(([a, len, side]) => {
     const ang = deg(a);
     const re = radiusAt(edge, ang);
     const base = polar(re * 0.86, ang);
@@ -744,49 +744,56 @@ function dragonCrest(shapeFn, c) {
   return ornamentLayers(ds.join(' '), c, { shade: shades.join(' '), haloK: 0.7 });
 }
 
-// Bas de l'écu en dents de scie : petites épines qui pointent vers l'extérieur.
-function dragonSerration(shapeFn, c) {
-  const u = c.R;
-  const pts = evenPoints(shapeFn(c.R), 26, -90).points.filter((q) => q.y > 0.25 * u);
-  const ds = [], shades = [];
-  pts.forEach((q) => {
-    const ang = Math.atan2(q.y, q.x);
-    const r0 = Math.hypot(q.x, q.y);
-    const b = blade(ang, r0 * 0.9, r0 + 0.17 * u, 0.065 * u);
-    ds.push(b.full); shades.push(b.shade);
-  });
-  return ornamentLayers(ds.join(' '), c, { shade: shades.join(' '), haloK: 0.6 });
-}
-
-// Gueule : grands crocs ivoire qui se referment autour de l'avatar —
-// deux en haut qui plongent, deux en bas qui remontent, plus deux petits.
-function dragonFangs(shapeFn, c) {
+// Mâchoire : deux grands crocs naissent SOUS l'anneau (calque arrière, leur
+// base est recouverte par le métal) et se referment autour de la pointe de
+// l'écu, épaulés par deux crocs plus courts. Même métal que le cadre, avec un
+// ton plus clair pour l'émail : ils font corps avec l'écu au lieu de flotter.
+function dragonJaw(shapeFn, c) {
   const u = c.R;
   const edge = shapeFn(c.R);
   const ds = [], shades = [];
-  const add = (a, tipK, turn, w, bend) => {
-    const ang = deg(a);
-    const re = radiusAt(edge, ang);
-    const base = polar(re * 0.98, ang);
-    const tip = polar(re * tipK, ang + deg(turn));
+  const add = (aDeg, tip, w, bend) => {
+    const ang = deg(aDeg);
+    const base = polar(radiusAt(edge, ang) * 0.84, ang);
     const f = fang(base, tip, bend * u, w * u);
     ds.push(f.d); shades.push(f.shade);
   };
   [-1, 1].forEach((s) => {
-    const A = (deg0) => (s > 0 ? deg0 : 180 - deg0);
-    add(A(-36), 0.5, s * 18, 0.2, s * 0.07);    // croc supérieur
-    add(A(-12), 0.7, s * 10, 0.1, s * 0.035);   // petit croc supérieur
-    add(A(42), 0.5, -s * 18, 0.2, -s * 0.07);   // croc inférieur
-    add(A(18), 0.7, -s * 10, 0.1, -s * 0.035);  // petit croc inférieur
+    const a = (d0) => (s > 0 ? d0 : 180 - d0);
+    add(a(58), { x: s * 0.24 * u, y: 1.5 * u }, 0.18, s * 0.12);   // grand croc
+    add(a(34), { x: s * 0.6 * u, y: 1.08 * u }, 0.1, s * 0.07);    // croc latéral
   });
   const d = ds.join(' ');
   return [
-    { d, fill: '#000000', op: 0.45, stroke: '#000000', sw: c.hair * 2.6 },
-    { d, fill: c.tones.light },
-    { d, fill: '#FFFFFF', op: 0.18 },
-    { d: shades.join(' '), fill: c.tones.dark, op: 0.55 },
+    ...haloLayers(d, c, 0.8),
+    { d, fill: 'url:metalV' },
+    { d, fill: c.tones.light, op: 0.55 },
     { d, fill: 'url:sheen' },
-    { d, fill: 'none', stroke: c.tones.dark, sw: c.hair * 0.8, op: 0.95 },
+    { d: shades.join(' '), fill: '#000000', op: 0.3 },
+    { d, fill: 'none', stroke: c.tones.dark, sw: c.hair, op: 0.95 },
+  ];
+}
+
+// Œil de dragon serti au sommet de l'écu : sertissure en métal, iris
+// lumineux à la couleur du cadre, pupille fendue. La signature du cadre.
+function dragonEye(c) {
+  const w = c.R * 0.3, h = c.R * 0.15;
+  const cy = -(c.r + c.ringW * 0.55) * 0.99;
+  const almond = (k, kx = 1) => {
+    const ww = w * k * kx, hh = h * k;
+    return `M${pt(-ww, cy)} Q${pt(0, cy - hh * 1.9)} ${pt(ww, cy)} Q${pt(0, cy + hh * 1.9)} ${pt(-ww, cy)} Z`;
+  };
+  const iris = c.glow ? c.tones.light : c.tones.mid;
+  return [
+    { d: almond(1.45), fill: '#000000', op: 0.45 },
+    { d: almond(1.32), fill: 'url:metalV' },
+    { d: almond(1.32), fill: 'url:sheen' },
+    { d: almond(1.32), fill: 'none', stroke: c.tones.dark, sw: c.hair, op: 0.95 },
+    ...(c.glow ? [{ d: almond(1.1), fill: 'none', stroke: c.glow, sw: c.hair * 3, op: 0.6 }] : []),
+    { d: almond(1), fill: iris },
+    { d: almond(0.62), fill: '#FFFFFF', op: 0.28 },
+    { d: almond(0.95, 0.16), fill: '#0A0A0F' },
+    { d: circlePath(h * 0.26, -w * 0.32, cy - h * 0.32), fill: '#FFFFFF', op: 0.85 },
   ];
 }
 
@@ -807,10 +814,10 @@ const SHAPES = {
     back: (c) => [
       ...dragonBack(c),
       ...dragonCrest((r) => shieldPath(r), c),
-      ...dragonSerration((r) => shieldPath(r), c),
+      ...dragonJaw((r) => shieldPath(r), c),
     ],
     ringExtra: dragonScales,
-    front: (c) => dragonFangs((r) => shieldPath(r), c),
+    front: dragonEye,
   },
 };
 

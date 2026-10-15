@@ -256,7 +256,7 @@ describe("Streaks de Groupe & Niveaux d'Amitié Athly — V2", () => {
     });
 
     it("❌ Impossible de secouer un membre qui a déjà validé sa séance aujourd'hui", async () => {
-      await Workout.create({ user: bob.userId, status: 'finished', date: new Date() });
+      await Workout.create({ user: bob.userId, status: 'finished', durationSeconds: 1800, date: new Date() });
 
       const res = await request(app)
         .post(`/api/groups/${groupId}/shake/${bob.userId}`)
@@ -327,8 +327,8 @@ describe("Streaks de Groupe & Niveaux d'Amitié Athly — V2", () => {
       const group = await StreakGroup.create({ members: [alice.userId, bob.userId] });
 
       const today = new Date();
-      await Workout.create({ user: alice.userId, status: 'finished', date: today });
-      await Workout.create({ user: bob.userId,   status: 'finished', date: today });
+      await Workout.create({ user: alice.userId, status: 'finished', durationSeconds: 1800, date: today });
+      await Workout.create({ user: bob.userId,   status: 'finished', durationSeconds: 1800, date: today });
 
       // XP d'amitié avant
       const fBefore = await Friendship.findOne({
@@ -362,7 +362,7 @@ describe("Streaks de Groupe & Niveaux d'Amitié Athly — V2", () => {
       const group = await StreakGroup.create({ members: [alice.userId, bob.userId] });
 
       // Seule Alice a une séance
-      await Workout.create({ user: alice.userId, status: 'finished', date: new Date() });
+      await Workout.create({ user: alice.userId, status: 'finished', durationSeconds: 1800, date: new Date() });
 
       const res = await request(app)
         .post(`/api/groups/${group._id}/check-streak`)
@@ -400,9 +400,9 @@ describe("Streaks de Groupe & Niveaux d'Amitié Athly — V2", () => {
       const group = await StreakGroup.create({ members: [alice.userId, bob.userId, carol.userId] });
 
       const today = new Date();
-      await Workout.create({ user: alice.userId, status: 'finished', date: today });
-      await Workout.create({ user: bob.userId,   status: 'finished', date: today });
-      await Workout.create({ user: carol.userId,  status: 'finished', date: today });
+      await Workout.create({ user: alice.userId, status: 'finished', durationSeconds: 1800, date: today });
+      await Workout.create({ user: bob.userId,   status: 'finished', durationSeconds: 1800, date: today });
+      await Workout.create({ user: carol.userId,  status: 'finished', durationSeconds: 1800, date: today });
 
       await request(app)
         .post(`/api/groups/${group._id}/check-streak`)
@@ -490,7 +490,7 @@ describe("Streaks de Groupe & Niveaux d'Amitié Athly — V2", () => {
 
     it("✅ done : membre avec une séance 'finished' aujourd'hui", async () => {
       await StreakGroup.create({ members: [alice.userId, bob.userId] });
-      await Workout.create({ user: alice.userId, status: 'finished', date: new Date() });
+      await Workout.create({ user: alice.userId, status: 'finished', durationSeconds: 1800, date: new Date() });
 
       const res = await request(app)
         .get('/api/groups/my-group')
@@ -498,6 +498,19 @@ describe("Streaks de Groupe & Niveaux d'Amitié Athly — V2", () => {
 
       const aliceMember = res.body.group.members.find((m) => m._id === alice.userId);
       expect(aliceMember.weatherStatus).toBe('done');
+    });
+
+    it("✅ pas done : une séance validée en moins de 5 min (shortSession) ne compte pas", async () => {
+      await StreakGroup.create({ members: [alice.userId, bob.userId] });
+      await Workout.create({ user: alice.userId, status: 'finished', durationSeconds: 1800, shortSession: true, date: new Date() });
+      await Workout.create({ user: bob.userId, status: 'finished', durationSeconds: 90, date: new Date() });
+
+      const res = await request(app)
+        .get('/api/groups/my-group')
+        .set('Authorization', `Bearer ${alice.token}`);
+
+      const statuses = res.body.group.members.map((m) => m.weatherStatus);
+      expect(statuses).not.toContain('done');
     });
 
     it("✅ active : membre avec une séance 'in_progress' mise à jour il y a moins de 4h", async () => {
@@ -555,7 +568,7 @@ describe("Streaks de Groupe & Niveaux d'Amitié Athly — V2", () => {
     it("✅ done l'emporte sur active si les deux signaux sont présents", async () => {
       await StreakGroup.create({ members: [alice.userId, bob.userId] });
       await Workout.create({ user: alice.userId, status: 'in_progress', date: new Date() });
-      await Workout.create({ user: alice.userId, status: 'finished', date: new Date() });
+      await Workout.create({ user: alice.userId, status: 'finished', durationSeconds: 1800, date: new Date() });
 
       const res = await request(app)
         .get('/api/groups/my-group')
@@ -584,7 +597,7 @@ describe("Streaks de Groupe & Niveaux d'Amitié Athly — V2", () => {
         lastValidatedDate: new Date(yesterday.getTime() - 24 * 60 * 60 * 1000), // avant-hier
       });
       // Alice a validé hier, Bob non, et Bob n'a aucun gel
-      await Workout.create({ user: alice.userId, status: 'finished', date: yesterday });
+      await Workout.create({ user: alice.userId, status: 'finished', durationSeconds: 1800, date: yesterday });
 
       const res = await request(app)
         .get('/api/groups/my-group')
@@ -609,7 +622,7 @@ describe("Streaks de Groupe & Niveaux d'Amitié Athly — V2", () => {
         currentStreak: 5,
         lastValidatedDate: new Date(yesterday.getTime() - 24 * 60 * 60 * 1000),
       });
-      await Workout.create({ user: alice.userId, status: 'finished', date: yesterday });
+      await Workout.create({ user: alice.userId, status: 'finished', durationSeconds: 1800, date: yesterday });
 
       const res = await request(app)
         .get('/api/groups/my-group')
@@ -633,8 +646,8 @@ describe("Streaks de Groupe & Niveaux d'Amitié Athly — V2", () => {
       });
 
       const today = new Date();
-      await Workout.create({ user: alice.userId, status: 'finished', date: today });
-      await Workout.create({ user: bob.userId,   status: 'finished', date: today });
+      await Workout.create({ user: alice.userId, status: 'finished', durationSeconds: 1800, date: today });
+      await Workout.create({ user: bob.userId,   status: 'finished', durationSeconds: 1800, date: today });
 
       await request(app)
         .post(`/api/groups/${group._id}/check-streak`)
@@ -654,8 +667,8 @@ describe("Streaks de Groupe & Niveaux d'Amitié Athly — V2", () => {
         currentStreak: 5,
         lastValidatedDate: new Date(yesterday.getTime() - 24 * 60 * 60 * 1000),
       });
-      await Workout.create({ user: alice.userId, status: 'finished', date: yesterday });
-      await Workout.create({ user: bob.userId,   status: 'finished', date: yesterday });
+      await Workout.create({ user: alice.userId, status: 'finished', durationSeconds: 1800, date: yesterday });
+      await Workout.create({ user: bob.userId,   status: 'finished', durationSeconds: 1800, date: yesterday });
 
       const res = await request(app)
         .get('/api/groups/my-group')

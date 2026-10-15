@@ -37,8 +37,13 @@ export const GLOW = {
 
 // ─── TrophySlot ───────────────────────────────────────────────────────────────
 
-export function TrophySlot({ trophy, onPress, hideCondition = false }) {
-  const { icon, label, condition, desc, color, gradientColors, unlocked, tier, glowIntensity } = trophy;
+// Palier affiché sous le nom dans la vitrine : court et toujours de la même
+// longueur, contrairement aux conditions (phrases parfois longues, lisibles
+// en entier dans la fenêtre de détail).
+export const TIER_LABELS = { bronze: 'Bronze', silver: 'Argent', gold: 'Or', platinum: 'Platine', diamond: 'Diamant' };
+
+export function TrophySlot({ trophy, onPress }) {
+  const { icon, label, color, gradientColors, unlocked, tier, glowIntensity } = trophy;
   const gleamX = useRef(new Animated.Value(-56)).current;
   const reducedMotion = useReducedMotion();
 
@@ -78,12 +83,12 @@ export function TrophySlot({ trophy, onPress, hideCondition = false }) {
           </View>
         )}
       </View>
-      <Text style={[styles.label, { color: unlocked ? Colors.textPrimary : Colors.textMuted }]}>{label}</Text>
-      {hideCondition ? null : (
-        <Text style={[styles.desc, { color: unlocked ? color : Colors.textMuted }]}>
-          {condition || desc || ''}
-        </Text>
-      )}
+      <Text style={[styles.label, { color: unlocked ? Colors.textPrimary : Colors.textMuted }]} numberOfLines={2}>{label}</Text>
+      {unlocked && TIER_LABELS[tier] ? (
+        <View style={[styles.tierChip, { backgroundColor: color + '1F', borderColor: color + '55' }]}>
+          <Text style={[styles.tierText, { color }]}>{TIER_LABELS[tier]}</Text>
+        </View>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -196,7 +201,9 @@ export const styles = StyleSheet.create({
   },
   gleam: { position: 'absolute', top: -8, width: 16, height: 80, backgroundColor: 'rgba(255,255,255,0.30)', borderRadius: 6 },
   iconLocked: { width: 56, height: 56, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'center', borderWidth: 0.8, borderColor: 'rgba(255,255,255,0.07)' },
-  label: { fontSize: 13, fontWeight: '800', textAlign: 'center', letterSpacing: 0.2 },
+  label: { fontSize: 13, fontWeight: '800', textAlign: 'center', lineHeight: 17, minHeight: 34 },
+  tierChip: { marginTop: 6, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, borderWidth: 1 },
+  tierText: { fontSize: 11, fontWeight: '800' },
   desc:  { fontSize: 11, fontWeight: '600', textAlign: 'center', marginTop: 3, lineHeight: 15 },
 
   emptySlot: {

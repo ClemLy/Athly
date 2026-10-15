@@ -249,7 +249,7 @@ describe('Prestige visuel Rouge Sang Unique — cadre, couleur, thème, coffres,
 
     async function markAllValidatedToday() {
       const today = new Date();
-      await Promise.all(members.map((m) => Workout.create({ user: m.userId, status: 'finished', date: today })));
+      await Promise.all(members.map((m) => Workout.create({ user: m.userId, status: 'finished', durationSeconds: 1800, date: today })));
     }
 
     it('✅ Groupe de 5 membres franchissant 30 jours : chaque membre reçoit l\'item Unique', async () => {
@@ -294,7 +294,7 @@ describe('Prestige visuel Rouge Sang Unique — cadre, couleur, thème, coffres,
         lastValidatedDate: yesterday,
       });
       const today = new Date();
-      await Promise.all(fourMembers.map((m) => Workout.create({ user: m.userId, status: 'finished', date: today })));
+      await Promise.all(fourMembers.map((m) => Workout.create({ user: m.userId, status: 'finished', durationSeconds: 1800, date: today })));
 
       const res = await request(app)
         .post(`/api/groups/${group._id}/check-streak`)

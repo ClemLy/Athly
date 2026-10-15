@@ -1,5 +1,8 @@
 import axios from 'axios';
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { API_URL } from '@env';
+import { resolveDevApiUrl } from '../utils/devApiUrl';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getToken, removeToken } from '../utils/authStorage';
 import {
@@ -97,8 +100,20 @@ export const SESSION_EXPIRED_MSG = SESSION_EXPIRED_TEXT;
 // l'app déployée ne tape jamais dans le vide sur sa propre origine.
 const PRODUCTION_API_URL = 'https://athly-api.onrender.com/api';
 
+// En développement, l'API tourne sur la même machine que le serveur Expo. Si
+// .env pointe vers une adresse locale (localhost ou IP du Wi-Fi), on reprend
+// l'adresse par laquelle le téléphone a ouvert l'app : l'IP du Mac change d'un
+// réseau à l'autre, et une IP figée dans .env donnait "Impossible de joindre
+// le serveur".
+function currentDevHost() {
+  if (typeof __DEV__ === 'undefined' || !__DEV__) return null;
+  if (Platform.OS === 'web') return typeof window !== 'undefined' ? window.location.hostname : null;
+  return Constants.expoConfig?.hostUri?.split(':')[0] || null;
+}
+
 // Normalise l'URL fournie dans .env et s'assure d'avoir le préfixe `/api`
-const rawApiUrl = API_URL || (process.env.NODE_ENV === 'production' ? PRODUCTION_API_URL : '');
+const rawApiUrl = resolveDevApiUrl(API_URL, currentDevHost())
+  || (process.env.NODE_ENV === 'production' ? PRODUCTION_API_URL : '');
 const normalizedEnv = rawApiUrl ? rawApiUrl.replace(/\/+$/g, '') : '';
 const baseURL = normalizedEnv.endsWith('/api')
   ? normalizedEnv

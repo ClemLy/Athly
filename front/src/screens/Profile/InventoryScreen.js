@@ -3,13 +3,17 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   StatusBar, ActivityIndicator, Animated,
 } from 'react-native';
+import { ConfirmModal } from '../../components/common';
+import ChestGlyph from '../../components/inventory/ChestGlyph';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { COLOR_DEFS } from '../../components/profile/AvatarFrame';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '../../constants/theme';
 import { useUser } from '../../context/UserContext';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import { useToast } from '../../context/ToastContext';
-import { openChest, useItem, claimUniqueItem, ITEM_CATALOG, RARITY_META } from '../../services';
+import { openChest, useItem, claimUniqueItem, ITEM_CATALOG, RARITY_META, CHEST_ODDS, CHEST_MINUTES } from '../../services';
 import { xpForLevel, xpToLevel } from '../../services';
 import { useAvatarFrame } from '../../hooks';
 import { useDevSettings } from '../../hooks';
@@ -26,8 +30,19 @@ const RARITY_ORDER = ['unique', 'legendary', 'epic', 'rare', 'common'];
 // Auto-équipement du cosmétique Unique juste après sa réclamation — même
 // logique que l'équipement manuel (useAvatarFrame persiste en local +
 // synchronise le backend ; setProfileThemeId reste une préférence locale).
+// Meilleure couleur de cadre déjà débloquée par le niveau (hors Uniques).
+function bestColorFor(level) {
+  const owned = COLOR_DEFS.filter((c) => c.colors && !c.special && c.unlockLevel <= level);
+  return owned.length ? owned[owned.length - 1].id : 'iron';
+}
+
 const CLAIM_EQUIP_ACTION = {
-  PROFILE_FRAME_BLOOD_BOND: (ctx) => ctx.selectShape('dragonfang'),
+  // Une forme sans couleur ne s'affiche pas ("Défaut" = pas de cadre) : on
+  // pose aussi la meilleure couleur disponible pour que le cadre se voie.
+  PROFILE_FRAME_BLOOD_BOND: async (ctx) => {
+    await ctx.selectShape('dragonfang');
+    if (!ctx.colorId || ctx.colorId === 'none') await ctx.selectColor(bestColorFor(ctx.level));
+  },
   FRAME_COLOR_BLOOD_SANG:   (ctx) => ctx.selectColor('bloodsang'),
   THEME_UNLOCK_BLOOD_SANG:  (ctx) => ctx.setProfileThemeId('blood_sang'),
 };
@@ -41,11 +56,12 @@ export default function InventoryScreen({ navigation }) {
   const { user, refetch } = useUser();
   const { addBonusXp, totalXP } = useWorkoutLogs();
   const { showToast } = useToast();
-  const { selectShape, selectColor } = useAvatarFrame();
+  const { colorId, selectShape, selectColor } = useAvatarFrame();
   const { setProfileThemeId } = useDevSettings();
 
   const [busy, setBusy]         = useState(false);
   const [chestModal, setChestModal] = useState({ visible: false, drawnItem: null });
+  const [pendingUse, setPendingUse] = useState(null); // itemType à confirmer
 
   // ─── Tutorial (chapitre Inventaire) ──────────────────────────────────────────
   const { pendingChapterId, activeChapterId, startChapter } = useTutorial();
@@ -80,6 +96,8 @@ export default function InventoryScreen({ navigation }) {
   const chestCount = chestEntry?.quantity ?? 0;
   const level      = user?.level ?? 1;
   const chestLocked = level < MIN_LEVEL_FOR_CHEST;
+  const gels       = user?.streakGels ?? 0;
+  const minutesToward = (user?.totalWorkoutMinutes ?? 0) % CHEST_MINUTES;
 
   // Items hors coffres, groupés par rareté (ordre : unique → commun)
   const items = inventory
@@ -92,14 +110,12 @@ export default function InventoryScreen({ navigation }) {
     try {
       const res = await openChest();
       if (res.success) {
-        // Ouverture de coffre : moment marquant → vibration lourde.
-        haptics.heavy();
-        // La modale joue l'animation (shake → burst → reveal)
         setChestModal({ visible: true, drawnItem: res.drawnItem });
+        refetch();
       }
     } catch (error) {
       if (error.isSessionExpired) return;
-      showToast(getErrorMessage(error, 'Impossible d\'ouvrir le coffre.'), 'error');
+      showToast(getErrorMessage(error, 'Le coffre n\'a pas pu être ouvert. Réessaie dans un instant.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -110,17 +126,19 @@ export default function InventoryScreen({ navigation }) {
     setBusy(true);
     const beforeXp    = user?.xp ?? 0;
     const beforeLevel = user?.level ?? 1;
+    const meta = ITEM_CATALOG[itemType] ?? {};
     try {
       const res = await useItem(itemType);
       if (res.success) {
-        showToast(`${ITEM_CATALOG[itemType]?.name ?? itemType} utilisé !`, 'success');
+        haptics.success();
+        showToast(`${meta.name ?? itemType} utilisé${meta.effect ? ` : ${meta.effect}` : ''}.`, 'success');
         refetch();
 
         // Le Profil affiche un niveau/XP calculé localement (logs de séances),
         // distinct du user.xp backend. On pousse un log de synchronisation pour
         // que l'usage d'un objet se reflète immédiatement sur le Profil/Accueil.
         const xpGained = (res.user?.xp ?? beforeXp) - beforeXp;
-        const itemLabel = `Objet : ${ITEM_CATALOG[itemType]?.name ?? itemType}`;
+        const itemLabel = `Objet : ${meta.name ?? itemType}`;
         if (xpGained > 0) {
           addBonusXp(itemLabel, xpGained);
         } else if ((res.user?.level ?? beforeLevel) > beforeLevel) {
@@ -132,7 +150,7 @@ export default function InventoryScreen({ navigation }) {
       }
     } catch (error) {
       if (error.isSessionExpired) return;
-      showToast(getErrorMessage(error, 'Impossible d\'utiliser cet objet.'), 'error');
+      showToast(getErrorMessage(error, 'L\'objet n\'a pas pu être utilisé. Réessaie dans un instant.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -147,14 +165,15 @@ export default function InventoryScreen({ navigation }) {
     try {
       const res = await claimUniqueItem(itemType);
       if (res.success) {
-        showToast(`${ITEM_CATALOG[itemType]?.name ?? itemType} réclamé !`, 'success');
+        haptics.heavy();
+        showToast(`${ITEM_CATALOG[itemType]?.name ?? itemType} débloqué et équipé.`, 'success');
         const equip = CLAIM_EQUIP_ACTION[itemType];
-        if (equip) await equip({ selectShape, selectColor, setProfileThemeId });
+        if (equip) await equip({ selectShape, selectColor, setProfileThemeId, colorId, level: user?.level ?? 1 });
         refetch();
       }
     } catch (error) {
       if (error.isSessionExpired) return;
-      showToast(getErrorMessage(error, 'Impossible de réclamer cet objet.'), 'error');
+      showToast(getErrorMessage(error, 'Le cosmétique n\'a pas pu être débloqué. Réessaie dans un instant.'), 'error');
     } finally {
       setBusy(false);
     }
@@ -165,17 +184,24 @@ export default function InventoryScreen({ navigation }) {
     refetch();
   };
 
+  const openAnother = () => {
+    setChestModal({ visible: false, drawnItem: null });
+    handleOpenChest();
+  };
+
+  const pendingMeta = pendingUse ? ITEM_CATALOG[pendingUse] : null;
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" />
 
       {/* ── Header ── */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button" onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button" style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.75}>
+          <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Inventaire</Text>
-        <View style={{ width: 24 }} />
+        <Text style={styles.headerTitle} accessibilityRole="header">Inventaire</Text>
+        <View style={{ width: 44 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -188,18 +214,24 @@ export default function InventoryScreen({ navigation }) {
             count={chestCount}
             locked={chestLocked}
             busy={busy}
+            minutesToward={minutesToward}
             onOpen={handleOpenChest}
           />
         </View>
 
         {/* ── Objets ── */}
-        <Text style={styles.sectionLabel}>MES OBJETS</Text>
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionLabel}>Mes objets</Text>
+          <View style={styles.gelChip} accessible accessibilityLabel={`Gels de streak chargés : ${gels} sur 3`}>
+            <Ionicons name="snow" size={14} color="#60A5FA" />
+            <Text style={styles.gelTxt}>Gels {gels}/3</Text>
+          </View>
+        </View>
         {items.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Ionicons name="bag-outline" size={36} color={Colors.textMuted} style={{ marginBottom: 12 }} />
-            <Text style={styles.emptyTxt}>
-              Ton sac est vide.{'\n'}Enchaîne les séances pour gagner des coffres !
-            </Text>
+            <Ionicons name="bag-outline" size={32} color={Colors.textMuted} style={{ marginBottom: 10 }} />
+            <Text style={styles.emptyTitle}>Ton sac est vide</Text>
+            <Text style={styles.emptyTxt}>Ouvre des coffres pour obtenir des objets : XP, gels de streak, coupons de niveau.</Text>
           </View>
         ) : (
           items.map((entry, index) => (
@@ -208,7 +240,8 @@ export default function InventoryScreen({ navigation }) {
               entry={entry}
               index={index}
               busy={busy}
-              onUse={() => handleUseItem(entry.itemType)}
+              gelsFull={gels >= 3}
+              onUse={() => setPendingUse(entry.itemType)}
               onClaim={() => handleClaimItem(entry.itemType)}
             />
           ))
@@ -220,7 +253,19 @@ export default function InventoryScreen({ navigation }) {
       <ChestOpeningModal
         visible={chestModal.visible}
         drawnItem={chestModal.drawnItem}
+        chestsLeft={chestCount}
         onClose={closeChestModal}
+        onOpenAnother={openAnother}
+      />
+
+      <ConfirmModal
+        visible={!!pendingUse}
+        icon={pendingMeta?.icon || 'cube-outline'}
+        title={`Utiliser ${pendingMeta?.name ?? ''} ?`}
+        body={pendingMeta ? `${pendingMeta.description} L'objet sera consommé.` : ''}
+        confirmLabel="Utiliser"
+        onConfirm={() => { const t = pendingUse; setPendingUse(null); handleUseItem(t); }}
+        onCancel={() => setPendingUse(null)}
       />
 
       {activeChapterId === 'inventory' && (
@@ -230,43 +275,58 @@ export default function InventoryScreen({ navigation }) {
   );
 }
 
-// ─── Carte coffre avec flottement continu ────────────────────────────────────
+// ─── Carte coffre ─────────────────────────────────────────────────────────────
 
-function ChestCard({ count, locked, busy, onOpen }) {
+function ChestCard({ count, locked, busy, minutesToward, onOpen }) {
+  const reduced = useReducedMotion();
   const float = useRef(new Animated.Value(0)).current;
+  const canOpen = !locked && count > 0 && !busy;
 
+  // Flottement léger uniquement quand un coffre attend d'être ouvert.
   useEffect(() => {
+    if (!canOpen || reduced) { float.setValue(0); return undefined; }
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(float, { toValue: -6, duration: 1400, useNativeDriver: true }),
+        Animated.timing(float, { toValue: -4, duration: 1400, useNativeDriver: true }),
         Animated.timing(float, { toValue: 0,  duration: 1400, useNativeDriver: true }),
       ]),
     );
     loop.start();
     return () => loop.stop();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [canOpen, reduced, float]);
 
-  const canOpen = !locked && count > 0 && !busy;
+  const pct = Math.min(1, minutesToward / CHEST_MINUTES);
+  const title = locked
+    ? 'Coffres verrouillés'
+    : count > 0 ? `${count} coffre${count > 1 ? 's' : ''} à ouvrir` : 'Aucun coffre pour l\'instant';
 
   return (
     <View style={[styles.chestCard, locked && styles.chestCardLocked]}>
-      <Animated.View style={[styles.chestIconWrap, { transform: [{ translateY: float }] }]}>
-        <Ionicons name={locked ? 'lock-closed' : 'cube'} size={34} color={locked ? Colors.textMuted : Colors.primary} />
-      </Animated.View>
-
-      <View style={styles.chestInfo}>
-        <Text style={styles.chestTitle}>
-          {locked ? 'Coffres verrouillés' : `${count} coffre${count > 1 ? 's' : ''} disponible${count > 1 ? 's' : ''}`}
-        </Text>
-        <Text style={styles.chestSub}>
-          {locked
-            ? `Atteins le niveau ${MIN_LEVEL_FOR_CHEST} (Rang Initié) pour les débloquer.`
-            : 'Cumule 2 h de séance pour gagner un coffre.'}
-        </Text>
+      <View style={styles.chestTop}>
+        <Animated.View style={{ transform: [{ translateY: float }] }}>
+          <ChestGlyph size={68} dimmed={locked || count === 0} />
+        </Animated.View>
+        <View style={styles.chestInfo}>
+          <Text style={styles.chestTitle}>{title}</Text>
+          <Text style={styles.chestSub}>
+            {locked
+              ? `Atteins le niveau ${MIN_LEVEL_FOR_CHEST} pour gagner et ouvrir des coffres.`
+              : `Un coffre toutes les ${CHEST_MINUTES / 60} h de séance cumulées.`}
+          </Text>
+        </View>
       </View>
 
+      {!locked ? (
+        <View style={styles.progressBlock} accessible accessibilityLabel={`${minutesToward} minutes sur ${CHEST_MINUTES} avant le prochain coffre`}>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${pct * 100}%` }]} />
+          </View>
+          <Text style={styles.progressTxt}>{minutesToward} / {CHEST_MINUTES} min avant le prochain</Text>
+        </View>
+      ) : null}
+
       <TouchableOpacity accessibilityRole="button"
+        accessibilityState={{ disabled: !canOpen, busy }}
         style={[styles.openBtn, !canOpen && styles.openBtnDisabled]}
         onPress={onOpen}
         disabled={!canOpen}
@@ -274,82 +334,87 @@ function ChestCard({ count, locked, busy, onOpen }) {
       >
         {busy
           ? <ActivityIndicator size="small" color="#fff" />
-          : <Text style={styles.openBtnTxt}>Ouvrir</Text>}
+          : <Text style={[styles.openBtnTxt, !canOpen && styles.openBtnTxtDisabled]}>Ouvrir un coffre</Text>}
       </TouchableOpacity>
+
+      <View style={styles.oddsRow} accessible accessibilityLabel={`Chances : ${CHEST_ODDS.map((o) => `${RARITY_META[o.rarity].label} ${o.pct} %`).join(', ')}`}>
+        {CHEST_ODDS.map((o) => (
+          <View key={o.rarity} style={styles.oddsItem}>
+            <View style={[styles.oddsDot, { backgroundColor: RARITY_META[o.rarity].color }]} />
+            <Text style={styles.oddsTxt}>{RARITY_META[o.rarity].label} {o.pct} %</Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
 
 // ─── Carte item avec entrée en cascade ───────────────────────────────────────
 
-function StaggeredItemCard({ entry, index, busy, onUse, onClaim }) {
-  const slide = useRef(new Animated.Value(24)).current;
-  const fade  = useRef(new Animated.Value(0)).current;
+function StaggeredItemCard({ entry, index, busy, gelsFull, onUse, onClaim }) {
+  const reduced = useReducedMotion();
+  const enter = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(slide, {
-        toValue: 0, duration: 320, delay: index * 70, useNativeDriver: true,
-      }),
-      Animated.timing(fade, {
-        toValue: 1, duration: 320, delay: index * 70, useNativeDriver: true,
-      }),
-    ]).start();
+    Animated.timing(enter, {
+      toValue: 1, duration: 280, delay: Math.min(index, 6) * 60, useNativeDriver: true,
+    }).start();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const meta   = ITEM_CATALOG[entry.itemType] ?? {};
   const rarity = RARITY_META[entry.rarity] ?? RARITY_META.common;
+  const tone   = rarity.text || rarity.color;
+  const blocked = meta.gel && gelsFull;
 
   return (
     <Animated.View
       style={[
         styles.itemCard,
+        { borderColor: `${rarity.color}55` },
         {
-          borderColor: `${rarity.color}55`,
-          opacity: fade,
-          transform: [{ translateY: slide }],
-        },
-        // Lueur pulsée réservée à la rareté Unique — signale le prestige des
-        // cosmétiques Rouge Sang sans dépendre d'un composant à part.
-        rarity.glow && {
-          shadowColor: rarity.glow, shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.9, shadowRadius: 14, elevation: 10,
+          opacity: enter,
+          transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [reduced ? 0 : 12, 0] }) }],
         },
       ]}
     >
-      <View style={[styles.itemIconBox, { backgroundColor: `${rarity.color}18` }]}>
-        <Ionicons name={meta.icon ?? 'help-circle-outline'} size={24} color={rarity.color} />
-      </View>
-
-      <View style={styles.itemInfo}>
-        <View style={styles.itemNameRow}>
-          <Text style={styles.itemName}>{meta.name ?? entry.itemType}</Text>
-          {entry.quantity > 1 && <Text style={styles.itemQty}>×{entry.quantity}</Text>}
+      <View style={styles.itemTop}>
+        <View style={[styles.itemIconBox, { backgroundColor: `${rarity.color}1F` }]}>
+          <Ionicons name={meta.icon ?? 'help-circle-outline'} size={24} color={tone} />
         </View>
-        <Text style={[styles.itemRarity, { color: rarity.color }]}>{rarity.label}</Text>
-        <Text style={styles.itemDesc} numberOfLines={2}>{meta.description}</Text>
+        <View style={styles.itemInfo}>
+          <View style={styles.itemNameRow}>
+            <Text style={styles.itemName}>{meta.name ?? entry.itemType}</Text>
+            {entry.quantity > 1 && <Text style={styles.itemQty}>×{entry.quantity}</Text>}
+          </View>
+          <Text style={[styles.itemRarity, { color: tone }]}>{rarity.label}</Text>
+          <Text style={styles.itemDesc}>{meta.description}</Text>
+          {blocked ? <Text style={styles.itemBlocked}>Tes 3 gels sont déjà chargés.</Text> : null}
+        </View>
       </View>
 
       {meta.usable && (
         <TouchableOpacity accessibilityRole="button"
-          style={[styles.useBtn, { borderColor: rarity.color }, busy && { opacity: 0.4 }]}
+          accessibilityLabel={`Utiliser ${meta.name ?? ''}`}
+          accessibilityState={{ disabled: busy || blocked }}
+          style={[styles.useBtn, { borderColor: `${rarity.color}80` }, (busy || blocked) && styles.btnDisabled]}
           onPress={onUse}
-          disabled={busy}
+          disabled={busy || blocked}
           activeOpacity={0.8}
         >
-          <Text style={[styles.useBtnTxt, { color: rarity.color }]}>Utiliser</Text>
+          <Text style={[styles.useBtnTxt, { color: tone }]}>Utiliser</Text>
         </TouchableOpacity>
       )}
 
       {meta.claimable && (
         <TouchableOpacity accessibilityRole="button"
-          style={[styles.useBtn, { borderColor: rarity.color, backgroundColor: `${rarity.color}14` }, busy && { opacity: 0.4 }]}
+          accessibilityLabel={`Débloquer ${meta.name ?? ''}`}
+          style={[styles.useBtn, { borderColor: tone, backgroundColor: `${rarity.color}26` }, busy && styles.btnDisabled]}
           onPress={onClaim}
           disabled={busy}
           activeOpacity={0.8}
         >
-          <Text style={[styles.useBtnTxt, { color: rarity.color }]}>Réclamer</Text>
+          <Text style={[styles.useBtnTxt, { color: tone }]}>Débloquer et équiper</Text>
         </TouchableOpacity>
       )}
     </Animated.View>
@@ -365,80 +430,95 @@ const styles = StyleSheet.create({
     alignItems:     'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingBottom:  14,
+    paddingBottom:  10,
   },
-  headerTitle: { color: Colors.textPrimary, fontSize: 17, fontWeight: '800', letterSpacing: 0.2 },
+  backBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: Colors.glassBg, borderWidth: 1, borderColor: Colors.glassBorder,
+  },
+  headerTitle: { color: Colors.textPrimary, fontSize: 18, fontWeight: '800' },
   content: { paddingHorizontal: 16 },
 
+  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 26, marginBottom: 10 },
   sectionLabel: {
-    color: Colors.textMuted, fontSize: 11, fontWeight: '700',
-    letterSpacing: 0.8, marginTop: 26, marginBottom: 10, marginLeft: 4,
+    color: Colors.textSecondary, fontSize: 12, fontWeight: '800',
+    letterSpacing: 0.8, textTransform: 'uppercase', marginLeft: 4,
   },
+  gelChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12,
+    backgroundColor: 'rgba(96,165,250,0.1)', borderWidth: 1, borderColor: 'rgba(96,165,250,0.3)',
+  },
+  gelTxt: { color: Colors.textPrimary, fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] },
 
   // ── Coffre ──
-  chestSpot: { marginTop: 8 },
+  chestSpot: { marginTop: 4 },
   chestCard: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    backgroundColor: 'rgba(254,116,57,0.07)',
+    backgroundColor: Colors.cardDeep,
     borderWidth:     1,
-    borderColor:     'rgba(254,116,57,0.30)',
-    borderRadius:    18,
-    padding:         18,
+    borderColor:     'rgba(232,176,74,0.35)',
+    borderRadius:    20,
+    padding:         16,
   },
-  chestCardLocked: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderColor:     'rgba(255,255,255,0.09)',
-  },
-  chestIconWrap: {
-    width: 60, height: 60, borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    justifyContent: 'center', alignItems: 'center', marginRight: 14,
-  },
-  chestInfo:  { flex: 1, marginRight: 10 },
-  chestTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: '800', marginBottom: 3 },
-  chestSub:   { color: Colors.textSecondary, fontSize: 12, lineHeight: 17 },
+  chestCardLocked: { borderColor: Colors.glassBorder },
+  chestTop: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  chestInfo:  { flex: 1 },
+  chestTitle: { color: Colors.textPrimary, fontSize: 17, fontWeight: '800', marginBottom: 3 },
+  chestSub:   { color: Colors.textSecondary, fontSize: 13, lineHeight: 18 },
+  progressBlock: { marginTop: 14 },
+  progressTrack: { height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 3, backgroundColor: '#E8B04A' },
+  progressTxt: { color: Colors.textSecondary, fontSize: 12, marginTop: 6, fontVariant: ['tabular-nums'] },
   openBtn: {
+    marginTop: 14,
     backgroundColor:  Colors.primary,
-    borderRadius:     11,
-    paddingHorizontal: 18,
-    height:           40,
+    borderRadius:     14,
+    minHeight:        50,
     justifyContent:   'center',
     alignItems:       'center',
   },
-  openBtnDisabled: { opacity: 0.35 },
-  openBtnTxt: { color: '#fff', fontSize: 13, fontWeight: '800' },
+  openBtnDisabled: { backgroundColor: 'rgba(255,255,255,0.06)' },
+  openBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  openBtnTxtDisabled: { color: Colors.textMuted },
+  oddsRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: 12, rowGap: 4, marginTop: 12 },
+  oddsItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  oddsDot: { width: 7, height: 7, borderRadius: 4 },
+  oddsTxt: { color: Colors.textSecondary, fontSize: 12, fontVariant: ['tabular-nums'] },
 
   // ── Items ──
   itemCard: {
-    flexDirection:   'row',
-    alignItems:      'center',
     backgroundColor: Colors.cardDeep,
     borderWidth:     1,
     borderRadius:    16,
     padding:         14,
     marginBottom:    10,
   },
+  itemTop: { flexDirection: 'row', alignItems: 'flex-start' },
   itemIconBox: {
-    width: 52, height: 52, borderRadius: 14,
+    width: 48, height: 48, borderRadius: 14,
     justifyContent: 'center', alignItems: 'center', marginRight: 12,
   },
-  itemInfo:  { flex: 1, marginRight: 10 },
+  itemInfo:  { flex: 1 },
   itemNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  itemName:  { color: Colors.textPrimary, fontSize: 14, fontWeight: '700' },
-  itemQty:   { color: Colors.textSecondary, fontSize: 13, fontWeight: '800' },
-  itemRarity:{ fontSize: 11, fontWeight: '800', letterSpacing: 1, marginTop: 1, marginBottom: 3 },
-  itemDesc:  { color: Colors.textMuted, fontSize: 11.5, lineHeight: 16 },
+  itemName:  { color: Colors.textPrimary, fontSize: 15, fontWeight: '700', flexShrink: 1 },
+  itemQty:   { color: Colors.textSecondary, fontSize: 14, fontWeight: '800' },
+  itemRarity:{ fontSize: 12, fontWeight: '800', marginTop: 1, marginBottom: 4 },
+  itemDesc:  { color: Colors.textSecondary, fontSize: 13, lineHeight: 18 },
+  itemBlocked: { color: Colors.textMuted, fontSize: 12, marginTop: 4 },
   useBtn: {
+    marginTop: 12,
     borderWidth:      1,
-    borderRadius:     10,
-    paddingHorizontal: 13,
-    height:           34,
+    borderRadius:     12,
+    minHeight:        44,
     justifyContent:   'center',
+    alignItems:       'center',
   },
-  useBtnTxt: { fontSize: 12, fontWeight: '800' },
+  btnDisabled: { opacity: 0.4 },
+  useBtnTxt: { fontSize: 14, fontWeight: '800' },
 
   // ── Vide ──
-  emptyBox: { alignItems: 'center', paddingVertical: 40 },
-  emptyTxt: { color: Colors.textMuted, fontSize: 13, lineHeight: 20, textAlign: 'center' },
+  emptyBox: { alignItems: 'center', paddingVertical: 32, paddingHorizontal: 20 },
+  emptyTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700', marginBottom: 4 },
+  emptyTxt: { color: Colors.textSecondary, fontSize: 13, lineHeight: 19, textAlign: 'center' },
 });
