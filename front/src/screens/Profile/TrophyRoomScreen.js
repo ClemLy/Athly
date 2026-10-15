@@ -25,6 +25,7 @@ import { getAchievements } from '../../services/reward.service';
 import { normalizeAchievement } from '../../components/profile/AchievementShowcase';
 import { TrophyIcon } from '../../components/profile/TrophySlot';
 import { COLLECTION_CATEGORY, BACKEND_CATEGORY_MAP } from '../../data/backendTrophyCategories';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 
 const TIER_LABELS = { bronze: 'Bronze', silver: 'Argent', gold: 'Or', platinum: 'Platine', diamond: 'Diamant' };
 
@@ -59,6 +60,7 @@ function UltimateTile({ unlocked, unlockedCount, totalCount, onPress }) {
   const gleamX  = useRef(new Animated.Value(-140)).current;
   const glow    = useRef(new Animated.Value(0)).current;
   const prevUnlocked = useRef(false);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     if (unlocked && !prevUnlocked.current) {
@@ -72,7 +74,7 @@ function UltimateTile({ unlocked, unlockedCount, totalCount, onPress }) {
   }, [unlocked, scale]);
 
   useEffect(() => {
-    if (!unlocked) return;
+    if (!unlocked || reducedMotion) { glow.setValue(1); gleamX.setValue(-140); return undefined; }
     // Glow pulse
     const pulseLoop = Animated.loop(
       Animated.sequence([
@@ -92,12 +94,18 @@ function UltimateTile({ unlocked, unlockedCount, totalCount, onPress }) {
     pulseLoop.start();
     gleamLoop.start();
     return () => { pulseLoop.stop(); gleamLoop.stop(); };
-  }, [unlocked, glow, gleamX]);
+  }, [unlocked, reducedMotion, glow, gleamX]);
 
   const shadowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.95] });
 
   return (
-    <TouchableOpacity accessibilityRole="button" onPress={onPress} activeOpacity={0.85} style={styles.ultimateWrapper}>
+    <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityLabel={`${ULTIMATE_TROPHY.label}, ${unlocked ? 'débloqué' : `verrouillé, ${unlockedCount} trophées sur ${totalCount}`}`}
+      onPress={onPress}
+      activeOpacity={0.85}
+      style={styles.ultimateWrapper}
+    >
       <Animated.View style={[
         styles.ultimateTile,
         unlocked && {
@@ -137,7 +145,7 @@ function UltimateTile({ unlocked, unlockedCount, totalCount, onPress }) {
               </LinearGradient>
             ) : (
               <View style={styles.ultimateIconLocked}>
-                <Ionicons name="lock-closed" size={32} color="rgba(255,255,255,0.12)" />
+                <Ionicons name="lock-closed" size={28} color={Colors.textMuted} />
               </View>
             )}
           </Animated.View>
@@ -147,22 +155,25 @@ function UltimateTile({ unlocked, unlockedCount, totalCount, onPress }) {
             <Text style={[styles.ultimateLabel, { color: unlocked ? Colors.gold : Colors.textMuted }]}>
               {ULTIMATE_TROPHY.label}
             </Text>
-            <Text style={[styles.ultimateCond, { color: unlocked ? 'rgba(255,215,0,0.7)' : 'rgba(255,255,255,0.15)' }]}>
+            <Text style={[styles.ultimateCond, { color: unlocked ? Colors.gold : Colors.textSecondary }]}>
               {unlocked ? 'Collection complète. Bravo.' : ULTIMATE_TROPHY.condition}
             </Text>
             {unlocked && (
               <View style={styles.ultimateBadge}>
                 <Ionicons name="infinite" size={10} color={Colors.gold} />
-                <Text style={styles.ultimateBadgeText}>DIAMOND · ULTIME</Text>
+                <Text style={styles.ultimateBadgeText}>Diamant · Ultime</Text>
               </View>
             )}
           </View>
         </View>
 
         {!unlocked && (
-          <Text style={styles.ultimateHint}>
-            {unlockedCount}/{totalCount} trophées débloqués. Débloque-les tous pour obtenir celui-ci.
-          </Text>
+          <View style={styles.ultimateProgress}>
+            <View style={styles.ultimateTrack}>
+              <View style={[styles.ultimateFill, { width: `${totalCount ? (unlockedCount / totalCount) * 100 : 0}%` }]} />
+            </View>
+            <Text style={styles.ultimateHint}>{unlockedCount} sur {totalCount}</Text>
+          </View>
         )}
       </Animated.View>
     </TouchableOpacity>
@@ -287,10 +298,10 @@ export default function TrophyRoomScreen({ navigation }) {
           <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Salle des Trophées</Text>
-          <Text style={styles.headerSub}>{unlockedCount}/{totalCatalogSize} débloqués</Text>
+          <Text style={styles.headerTitle} accessibilityRole="header">Salle des trophées</Text>
+          <Text style={styles.headerSub}>{unlockedCount} sur {totalCatalogSize} débloqués</Text>
         </View>
-        <View style={{ width: 38 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       {/* Filter tabs — scroll horizontal (6 onglets ne tiennent plus à plat) */}
@@ -303,7 +314,8 @@ export default function TrophyRoomScreen({ navigation }) {
           {filterTabs.map((tab) => {
             const active = activeFilter === tab.id;
             return (
-              <TouchableOpacity accessibilityRole="button"
+              <TouchableOpacity accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
                 key={tab.id}
                 style={[styles.filterTab, active && styles.filterTabActive]}
                 onPress={() => setFilter(tab.id)}
@@ -394,19 +406,13 @@ function GalleryTile({ trophy, onPress, tutorialRef, tutorialOnLayout }) {
 
   return (
     <TouchableOpacity accessibilityRole="button"
+      accessibilityLabel={`${label}, ${unlocked ? `débloqué, ${TIER_LABELS[tier] || ''}` : `verrouillé. ${condition}`}`}
       ref={tutorialRef}
       onLayout={tutorialOnLayout}
       style={[styles.tile, unlocked && { borderColor: color + '40', borderTopColor: color + '90' }]}
       onPress={onPress}
       activeOpacity={0.82}
     >
-      {unlocked && (
-        <LinearGradient
-          colors={['rgba(255,255,255,0.07)', 'transparent', 'rgba(0,0,0,0.12)']}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill} borderRadius={14}
-        />
-      )}
       <View style={[
         styles.tileIconWrap,
         unlocked && { shadowColor: color, shadowOffset: { width: 0, height: 0 }, shadowOpacity: glow.opacity, shadowRadius: glow.radius, elevation: glow.elevation },
@@ -417,17 +423,17 @@ function GalleryTile({ trophy, onPress, tutorialRef, tutorialOnLayout }) {
           </LinearGradient>
         ) : (
           <View style={styles.tileIconLocked}>
-            <Ionicons name="lock-closed" size={14} color="rgba(255,255,255,0.12)" />
+            <Ionicons name="lock-closed" size={16} color={Colors.textMuted} />
           </View>
         )}
       </View>
-      <Text style={[styles.tileLabel, { color: unlocked ? Colors.textPrimary : Colors.textMuted }]} numberOfLines={1}>{label}</Text>
-      <Text style={[styles.tileCond,  { color: unlocked ? color : 'rgba(255,255,255,0.14)' }]} numberOfLines={2}>{condition}</Text>
-      {unlocked && (
+      <Text style={[styles.tileLabel, { color: unlocked ? Colors.textPrimary : Colors.textSecondary }]} numberOfLines={2}>{label}</Text>
+      <Text style={[styles.tileCond, { color: unlocked ? color : Colors.textSecondary }]} numberOfLines={3}>{condition}</Text>
+      {unlocked && TIER_LABELS[tier] ? (
         <View style={[styles.tierBadge, { backgroundColor: color + '22', borderColor: color + '50' }]}>
-          <Text style={[styles.tierText, { color }]}>{(TIER_LABELS[tier] || tier).toUpperCase()}</Text>
+          <Text style={[styles.tierText, { color }]}>{TIER_LABELS[tier]}</Text>
         </View>
-      )}
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -474,7 +480,7 @@ function TrophyDetailModal({ trophy, onClose, isFeatured = false, onToggleFeatur
             </View>
             <View style={[styles.divider, { backgroundColor: color + '30' }]} />
             <Text style={[styles.epicDesc, !unlocked && { color: Colors.textMuted, fontStyle: 'italic' }]}>
-              {unlocked ? epicDesc : "Pas encore débloqué. Continue, il est à ta portée."}
+              {unlocked ? epicDesc : 'Remplis la condition ci-dessus pour le débloquer.'}
             </Text>
             {unlocked && !isBackend && (
               <TouchableOpacity accessibilityRole="button"
@@ -482,17 +488,14 @@ function TrophyDetailModal({ trophy, onClose, isFeatured = false, onToggleFeatur
                 onPress={() => { onToggleFeatured?.(); onClose(); }}
                 activeOpacity={0.75}
               >
-                <Ionicons name={isFeatured ? 'star' : 'star-outline'} size={13} color={isFeatured ? color : Colors.textMuted} />
-                <Text style={[styles.featuredBtnText, { color: isFeatured ? color : Colors.textMuted }]}>
-                  {isFeatured ? 'Retirer de la vitrine' : 'Mettre en avant sur le profil'}
+                <Ionicons name={isFeatured ? 'remove-circle-outline' : 'add-circle-outline'} size={16} color={isFeatured ? color : Colors.textSecondary} />
+                <Text style={[styles.featuredBtnText, { color: isFeatured ? color : Colors.textSecondary }]}>
+                  {isFeatured ? 'Retirer de la vitrine' : 'Ajouter à la vitrine'}
                 </Text>
               </TouchableOpacity>
             )}
             {unlocked && isBackend && (
-              <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.10)', marginBottom: 10 }]}>
-                <Ionicons name="server-outline" size={12} color={Colors.textMuted} />
-                <Text style={[styles.badgeText, { color: Colors.textMuted }]}>Trophée de compte</Text>
-              </View>
+              <Text style={styles.featuredNote}>Ce trophée ne peut pas être ajouté à la vitrine.</Text>
             )}
 
             <TouchableOpacity accessibilityRole="button" style={[styles.closeBtn, { borderColor: color + '50' }]} onPress={onClose} activeOpacity={0.75}>
@@ -511,15 +514,15 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.backgroundDeep },
 
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
-  backBtn: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.cardDeep, borderRadius: 12 },
+  backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.cardDeep, borderRadius: 12 },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerTitle: { color: Colors.textPrimary, fontSize: 17, fontWeight: '800' },
-  headerSub:   { color: Colors.textMuted, fontSize: 11, fontWeight: '600', marginTop: 2 },
+  headerSub:   { color: Colors.textSecondary, fontSize: 13, fontWeight: '600', marginTop: 2 },
 
   filterRow: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 12, gap: 8 },
-  filterTab: { paddingVertical: 7, paddingHorizontal: 14, borderRadius: 10, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },
+  filterTab: { minHeight: 36, justifyContent: 'center', paddingVertical: 7, paddingHorizontal: 14, borderRadius: 10, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },
   filterTabActive: { backgroundColor: 'rgba(254,116,57,0.14)', borderColor: Colors.primary + '50' },
-  filterLabel:       { fontSize: 11, fontWeight: '700', color: Colors.textMuted, letterSpacing: 0.5 },
+  filterLabel:       { fontSize: 13, fontWeight: '700', color: Colors.textSecondary },
   filterLabelActive: { color: Colors.primary },
 
   content: { paddingHorizontal: 16, paddingTop: 4 },
@@ -528,7 +531,7 @@ const styles = StyleSheet.create({
   categoryHeader:  { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 },
   catIconBox:      { width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   categoryLabel:   { fontSize: 13, fontWeight: '900', letterSpacing: 0.8, flex: 1 },
-  categoryCount:   { color: Colors.textMuted, fontSize: 11, fontWeight: '600' },
+  categoryCount:   { color: Colors.textSecondary, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
 
   trophyGrid:  { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
 
@@ -573,18 +576,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start',
     borderWidth: 1, borderColor: 'rgba(255,215,0,0.35)',
   },
-  ultimateBadgeText: { color: Colors.gold, fontSize: 9, fontWeight: '900', letterSpacing: 1 },
-  ultimateHint: { color: 'rgba(255,255,255,0.2)', fontSize: 10, fontWeight: '500', textAlign: 'center', marginTop: 12 },
+  ultimateBadgeText: { color: Colors.gold, fontSize: 12, fontWeight: '800' },
+  ultimateProgress: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14 },
+  ultimateTrack: { flex: 1, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
+  ultimateFill: { height: '100%', borderRadius: 3, backgroundColor: Colors.gold },
+  ultimateHint: { color: Colors.textSecondary, fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
 
   // ── Tile ──────────────────────────────────────────────────────────────────
   tile: { width: '47%', backgroundColor: 'rgba(22,22,31,0.97)', borderRadius: 14, paddingVertical: 16, paddingHorizontal: 12, alignItems: 'center', borderWidth: 0.8, borderColor: 'rgba(255,255,255,0.06)', overflow: 'hidden' },
   tileIconWrap: { width: 48, height: 48, borderRadius: 16, marginBottom: 10 },
   tileIconGrad: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderTopWidth: 0.8, borderTopColor: 'rgba(255,255,255,0.48)', borderWidth: 0.8, borderColor: 'rgba(255,255,255,0.08)' },
   tileIconLocked: { width: 48, height: 48, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.04)', alignItems: 'center', justifyContent: 'center', borderWidth: 0.8, borderColor: 'rgba(255,255,255,0.07)' },
-  tileLabel: { fontSize: 12, fontWeight: '800', textAlign: 'center' },
-  tileCond:  { fontSize: 10, fontWeight: '500', textAlign: 'center', marginTop: 3, lineHeight: 14 },
+  tileLabel: { fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  tileCond:  { fontSize: 12, fontWeight: '500', textAlign: 'center', marginTop: 3, lineHeight: 16 },
   tierBadge: { marginTop: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1 },
-  tierText:  { fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
+  tierText:  { fontSize: 11, fontWeight: '800' },
+  featuredNote: { color: Colors.textSecondary, fontSize: 13, textAlign: 'center', marginBottom: 12 },
 
   // ── Modal ──────────────────────────────────────────────────────────────────
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.74)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
@@ -592,7 +599,7 @@ const styles = StyleSheet.create({
   modalIconShadow: { marginBottom: 20, shadowOffset: { width: 0, height: 0 }, elevation: 24 },
   modalIconGrad: { width: 96, height: 96, borderRadius: 30, alignItems: 'center', justifyContent: 'center', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.55)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)' },
   modalLabel:    { fontSize: 26, fontWeight: '900', letterSpacing: 0.4, marginBottom: 5 },
-  modalCond:     { color: Colors.textMuted, fontSize: 13, fontWeight: '600', letterSpacing: 0.4, marginBottom: 14 },
+  modalCond:     { color: Colors.textSecondary, fontSize: 14, fontWeight: '600', letterSpacing: 0.4, marginBottom: 14 },
   badge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1, marginBottom: 4 },
   badgeText: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
   divider:   { width: '55%', height: 1, marginVertical: 20 },

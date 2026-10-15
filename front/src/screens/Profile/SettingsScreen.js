@@ -80,6 +80,7 @@ export default function SettingsScreen({ navigation }) {
   } = useTutorial();
 
   const [welcomeModal, setWelcomeModal] = useState(false);
+  const [chaptersOpen, setChaptersOpen] = useState(false);
 
   React.useEffect(() => {
     if (justCompleted) {
@@ -747,10 +748,9 @@ export default function SettingsScreen({ navigation }) {
         <SettingsGroup>
           <View style={[styles.row, styles.rowSep]}>
             <View style={styles.rowLabelWrap}>
-              <Text style={styles.rowLabel}>Thème du Profil</Text>
+              <Text style={styles.rowLabel}>Thème du profil</Text>
               <Text style={styles.rowSub}>
-                {unlockedThemes.length}/{PROFILE_THEMES.length} débloqués
-                {level < 11 && '  ·  Niv. 11+ pour les suivants'}
+                {unlockedThemes.length} sur {PROFILE_THEMES.length} débloqués. Les autres se gagnent en montant de niveau.
               </Text>
             </View>
           </View>
@@ -758,26 +758,32 @@ export default function SettingsScreen({ navigation }) {
             {PROFILE_THEMES.map((theme) => {
               const locked   = isThemeLocked(theme, level, unlockedCosmetics);
               const selected = profileThemeId === theme.id;
+              const requirement = theme.requiresCosmetic ? '100 coffres' : `Niv. ${theme.unlockLevel}`;
               return (
-                <TouchableOpacity accessibilityRole="button"
+                <TouchableOpacity accessibilityRole="radio"
                   key={theme.id}
-                  style={[styles.themeItem, selected && styles.themeItemSel, locked && styles.themeItemLocked]}
+                  accessibilityLabel={locked ? `${theme.name}, verrouillé, ${requirement}` : theme.name}
+                  accessibilityState={{ checked: selected, disabled: locked }}
+                  style={[styles.themeItem, selected && styles.themeItemSel]}
                   onPress={() => !locked && setProfileThemeId(theme.id)}
-                  activeOpacity={locked ? 1 : 0.75}
+                  disabled={locked}
+                  activeOpacity={0.75}
                 >
-                  <View style={[styles.themeSwatch, { backgroundColor: theme.accentColor || Colors.primary }, theme.accentColor === null && { backgroundColor: '#444', borderWidth: 1, borderStyle: 'dashed', borderColor: Colors.textMuted }]} />
-                  {selected && <View style={styles.themeCheck}><Ionicons name="checkmark" size={8} color="#fff" /></View>}
-                  {locked   && <View style={styles.themeLockOverlay}><Ionicons name="lock-closed" size={10} color="rgba(255,255,255,0.4)" /></View>}
-                  <Text style={[styles.themeLabel, locked && styles.themeLabelLocked]} numberOfLines={1}>{theme.name}</Text>
+                  <View style={[styles.themeSwatch, { backgroundColor: theme.accentColor || Colors.primary }, theme.accentColor === null && { backgroundColor: '#444', borderWidth: 1, borderStyle: 'dashed', borderColor: Colors.textMuted }, locked && styles.themeSwatchLocked]}>
+                    {locked ? <Ionicons name="lock-closed" size={13} color={Colors.textPrimary} /> : null}
+                  </View>
+                  {selected && <View style={styles.themeCheck}><Ionicons name="checkmark" size={10} color="#fff" /></View>}
+                  <Text style={[styles.themeLabel, selected && { color: Colors.textPrimary }]} numberOfLines={2}>{theme.name}</Text>
+                  {locked ? <Text style={styles.themeReq}>{requirement}</Text> : null}
                 </TouchableOpacity>
               );
             })}
           </View>
           {bloodSangLocked && (
             <View style={styles.themeSpecialHint}>
-              <Ionicons name="lock-closed" size={11} color={Colors.textMuted} />
+              <Ionicons name="lock-closed" size={13} color={Colors.textSecondary} />
               <Text style={styles.themeSpecialHintTxt}>
-                Rouge Sang : déblocable après avoir ouvert 100 coffres (Actuel : {Math.min(totalChestsOpened, 100)}/100)
+                Rouge Sang se débloque après 100 coffres ouverts. Tu en as ouvert {Math.min(totalChestsOpened, 100)}.
               </Text>
             </View>
           )}
@@ -1193,7 +1199,7 @@ export default function SettingsScreen({ navigation }) {
         )}
 
         {/* ═══ CENTRE D'AIDE & TUTORIEL ════════════════════════════════════════ */}
-        <SectionLabel label="Centre d'aide & Tutoriel" />
+        <SectionLabel label="Aide et tutoriel" />
 
         {/* Rejouer l'intégralité */}
         <TouchableOpacity accessibilityRole="button" style={styles.tutReplayBtn} onPress={handleReplayFull} activeOpacity={0.82}>
@@ -1201,15 +1207,28 @@ export default function SettingsScreen({ navigation }) {
             <Ionicons name="play-circle" size={22} color={Colors.primary} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.tutReplayTitle}>Rejouer l'intégralité du tutoriel</Text>
-            <Text style={styles.tutReplaySub}>8 chapitres · du Dashboard aux Réglages</Text>
+            <Text style={styles.tutReplayTitle}>Revoir tout le tutoriel</Text>
+            <Text style={styles.tutReplaySub}>{TUTORIAL_CHAPTERS.length} chapitres, de l'accueil aux réglages</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={Colors.chevron} />
         </TouchableOpacity>
 
-        {/* Chapitres individuels */}
+        {/* Chapitres individuels, repliés par défaut */}
         <SettingsGroup>
-          {TUTORIAL_CHAPTERS.map((chapter, idx) => (
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityState={{ expanded: chaptersOpen }}
+            onPress={() => setChaptersOpen((v) => !v)}
+            activeOpacity={0.75}
+          >
+            <View style={[styles.row, chaptersOpen && styles.rowSep]}>
+              <View style={styles.rowLabelWrap}>
+                <Text style={styles.rowLabel}>Revoir un chapitre</Text>
+              </View>
+              <Ionicons name={chaptersOpen ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.chevron} />
+            </View>
+          </TouchableOpacity>
+          {chaptersOpen && TUTORIAL_CHAPTERS.map((chapter, idx) => (
             <TouchableOpacity accessibilityRole="button"
               key={chapter.id}
               onPress={() => handleReplayChapter(chapter)}
@@ -1231,8 +1250,8 @@ export default function SettingsScreen({ navigation }) {
 
         {/* ─── Déconnexion ──────────────────────────────────────────────────── */}
         <TouchableOpacity accessibilityRole="button" style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
-          <Ionicons name="log-out-outline" size={15} color={Colors.error} style={{ marginRight: 8 }} />
-          <Text style={styles.logoutText}>Déconnexion</Text>
+          <Ionicons name="log-out-outline" size={17} color={Colors.textPrimary} style={{ marginRight: 8 }} />
+          <Text style={styles.logoutText}>Se déconnecter</Text>
         </TouchableOpacity>
 
         {/* ─── Suppression définitive du compte ────────────────────────────── */}
@@ -1309,11 +1328,11 @@ export default function SettingsScreen({ navigation }) {
         <View style={styles.dmBackdrop}>
           <View style={[styles.dmCard, styles.dmCardFinal]}>
             <View style={styles.dmIconFinalWrap}>
-              <Ionicons name="skull-outline" size={28} color={Colors.destructive} />
+              <Ionicons name="trash-outline" size={28} color={Colors.destructive} />
             </View>
-            <Text style={styles.dmTitle}>Confirmation finale</Text>
+            <Text style={styles.dmTitle}>Supprimer définitivement ?</Text>
             <Text style={styles.dmBody}>
-              Appuie sur le bouton ci-dessous pour effacer toutes tes données de nos serveurs.
+              Toutes tes données seront effacées de nos serveurs. Cette action ne peut pas être annulée.
             </Text>
             <TouchableOpacity accessibilityRole="button"
               style={[styles.dmDestroyBtn, deleteLoading && { opacity: 0.7 }]}
@@ -1326,7 +1345,7 @@ export default function SettingsScreen({ navigation }) {
                 : (
                   <>
                     <Ionicons name="trash-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
-                    <Text style={styles.dmDestroyTxt}>Détruire définitivement</Text>
+                    <Text style={styles.dmDestroyTxt}>Supprimer mon compte</Text>
                   </>
                 )
               }
@@ -1355,10 +1374,9 @@ export default function SettingsScreen({ navigation }) {
       <ConfirmModal
         visible={logoutConfirmVisible}
         icon="log-out-outline"
-        title="Déconnexion"
-        body="Tu vas être déconnecté."
-        confirmLabel="Déconnexion"
-        destructive
+        title="Se déconnecter ?"
+        body="Ta progression reste enregistrée. Tu la retrouveras en te reconnectant."
+        confirmLabel="Se déconnecter"
         onConfirm={() => { setLogoutConfirmVisible(false); signOut(); }}
         onCancel={() => setLogoutConfirmVisible(false)}
       />
@@ -1411,7 +1429,7 @@ function SettingsRow({ label, children, last, chevron, onPress }) {
 
 function SegBtn({ label, active, onPress }) {
   return (
-    <TouchableOpacity accessibilityRole="button" onPress={onPress} style={[styles.seg, active && styles.segActive]} activeOpacity={0.8}>
+    <TouchableOpacity accessibilityRole="radio" accessibilityState={{ checked: active }} onPress={onPress} style={[styles.seg, active && styles.segActive]} activeOpacity={0.8}>
       <Text style={[styles.segText, active && styles.segTextActive]}>{label}</Text>
     </TouchableOpacity>
   );
@@ -1482,14 +1500,14 @@ const styles = StyleSheet.create({
   scroll:        { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 8 },
 
-  sectionLabel: { color: Colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginTop: 24, marginBottom: 8, marginLeft: 4 },
+  sectionLabel: { color: Colors.textSecondary, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, marginTop: 24, marginBottom: 8, marginLeft: 4 },
 
   group:   { backgroundColor: GRP_BG, borderRadius: 14, borderWidth: 1, borderColor: GRP_BDR, overflow: 'hidden' },
   row:     { flexDirection: 'row', alignItems: 'center', minHeight: 50, paddingHorizontal: 16, paddingVertical: 10 },
   rowSep:  { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: SEP },
   rowLabelWrap: { flex: 1, marginRight: 12 },
   rowLabel:     { color: Colors.textPrimary, fontSize: 14, fontWeight: '500' },
-  rowSub:       { color: Colors.textMuted, fontSize: 11, fontWeight: '400', marginTop: 2 },
+  rowSub:       { color: Colors.textSecondary, fontSize: 13, fontWeight: '400', marginTop: 2, lineHeight: 18 },
   rowRight:     { flexDirection: 'row', alignItems: 'center' },
   valueText:    { color: Colors.textMuted, fontSize: 14, fontWeight: '500' },
 
@@ -1510,25 +1528,24 @@ const styles = StyleSheet.create({
     color: Colors.textMuted, fontSize: 11, lineHeight: 16,
     marginTop: 8, marginHorizontal: 4,
   },
-  seg:           { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: GRP_BDR, backgroundColor: 'rgba(255,255,255,0.04)' },
+  seg:           { minHeight: 36, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: GRP_BDR, backgroundColor: 'rgba(255,255,255,0.04)' },
   segActive:     { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  segText:       { color: Colors.textSecondary, fontSize: 12, fontWeight: '700' },
+  segText:       { color: Colors.textSecondary, fontSize: 14, fontWeight: '700' },
   segTextActive: { color: '#fff' },
 
   themeGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingBottom: 12, gap: 8 },
-  themeItem: { alignItems: 'center', paddingVertical: 8, paddingHorizontal: 4, borderRadius: 10, borderWidth: 1.5, borderColor: 'transparent', position: 'relative', width: 62 },
+  themeItem: { alignItems: 'center', paddingVertical: 8, paddingHorizontal: 2, borderRadius: 12, borderWidth: 1.5, borderColor: 'transparent', position: 'relative', flexBasis: '30%', flexGrow: 1 },
   themeItemSel:    { backgroundColor: 'rgba(255,255,255,0.07)', borderColor: 'rgba(255,255,255,0.25)' },
-  themeItemLocked: { opacity: 0.35 },
-  themeSwatch:     { width: 32, height: 32, borderRadius: 16, marginBottom: 5 },
-  themeCheck:      { position: 'absolute', top: 6, right: 6, width: 14, height: 14, borderRadius: 7, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: Colors.bgDeep2 },
-  themeLockOverlay:{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
-  themeLabel:      { color: Colors.textMuted, fontSize: 8, fontWeight: '600', textAlign: 'center' },
-  themeLabelLocked:{ color: Colors.textMuted },
+  themeSwatch:     { width: 36, height: 36, borderRadius: 18, marginBottom: 6, alignItems: 'center', justifyContent: 'center' },
+  themeSwatchLocked: { opacity: 0.45 },
+  themeCheck:      { position: 'absolute', top: 6, right: 6, width: 18, height: 18, borderRadius: 9, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: Colors.bgDeep2 },
+  themeLabel:      { color: Colors.textSecondary, fontSize: 12, fontWeight: '600', textAlign: 'center', lineHeight: 15 },
+  themeReq:        { color: Colors.textMuted, fontSize: 11, fontWeight: '600', marginTop: 2 },
   themeSpecialHint: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 6,
     paddingHorizontal: 12, paddingBottom: 12, paddingTop: 2,
   },
-  themeSpecialHintTxt: { flex: 1, color: Colors.textMuted, fontSize: 10.5, lineHeight: 14 },
+  themeSpecialHintTxt: { flex: 1, color: Colors.textSecondary, fontSize: 13, lineHeight: 18 },
 
   // ── God Mode console ───────────────────────────────────────────────────────
   devConsole: { marginTop: 10, backgroundColor: GOLD_BG, borderRadius: 16, borderWidth: 1, borderColor: GOLD_BDR, padding: 16, gap: 12 },
@@ -1630,15 +1647,15 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   tutReplayTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: '700' },
-  tutReplaySub:   { color: Colors.textMuted, fontSize: 11, fontWeight: '500', marginTop: 2 },
+  tutReplaySub:   { color: Colors.textSecondary, fontSize: 13, fontWeight: '500', marginTop: 2 },
   tutChapIcon: {
     width: 26, height: 26, borderRadius: 8,
     alignItems: 'center', justifyContent: 'center', marginRight: 2,
   },
 
   // ── Logout ──────────────────────────────────────────────────────────────────
-  logoutBtn:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 28, paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,77,77,0.20)', backgroundColor: 'rgba(255,77,77,0.06)' },
-  logoutText: { color: Colors.error, fontSize: 14, fontWeight: '700' },
+  logoutBtn:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 28, minHeight: 50, borderRadius: 14, borderWidth: 1, borderColor: GRP_BDR, backgroundColor: 'rgba(255,255,255,0.05)' },
+  logoutText: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
 
   // ── Welcome modal (fin tutoriel) ─────────────────────────────────────────────
   welcomeCard:    { borderColor: 'rgba(110,106,240,0.30)' },
@@ -1648,7 +1665,7 @@ const styles = StyleSheet.create({
 
   // ── Delete Account button ────────────────────────────────────────────────────
   deleteAccountBtn:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12, paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(239,68,68,0.15)', backgroundColor: 'transparent' },
-  deleteAccountText: { color: Colors.error, fontSize: 13, fontWeight: '600', opacity: 0.75 },
+  deleteAccountText: { color: Colors.error, fontSize: 14, fontWeight: '700' },
 
   // ── Delete Account Modals ────────────────────────────────────────────────────
   dmBackdrop:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },

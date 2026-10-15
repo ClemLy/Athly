@@ -37,7 +37,7 @@ export const GLOW = {
 
 // ─── TrophySlot ───────────────────────────────────────────────────────────────
 
-export function TrophySlot({ trophy, onPress }) {
+export function TrophySlot({ trophy, onPress, hideCondition = false }) {
   const { icon, label, condition, desc, color, gradientColors, unlocked, tier, glowIntensity } = trophy;
   const gleamX = useRef(new Animated.Value(-56)).current;
   const reducedMotion = useReducedMotion();
@@ -79,9 +79,11 @@ export function TrophySlot({ trophy, onPress }) {
         )}
       </View>
       <Text style={[styles.label, { color: unlocked ? Colors.textPrimary : Colors.textMuted }]}>{label}</Text>
-      <Text style={[styles.desc, { color: unlocked ? color : Colors.textMuted }]}>
-        {condition || desc || ''}
-      </Text>
+      {hideCondition ? null : (
+        <Text style={[styles.desc, { color: unlocked ? color : Colors.textMuted }]}>
+          {condition || desc || ''}
+        </Text>
+      )}
     </TouchableOpacity>
   );
 }
@@ -112,6 +114,11 @@ export function EmptySlot({ onPress, label = 'Ajouter', hint = null }) {
 
 export function FeaturedModal({ trophy, onClose, onUnfeature }) {
   const { icon, label, condition, desc, epicDesc, color, gradientColors, unlocked } = trophy;
+  // Vitrine d'un ami (lecture seule) : les conditions sont rédigées à la
+  // 2e personne ("Tu as…"), on ne garde que le texte d'ambiance s'il existe.
+  const readOnly = !onUnfeature;
+  const conditionText = readOnly ? '' : (condition || desc || '');
+  const storyText = readOnly && epicDesc === (condition || desc) ? '' : (epicDesc || '');
   const scale   = useRef(new Animated.Value(0.88)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -134,7 +141,7 @@ export function FeaturedModal({ trophy, onClose, onUnfeature }) {
             </View>
 
             <Text style={[styles.modalLabel, { color }]}>{label}</Text>
-            <Text style={styles.modalCondition}>{condition || desc || ''}</Text>
+            {conditionText ? <Text style={styles.modalCondition}>{conditionText}</Text> : null}
 
             {unlocked && (
               <View style={[styles.badge, { backgroundColor: color + '1A', borderColor: color + '55' }]}>
@@ -143,9 +150,12 @@ export function FeaturedModal({ trophy, onClose, onUnfeature }) {
               </View>
             )}
 
-            <View style={[styles.modalDivider, { backgroundColor: color + '30' }]} />
-
-            <Text style={styles.modalEpicDesc}>{epicDesc || ''}</Text>
+            {storyText ? (
+              <>
+                <View style={[styles.modalDivider, { backgroundColor: color + '30' }]} />
+                <Text style={styles.modalEpicDesc}>{storyText}</Text>
+              </>
+            ) : <View style={{ height: 20 }} />}
 
             {onUnfeature && (
               <TouchableOpacity accessibilityRole="button"
@@ -153,7 +163,7 @@ export function FeaturedModal({ trophy, onClose, onUnfeature }) {
                 onPress={onUnfeature}
                 activeOpacity={0.75}
               >
-                <Ionicons name="star" size={13} color={color} />
+                <Ionicons name="remove-circle-outline" size={15} color={color} />
                 <Text style={[styles.unfeaturedBtnText, { color }]}>Retirer de la vitrine</Text>
               </TouchableOpacity>
             )}

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useLayoutEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -15,6 +15,7 @@ import { useUser } from '../../context/UserContext';
 import { useToast } from '../../context/ToastContext';
 import { setBirthdate } from '../../services';
 import BirthdatePicker from '../../components/profile/BirthdatePicker';
+import { ConfirmModal } from '../../components/common';
 import { getErrorMessage } from '../../utils/errorMessages';
 
 // ─── EditProfileScreen ────────────────────────────────────────────────────────
@@ -22,9 +23,10 @@ import { getErrorMessage } from '../../utils/errorMessages';
 // Style "réglages iOS" : groupes de lignes avec séparateurs, fond sombre.
 
 const SELECTIONS = {
-  sexe:     ['H', 'F', 'Autre'],
+  sexe:     [{ value: 'H', label: 'Homme' }, { value: 'F', label: 'Femme' }, { value: 'Autre', label: 'Autre' }],
   niveau:   ['Débutant', 'Intermédiaire', 'Avancé'],
   objectif: ['Prise de masse', 'Perte de poids', 'Entretien', 'Force'],
+  rythme:   ['1', '2', '3', '4', '5', '6', '7'],
 };
 
 // L'API stocke objectif en minuscules ("prise de masse"), les chips utilisent des majuscules.
@@ -34,35 +36,45 @@ function normalizeObjectif(val) {
   return SELECTIONS.objectif.find((o) => o.toLowerCase() === val.toLowerCase()) || val;
 }
 
+// Valeurs du formulaire à partir du profil. Un champ jamais renseigné reste
+// vide : on n'invente pas de sexe ou d'objectif à la place de l'utilisateur.
+function formFromUser(user) {
+  return {
+    name:          user?.name || '',
+    poids:         user?.poids?.toString() || '',
+    taille:        user?.taille?.toString() || '',
+    poidsCible:    user?.poidsCible?.toString() || '',
+    sexe:          user?.sexe || '',
+    objectif:      normalizeObjectif(user?.objectif),
+    niveauSportif: user?.niveauSportif || '',
+    rythme:        user?.rythme?.toString() || '',
+  };
+}
+
 export default function EditProfileScreen({ navigation }) {
   const { user, refetch: refetchUser } = useUser();
   const { showToast } = useToast();
-  const [formData, setFormData] = useState({
-    name:          user?.name          || '',
-    poids:         user?.poids?.toString()      || '',
-    taille:        user?.taille?.toString()     || '',
-    poidsCible:    user?.poidsCible?.toString() || '',
-    sexe:          user?.sexe          || '',
-    objectif:      normalizeObjectif(user?.objectif),
-    niveauSportif: user?.niveauSportif || 'Débutant',
-    rythme:        user?.rythme?.toString() || '',
-  });
+  const [formData, setFormData] = useState(() => formFromUser(user));
+  const initialRef = useRef(JSON.stringify(formFromUser(user)));
+  const savedRef = useRef(false);
+  const [leaveAction, setLeaveAction] = useState(null);
 
   // Synchronise le formulaire si le contexte user se met à jour (ex: premier chargement)
-  React.useEffect(() => {
+  useEffect(() => {
     if (!user) return;
-    setFormData({
-      name:          user.name          || '',
-      poids:         user.poids?.toString()      || '',
-      taille:        user.taille?.toString()     || '',
-      poidsCible:    user.poidsCible?.toString() || '',
-      sexe:          user.sexe          || 'H',
-      objectif:      normalizeObjectif(user.objectif) || 'Entretien',
-      niveauSportif: user.niveauSportif || 'Débutant',
-      rythme:        user.rythme?.toString() || '',
-    });
+    const next = formFromUser(user);
+    initialRef.current = JSON.stringify(next);
+    setFormData(next);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.name]);
+
+  // Quitter avec des modifications non enregistrées demande confirmation.
+  const dirty = JSON.stringify(formData) !== initialRef.current;
+  useEffect(() => navigation.addListener('beforeRemove', (e) => {
+    if (!dirty || savedRef.current) return;
+    e.preventDefault();
+    setLeaveAction(e.data.action);
+  }), [navigation, dirty]);
 
   const [loading, setLoading] = useState(false);
   const [errors,  setErrors]  = useState({});
@@ -128,6 +140,7 @@ export default function EditProfileScreen({ navigation }) {
       if (res.success) {
         refetchUser(); // met à jour le UserContext → ProfileScreen + SettingsScreen sync instantané
         showToast('Profil mis à jour.', 'success');
+        savedRef.current = true;
         navigation.goBack();
       }
     } catch (error) {
@@ -156,7 +169,7 @@ export default function EditProfileScreen({ navigation }) {
     try {
       await setBirthdate(dateObj.toISOString());
       await refetchUser();
-      showToast('Date de naissance enregistrée. Ton coffre est dans ton inventaire !', 'success');
+      showToast('Date de naissance enregistrée. Un coffre t\'attend dans ton inventaire.', 'success');
     } catch (error) {
       if (error.isSessionExpired) throw error;
       showToast(getErrorMessage(error, 'La date n\'a pas pu être enregistrée. Réessaie dans un instant.'), 'error');
@@ -200,7 +213,11 @@ export default function EditProfileScreen({ navigation }) {
             <TextInput
               style={[styles.inlineInput, errors.name && styles.inlineInputError]}
               value={formData.name}
-              onChangeText={(v) => { set('name', v); if (errors.name) setErrors((e) => ({ ...e, name: undefined })); }}
+              onChangeText={(v) => set('name', v)}
+              accessibilityLabel="Pseudo"
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={30}
               placeholder="Ton pseudo"
               placeholderTextColor={Colors.textMuted}
               selectionColor={Colors.primary}
@@ -212,10 +229,10 @@ export default function EditProfileScreen({ navigation }) {
         {/* ═══ PHYSIQUE ══════════════════════════════════════════════════════ */}
         <SectionLabel label="Physique" />
         <SettingsGroup>
-          <SettingsRow label="Sexe" last={false}>
+          <SettingsRow label="Sexe" last={false} stacked>
             <View style={styles.chipRow}>
-              {SELECTIONS.sexe.map((s) => (
-                <MiniChip key={s} label={s} selected={formData.sexe === s} onPress={() => set('sexe', s)} />
+              {SELECTIONS.sexe.map((o) => (
+                <MiniChip key={o.value} label={o.label} selected={formData.sexe === o.value} onPress={() => set('sexe', o.value)} />
               ))}
             </View>
           </SettingsRow>
@@ -224,7 +241,8 @@ export default function EditProfileScreen({ navigation }) {
               style={styles.inlineInput}
               value={formData.poids}
               onChangeText={(v) => set('poids', v)}
-              placeholder="-"
+              accessibilityLabel="Poids actuel en kilos"
+              placeholder="ex : 72"
               placeholderTextColor={Colors.textMuted}
               selectionColor={Colors.primary}
               keyboardType="decimal-pad"
@@ -235,7 +253,8 @@ export default function EditProfileScreen({ navigation }) {
               style={styles.inlineInput}
               value={formData.poidsCible}
               onChangeText={(v) => set('poidsCible', v)}
-              placeholder="-"
+              accessibilityLabel="Poids cible en kilos"
+              placeholder="ex : 75"
               placeholderTextColor={Colors.textMuted}
               selectionColor={Colors.primary}
               keyboardType="decimal-pad"
@@ -246,7 +265,8 @@ export default function EditProfileScreen({ navigation }) {
               style={styles.inlineInput}
               value={formData.taille}
               onChangeText={(v) => set('taille', v)}
-              placeholder="-"
+              accessibilityLabel="Taille en centimètres"
+              placeholder="ex : 178"
               placeholderTextColor={Colors.textMuted}
               selectionColor={Colors.primary}
               keyboardType="number-pad"
@@ -277,16 +297,12 @@ export default function EditProfileScreen({ navigation }) {
               ))}
             </View>
           </SettingsRow>
-          <SettingsRow label="Séances / semaine" last error={errors.rythme}>
-            <TextInput
-              style={styles.inlineInput}
-              value={formData.rythme}
-              onChangeText={(v) => set('rythme', v)}
-              placeholder="ex : 4"
-              placeholderTextColor={Colors.textMuted}
-              selectionColor={Colors.primary}
-              keyboardType="number-pad"
-            />
+          <SettingsRow label="Séances par semaine" last stacked error={errors.rythme}>
+            <View style={styles.chipRow}>
+              {SELECTIONS.rythme.map((n) => (
+                <MiniChip key={n} label={n} selected={formData.rythme === n} onPress={() => set('rythme', n)} square />
+              ))}
+            </View>
           </SettingsRow>
         </SettingsGroup>
 
@@ -302,6 +318,18 @@ export default function EditProfileScreen({ navigation }) {
 
         <View style={{ height: 48 }} />
       </ScrollView>
+
+      <ConfirmModal
+        visible={!!leaveAction}
+        icon="create-outline"
+        title="Quitter sans enregistrer ?"
+        body="Tes modifications seront perdues."
+        confirmLabel="Quitter"
+        cancelLabel="Rester"
+        destructive
+        onConfirm={() => { const a = leaveAction; setLeaveAction(null); savedRef.current = true; navigation.dispatch(a); }}
+        onCancel={() => setLeaveAction(null)}
+      />
     </View>
   );
 }
@@ -309,7 +337,7 @@ export default function EditProfileScreen({ navigation }) {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function SectionLabel({ label }) {
-  return <Text style={styles.sectionLabel}>{label.toUpperCase()}</Text>;
+  return <Text style={styles.sectionLabel} accessibilityRole="header">{label}</Text>;
 }
 
 function SettingsGroup({ children }) {
@@ -330,12 +358,12 @@ function SettingsRow({ label, children, last, error, stacked }) {
   );
 }
 
-function MiniChip({ label, selected, onPress }) {
+function MiniChip({ label, selected, onPress, square }) {
   return (
     <TouchableOpacity accessibilityRole="radio"
       accessibilityState={{ selected, checked: selected }}
       onPress={onPress}
-      style={[styles.chip, selected && styles.chipSel]}
+      style={[styles.chip, square && styles.chipSquare, selected && styles.chipSel]}
       activeOpacity={0.8}
     >
       <Text style={[styles.chipTxt, selected && styles.chipTxtSel]}>{label}</Text>
@@ -360,10 +388,11 @@ const styles = StyleSheet.create({
 
   // ── Section labels (iOS style) ───────────────────────────────────────────────
   sectionLabel: {
-    color: Colors.textMuted,
-    fontSize: 11,
+    color: Colors.textSecondary,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.8,
+    textTransform: 'uppercase',
     marginTop: 24,
     marginBottom: 8,
     marginLeft: 4,
@@ -420,8 +449,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     textAlign: 'right',
-    padding: 0,
+    paddingVertical: 8,
+    paddingHorizontal: 0,
     minWidth: 80,
+    alignSelf: 'stretch',
   },
   inlineInputError: {
     color: Colors.error,
@@ -444,6 +475,7 @@ const styles = StyleSheet.create({
     borderColor: GRP_BORDER,
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
+  chipSquare: { minWidth: 40, alignItems: 'center', paddingHorizontal: 0 },
   chipSel:    { backgroundColor: Colors.primary, borderColor: Colors.primary },
   chipTxt:    { color: Colors.textSecondary, fontSize: 13, fontWeight: '600' },
   chipTxtSel: { color: '#fff' },

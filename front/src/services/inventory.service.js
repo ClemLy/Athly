@@ -64,7 +64,8 @@ export const RARITY_META = {
   rare:      { label: 'Rare',       color: '#3B82F6' },
   epic:      { label: 'Épique',     color: '#A855F7' },
   legendary: { label: 'Légendaire', color: '#FE7439' },
-  unique:    { label: 'Unique',     color: Colors.uniqueBlood, gradient: [Colors.uniqueBloodBright, Colors.uniqueBlood, Colors.uniqueBloodDeep], glow: Colors.uniqueBloodGlow },
+  // text : teinte lisible sur fond sombre (le rouge sang de base est trop foncé)
+  unique:    { label: 'Unique',     color: Colors.uniqueBlood, text: Colors.uniqueBloodBright, gradient: [Colors.uniqueBloodBright, Colors.uniqueBlood, Colors.uniqueBloodDeep], glow: Colors.uniqueBloodGlow },
 };
 
 export async function openChest() {
