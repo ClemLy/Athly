@@ -148,21 +148,28 @@ export default function FriendProfileScreen({ route, navigation }) {
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       <LinearGradient colors={bgColors} style={StyleSheet.absoluteFill} pointerEvents="none" />
 
-      <TouchableOpacity accessibilityLabel="Retour" accessibilityRole="button"
-        style={[styles.backBtn, { top: insets.top + 8 }]}
-        onPress={() => navigation.goBack()}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="chevron-back" size={24} color={Colors.textPrimary} />
-      </TouchableOpacity>
-
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingTop: topPad }]}
         showsVerticalScrollIndicator={false}
       >
         <Animated.View style={{ opacity }}>
+
+          {/* ── En-tête : retour dans le flux (ne chevauche plus la carte) ── */}
+          <View style={styles.header}>
+            <TouchableOpacity
+              accessibilityLabel="Retour"
+              accessibilityRole="button"
+              style={styles.backBtn}
+              onPress={() => navigation.goBack()}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">
+              Profil de {profile.user.pseudo}
+            </Text>
+          </View>
 
           {/* ── Hero Level Card (cadre équipé de l'ami) ── */}
           <View style={styles.heroWrapper}>
@@ -175,7 +182,8 @@ export default function FriendProfileScreen({ route, navigation }) {
               shapeId={equippedFrame.shapeId}
               colorId={equippedFrame.colorId}
               titleLabel={profile.equippedTitleInfo?.label}
-              titleColor={profile.equippedTitleInfo ? RARITY_META[profile.equippedTitleInfo.rarity]?.color : undefined}
+              titleId={profile.equippedTitleInfo?.id}
+              titleColor={profile.equippedTitleInfo ? (RARITY_META[profile.equippedTitleInfo.rarity]?.text || RARITY_META[profile.equippedTitleInfo.rarity]?.color) : undefined}
             />
             <EmberParticles
               visible={isLegend}
@@ -190,28 +198,27 @@ export default function FriendProfileScreen({ route, navigation }) {
             </View>
           )}
 
-          {/* ── Vitrine de l'ami : ses trophées mis en avant (mêmes TrophySlot que le profil) ── */}
-          <FriendShowcaseGrid pseudo={profile.user.pseudo} entries={showcasedEntries} />
-
           {/* ── Statut d'amitié ── */}
-          <View style={styles.friendshipCard}>
+          <View style={styles.friendshipCard} accessible accessibilityLabel={`Niveau d'amitié ${profile.friendshipLevel} sur 5, ${friendshipTitle.label}, ${profile.friendshipXp} XP d'amitié`}>
             <View style={styles.friendshipHearts}>
               {Array.from({ length: 5 }, (_, i) => (
                 <Ionicons
                   key={i}
                   name={i < profile.friendshipLevel ? 'heart' : 'heart-outline'}
-                  size={16}
-                  color={i < profile.friendshipLevel ? '#FF4D6D' : Colors.borderDim}
-                  style={{ marginHorizontal: 2 }}
+                  size={14}
+                  color={i < profile.friendshipLevel ? '#FF4D6D' : Colors.textMuted}
                 />
               ))}
             </View>
-            <Text style={styles.friendshipLevel}>
-              Niveau d'amitié {profile.friendshipLevel}/5
-              {profile.friendshipLevel === 5 ? ' · Lien de Sang' : ''}
-            </Text>
-            <Text style={styles.friendshipTitle}>{friendshipTitle.label}</Text>
-            <Text style={styles.friendshipXp}>{profile.friendshipXp} XP d'amitié</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.friendshipLevel}>
+                {friendshipTitle.label}
+                {profile.friendshipLevel === 5 ? ' · Lien de Sang' : ''}
+              </Text>
+              <Text style={styles.friendshipXp}>
+                Amitié niveau {profile.friendshipLevel} sur 5 · {profile.friendshipXp} XP
+              </Text>
+            </View>
           </View>
 
           {/* ── Action sociale : Secouer (uniquement si coéquipier de streak) ── */}
@@ -224,22 +231,31 @@ export default function FriendProfileScreen({ route, navigation }) {
             >
               <View style={styles.shakeIconBox}>
                 {shaking
-                  ? <ActivityIndicator size="small" color={Colors.error} />
-                  : <Ionicons name="warning" size={18} color={alreadyShakenToday ? Colors.textMuted : Colors.error} />}
+                  ? <ActivityIndicator size="small" color={Colors.primary} />
+                  : <Ionicons name="notifications-outline" size={18} color={alreadyShakenToday ? Colors.textMuted : Colors.primary} />}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.shakeTitle}>Coéquipier de streak</Text>
+                <Text style={styles.shakeTitle}>
+                  {alreadyShakenToday ? 'Déjà secoué aujourd\'hui' : `Secouer ${profile.user.pseudo}`}
+                </Text>
                 <Text style={styles.shakeSub}>
                   {alreadyShakenToday
-                    ? `Tu as déjà secoué ${profile.user.pseudo} aujourd'hui`
-                    : `Secoue ${profile.user.pseudo} s'il n'a pas encore fait sa séance`}
+                    ? 'Tu pourras recommencer demain.'
+                    : 'Envoie-lui un rappel pour sa séance du jour. Vous êtes dans le même groupe.'}
                 </Text>
               </View>
               {!alreadyShakenToday && <Ionicons name="chevron-forward" size={16} color={Colors.chevron} />}
             </TouchableOpacity>
           )}
 
-          {/* ── Vitrine des trophées ── */}
+          {/* ── Vitrine : ses trophées mis en avant (mêmes tuiles que son propre profil) ── */}
+          {showcasedEntries.length > 0 ? (
+            <Section title="Vitrine">
+              <FriendShowcaseGrid entries={showcasedEntries} />
+            </Section>
+          ) : null}
+
+          {/* ── Trophées ── */}
           <Section title="Trophées">
             <GlassCard>
               <AchievementShowcase achievements={profile.achievements} stats={profile.achievementsStats} />
@@ -247,13 +263,13 @@ export default function FriendProfileScreen({ route, navigation }) {
           </Section>
 
           {/* ── Records personnels (même composant que sur son propre profil) ── */}
-          <Section title="Records">
-            <GlassCard>
+          <Section title="Records personnels">
+            <View style={styles.recordsCard}>
               <PersonalRecordsList
                 records={records}
-                emptyLabel="Aucun record mis en avant"
+                emptyLabel={`${profile.user.pseudo} n'a pas encore mis de record en avant`}
               />
-            </GlassCard>
+            </View>
           </Section>
 
           {/* ── Retirer (ici plutôt que dans la liste, où il était trop facile à toucher) ── */}
@@ -319,12 +335,12 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  // Bouton flottant lisible par-dessus le contenu qui défile
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  headerTitle: { flex: 1, color: Colors.textPrimary, fontSize: 18, fontWeight: '800' },
   backBtn: {
-    position: 'absolute', left: 16, zIndex: 10,
-    width: 40, height: 40, borderRadius: 20,
+    width: 44, height: 44, borderRadius: 22,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(8,9,16,0.72)',
+    backgroundColor: Colors.glassBg,
     borderWidth: 1, borderColor: Colors.glassBorder,
   },
 
@@ -332,21 +348,20 @@ const styles = StyleSheet.create({
   streakWrap:  { marginTop: 10 },
 
   friendshipCard: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(139,92,246,0.07)',
-    borderWidth: 1, borderColor: 'rgba(139,92,246,0.28)',
-    borderRadius: 16, padding: 16, marginTop: 14,
+    flexDirection: 'row-reverse', alignItems: 'center', gap: 12,
+    backgroundColor: Colors.glassBg,
+    borderWidth: 1, borderColor: Colors.glassBorder,
+    borderRadius: 16, paddingVertical: 14, paddingHorizontal: 16, marginTop: 12,
   },
-  friendshipHearts: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  friendshipLevel:  { color: Colors.textPrimary, fontSize: 13.5, fontWeight: '700' },
-  friendshipTitle:  { color: Colors.primary, fontSize: 12, fontWeight: '700', marginTop: 4 },
-  friendshipXp:     { color: Colors.textMuted, fontSize: 11.5, marginTop: 2 },
+  friendshipHearts: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  friendshipLevel:  { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
+  friendshipXp:     { color: Colors.textSecondary, fontSize: 13, marginTop: 2 },
 
   shakeBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     marginTop: 12,
-    backgroundColor: 'rgba(255,77,77,0.07)',
-    borderWidth: 1, borderColor: 'rgba(255,77,77,0.28)',
+    backgroundColor: `${Colors.primary}10`,
+    borderWidth: 1, borderColor: `${Colors.primary}40`,
     borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14,
   },
   shakeBannerDisabled: {
@@ -355,23 +370,27 @@ const styles = StyleSheet.create({
   },
   shakeIconBox: {
     width: 36, height: 36, borderRadius: 11,
-    backgroundColor: 'rgba(255,77,77,0.12)',
+    backgroundColor: `${Colors.primary}1F`,
     justifyContent: 'center', alignItems: 'center',
   },
-  shakeTitle: { color: Colors.textPrimary, fontSize: 13, fontWeight: '700' },
-  shakeSub:   { color: Colors.textMuted, fontSize: 11, marginTop: 1 },
+  shakeTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
+  shakeSub:   { color: Colors.textSecondary, fontSize: 13, lineHeight: 18, marginTop: 2 },
 
   section: { marginTop: 26 },
   removeLink: { alignSelf: 'center', marginTop: 28, paddingVertical: 12, paddingHorizontal: 20 },
   removeLinkTxt: { color: Colors.error, fontSize: 14.5, fontWeight: '700' },
   sectionTitle: {
-    color: Colors.textPrimary, fontSize: 11, fontWeight: '800',
+    color: Colors.textPrimary, fontSize: 12, fontWeight: '800',
     letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 12,
   },
   glassCard: {
     backgroundColor: Colors.glassBg,
     borderWidth: 1, borderColor: Colors.glassBorder,
     borderRadius: 18, padding: 14, overflow: 'hidden',
+  },
+  recordsCard: {
+    borderWidth: 1, borderColor: Colors.glassBorder,
+    borderRadius: 18, overflow: 'hidden',
   },
 
 });

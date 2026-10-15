@@ -98,7 +98,7 @@ export default function ProfileScreen({ navigation }) {
     try {
       const res = await getTitles();
       const equipped = res.titles.find((t) => t.id === res.equippedTitle);
-      setEquippedTitleMeta(equipped ? { label: equipped.label, rarity: equipped.rarity } : null);
+      setEquippedTitleMeta(equipped ? { id: equipped.id, label: equipped.label, rarity: equipped.rarity } : null);
     } catch (_) {
       // best-effort — l'absence de titre affiché n'est pas bloquant.
     }
@@ -307,7 +307,8 @@ export default function ProfileScreen({ navigation }) {
               colorId={colorId}
               profileTheme={activeTheme}
               titleLabel={equippedTitleMeta?.label}
-              titleColor={equippedTitleMeta ? RARITY_META[equippedTitleMeta.rarity]?.color : undefined}
+              titleId={equippedTitleMeta?.id}
+              titleColor={equippedTitleMeta ? (RARITY_META[equippedTitleMeta.rarity]?.text || RARITY_META[equippedTitleMeta.rarity]?.color) : undefined}
             />
             <EmberParticles
               visible={activeTheme ? activeTheme.shimmer : isLegend}

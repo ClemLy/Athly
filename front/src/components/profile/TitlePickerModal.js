@@ -1,249 +1,273 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal } from 'react-native';
+import {
+  View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Modal, useWindowDimensions,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Colors } from '../../constants/theme';
-import { getTitles, equipTitle } from '../../services';
-import { RARITY_META } from '../../services';
-import { haptics } from '../../services';
-
-// ─── TitleInfoModal ───────────────────────────────────────────────────────────
-// Affiche la quête exacte pour un titre encore verrouillé, avec une barre de
-// progression quand le titre a un seuil numérique (voir progress côté backend).
-function TitleInfoModal({ title, onClose }) {
-  const visible = Boolean(title);
-  const meta = title ? (RARITY_META[title.rarity] || RARITY_META.common) : RARITY_META.common;
-  const progress = title?.progress;
-  const pct = progress ? Math.max(0, Math.min(1, progress.current / progress.target)) : 0;
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
-      <View style={s.infoBackdrop}>
-        <View style={[s.infoCard, { borderColor: `${meta.color}45` }]}>
-          <View style={[s.infoIconWrap, { backgroundColor: `${meta.color}1A`, borderColor: `${meta.color}45` }]}>
-            <Ionicons name="lock-closed" size={26} color={meta.color} />
-          </View>
-          <Text style={s.infoTitle}>{title?.label}</Text>
-          <Text style={s.infoBody}>{title?.condition}</Text>
-
-          {progress && (
-            <View style={s.progressWrap}>
-              <View style={s.progressTrack}>
-                <View style={[s.progressFill, { width: `${pct * 100}%`, backgroundColor: meta.color }]} />
-              </View>
-              <Text style={s.progressLabel}>{progress.current} / {progress.target}</Text>
-            </View>
-          )}
-
-          <TouchableOpacity accessibilityRole="button" style={[s.infoCloseBtn, { backgroundColor: meta.color }]} onPress={onClose} activeOpacity={0.85}>
-            <Text style={s.infoCloseTxt}>Compris</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-}
+import { getTitles, equipTitle, RARITY_META, haptics } from '../../services';
+import { titleIcon } from '../../data/titleIcons';
 
 // ─── TitlePickerModal ─────────────────────────────────────────────────────────
-// Sélecteur de titres (Section X) : liste directe, tap sur un titre débloqué
-// = équipé immédiatement (pas de preview ni d'étape de confirmation
-// intermédiaire — juste choisir parmi ce qu'on a et ce qu'on n'a pas).
+// Liste des titres : ceux débloqués s'équipent d'un tap, ceux à débloquer
+// affichent directement leur condition et leur progression.
 //
 // Props : visible bool, onClose () => void
 
+const RARITY_ORDER = ['unique', 'legendary', 'epic', 'rare', 'common'];
+const byRarity = (a, b) => RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity);
+
 export default function TitlePickerModal({ visible, onClose }) {
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const [titles, setTitles] = useState([]);
   const [equippedTitleId, setEquippedTitleId] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [equippingId, setEquippingId] = useState(undefined); // id en cours d'équipement, ou undefined
-  const [infoTitle, setInfoTitle] = useState(null);
+  const [status, setStatus] = useState('loading'); // loading | ready | error
+  const [equippingId, setEquippingId] = useState(undefined);
+  const [equipError, setEquipError] = useState(null);
 
   const load = useCallback(async () => {
+    setStatus('loading');
     try {
-      setLoading(true);
       const res = await getTitles();
-      setTitles(res.titles);
-      setEquippedTitleId(res.equippedTitle);
+      setTitles(res.titles || []);
+      setEquippedTitleId(res.equippedTitle ?? null);
+      setStatus('ready');
     } catch (_) {
-      // best-effort
-    } finally {
-      setLoading(false);
+      setStatus('error');
     }
   }, []);
 
   useEffect(() => {
-    if (visible) load();
+    if (visible) { setEquipError(null); load(); }
   }, [visible, load]);
 
   const handleSelect = useCallback(async (titleId) => {
-    if (titleId === equippedTitleId) return;
+    if (titleId === equippedTitleId || equippingId !== undefined) return;
+    setEquipError(null);
+    setEquippingId(titleId);
     try {
-      setEquippingId(titleId);
       await equipTitle(titleId);
       haptics.success();
       setEquippedTitleId(titleId);
     } catch (_) {
-      // best-effort
+      setEquipError('Le titre n\'a pas pu être équipé. Vérifie ta connexion et réessaie.');
     } finally {
       setEquippingId(undefined);
     }
-  }, [equippedTitleId]);
+  }, [equippedTitleId, equippingId]);
+
+  const unlocked = titles.filter((t) => t.unlocked).sort(byRarity);
+  const locked = titles.filter((t) => !t.unlocked).sort(byRarity);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
-      <View style={s.backdrop}>
-        <View style={s.sheet}>
-          <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button" style={s.closeIcon} onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="close" size={22} color={Colors.textMuted} />
-          </TouchableOpacity>
+    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent onRequestClose={onClose}>
+      <View style={s.root}>
+        <Pressable style={s.backdrop} onPress={onClose} accessible={false} />
+        <View
+          accessibilityViewIsModal
+          style={[s.sheet, { maxHeight: height * 0.88, paddingBottom: insets.bottom + 12 }]}
+        >
+          <View style={s.handle} />
+          <View style={s.header}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.title} accessibilityRole="header">Titres</Text>
+              <Text style={s.sub}>Le titre équipé s'affiche sous ton pseudo.</Text>
+            </View>
+            <Pressable
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Fermer"
+              style={({ pressed }) => [s.closeBtn, pressed && s.pressed]}
+            >
+              <Ionicons name="close" size={20} color={Colors.textSecondary} />
+            </Pressable>
+          </View>
 
-          <Text style={s.sheetTitle}>Titres</Text>
-          <Text style={s.sheetSub}>Choisis le titre affiché sous ton pseudo.</Text>
+          {equipError ? (
+            <View style={s.errorBox} accessibilityRole="alert">
+              <Ionicons name="alert-circle-outline" size={16} color={Colors.error} />
+              <Text style={s.errorTxt}>{equipError}</Text>
+            </View>
+          ) : null}
 
-          {loading ? (
-            <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 24 }} />
+          {status === 'loading' ? (
+            <ActivityIndicator size="small" color={Colors.primary} style={s.loader} />
+          ) : status === 'error' ? (
+            <View style={s.stateBox}>
+              <Text style={s.stateTxt}>Les titres n'ont pas pu être chargés.</Text>
+              <Pressable onPress={load} accessibilityRole="button" style={({ pressed }) => [s.retryBtn, pressed && s.pressed]}>
+                <Text style={s.retryTxt}>Réessayer</Text>
+              </Pressable>
+            </View>
           ) : (
-            <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
-              <View style={s.grid}>
-                {/* ── Tuile "Aucun titre" ── */}
-                <TouchableOpacity accessibilityRole="button"
-                  style={[s.tile, equippedTitleId === null && s.tileEquippedNeutral]}
+            <ScrollView style={s.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={s.scrollContent}>
+              <Text style={s.groupLabel}>Débloqués · {unlocked.length}</Text>
+              <View style={s.group}>
+                <TitleRow
+                  icon="remove-circle-outline"
+                  label="Aucun titre"
+                  meta="Rien sous ton pseudo"
+                  color={Colors.textSecondary}
+                  selected={equippedTitleId === null}
+                  busy={equippingId === null}
                   onPress={() => handleSelect(null)}
-                  activeOpacity={0.85}
-                >
-                  {equippedTitleId === null && (
-                    <View style={[s.tileCheck, { backgroundColor: Colors.textMuted }]}>
-                      <Ionicons name="checkmark" size={10} color="#fff" />
-                    </View>
-                  )}
-                  {equippingId === null
-                    ? <ActivityIndicator size="small" color={Colors.textMuted} />
-                    : <Ionicons name="remove-circle-outline" size={18} color={Colors.textMuted} />}
-                  <Text style={s.tileNoneLabel}>Aucun titre</Text>
-                </TouchableOpacity>
-
-                {titles.map((title) => {
-                  const meta = RARITY_META[title.rarity] || RARITY_META.common;
-                  const isEquipped = title.id === equippedTitleId;
-
-                  if (!title.unlocked) {
-                    return (
-                      <TouchableOpacity accessibilityRole="button"
-                        key={title.id}
-                        style={s.tileLocked}
-                        onPress={() => setInfoTitle(title)}
-                        activeOpacity={0.8}
-                      >
-                        <Ionicons name="lock-closed" size={16} color={Colors.textMuted} />
-                        <Text style={s.tileLockedLabel} numberOfLines={2}>{title.label}</Text>
-                        {title.progress && (
-                          <Text style={s.tileLockedProgress}>
-                            {title.progress.current}/{title.progress.target}
-                          </Text>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  }
-
+                />
+                {unlocked.map((t) => {
+                  const meta = RARITY_META[t.rarity] || RARITY_META.common;
                   return (
-                    <TouchableOpacity accessibilityRole="button"
-                      key={title.id}
-                      style={[
-                        s.tile,
-                        { borderColor: `${meta.color}40` },
-                        isEquipped && {
-                          borderColor: meta.color,
-                          backgroundColor: `${meta.color}1F`,
-                        },
-                      ]}
-                      onPress={() => handleSelect(title.id)}
-                      activeOpacity={0.85}
-                    >
-                      {isEquipped && (
-                        <View style={[s.tileCheck, { backgroundColor: meta.color }]}>
-                          <Ionicons name="checkmark" size={10} color="#fff" />
-                        </View>
-                      )}
-                      {equippingId === title.id
-                        ? <ActivityIndicator size="small" color={meta.color} />
-                        : <Ionicons name="sparkles" size={15} color={meta.color} />}
-                      <Text style={[s.tileLabel, { color: meta.color }]} numberOfLines={2}>{title.label}</Text>
-                    </TouchableOpacity>
+                    <TitleRow
+                      key={t.id}
+                      icon={titleIcon(t.id)}
+                      label={t.label}
+                      meta={meta.label}
+                      color={meta.text || meta.color}
+                      selected={t.id === equippedTitleId}
+                      busy={equippingId === t.id}
+                      onPress={() => handleSelect(t.id)}
+                    />
                   );
                 })}
               </View>
+
+              {locked.length > 0 ? (
+                <>
+                  <Text style={s.groupLabel}>À débloquer · {locked.length}</Text>
+                  <View style={s.group}>
+                    {locked.map((t) => <LockedRow key={t.id} title={t} />)}
+                  </View>
+                </>
+              ) : null}
             </ScrollView>
           )}
         </View>
       </View>
-
-      <TitleInfoModal title={infoTitle} onClose={() => setInfoTitle(null)} />
     </Modal>
   );
 }
 
+function TitleRow({ icon, label, meta, color, selected, busy, onPress }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected, busy }}
+      accessibilityLabel={`${label}, ${meta}`}
+      style={({ pressed }) => [s.row, selected && { backgroundColor: `${color}14` }, pressed && s.pressed]}
+    >
+      <View style={[s.iconBox, { backgroundColor: `${color}1F` }]}>
+        <Ionicons name={icon} size={18} color={color} />
+      </View>
+      <View style={s.rowText}>
+        <Text style={[s.rowLabel, selected && { color }]} numberOfLines={2}>{label}</Text>
+        <Text style={s.rowMeta}>{meta}</Text>
+      </View>
+      {busy ? (
+        <ActivityIndicator size="small" color={color} />
+      ) : (
+        <Ionicons
+          name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+          size={22}
+          color={selected ? color : Colors.borderDim}
+        />
+      )}
+    </Pressable>
+  );
+}
+
+function LockedRow({ title }) {
+  const meta = RARITY_META[title.rarity] || RARITY_META.common;
+  const p = title.progress;
+  const pct = p ? Math.max(0, Math.min(1, p.current / p.target)) : 0;
+  return (
+    <View style={s.row} accessible accessibilityLabel={`${title.label}, ${meta.label}, verrouillé. ${title.condition}`}>
+      <View style={[s.iconBox, s.iconBoxLocked]}>
+        <Ionicons name={titleIcon(title.id)} size={18} color={Colors.textMuted} />
+      </View>
+      <View style={s.rowText}>
+        <View style={s.lockedHead}>
+          <Text style={s.lockedLabel} numberOfLines={1}>{title.label}</Text>
+          <Text style={[s.rarityTag, { color: meta.text || meta.color }]}>{meta.label}</Text>
+        </View>
+        <Text style={s.condition}>{title.condition}</Text>
+        {p ? (
+          <View style={s.progressRow}>
+            <View style={s.track}>
+              <View style={[s.fill, { width: `${pct * 100}%`, backgroundColor: meta.text || meta.color }]} />
+            </View>
+            <Text style={s.progressTxt}>{p.current} / {p.target}</Text>
+          </View>
+        ) : null}
+      </View>
+      <Ionicons name="lock-closed" size={16} color={Colors.textMuted} />
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
-  backdrop: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.82)',
-    justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20,
-  },
+  root: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.72)' },
   sheet: {
-    width: '100%', maxHeight: '85%', backgroundColor: Colors.bgDeep2,
-    borderRadius: 24, borderWidth: 1, borderColor: `${Colors.primary}38`,
-    padding: 22, paddingTop: 40,
+    backgroundColor: Colors.bgDeep2,
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    borderTopWidth: 1, borderColor: Colors.glassBorder,
+    paddingHorizontal: 16, paddingTop: 10,
+    width: '100%', maxWidth: 480, alignSelf: 'center',
   },
-  closeIcon: { position: 'absolute', top: 14, right: 14, zIndex: 1 },
-  sheetTitle: { color: Colors.textPrimary, fontSize: 18, fontWeight: '800', textAlign: 'center' },
-  sheetSub: { color: Colors.textMuted, fontSize: 12.5, textAlign: 'center', marginTop: 4, marginBottom: 18 },
+  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.18)', alignSelf: 'center', marginBottom: 14 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12, paddingHorizontal: 4 },
+  title: { color: Colors.textPrimary, fontSize: 20, fontWeight: '800' },
+  sub: { color: Colors.textSecondary, fontSize: 14, marginTop: 2 },
+  closeBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  pressed: { opacity: 0.7 },
 
-  scroll: { maxHeight: 420 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingBottom: 4 },
+  errorBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    padding: 12, borderRadius: 12, marginBottom: 10,
+    backgroundColor: `${Colors.error}14`, borderWidth: 1, borderColor: `${Colors.error}40`,
+  },
+  errorTxt: { flex: 1, color: Colors.textPrimary, fontSize: 13, lineHeight: 18 },
 
-  tile: {
-    width: '47%', minHeight: 82, borderRadius: 14, borderWidth: 1,
-    backgroundColor: '#1A1A24', padding: 10, alignItems: 'center', justifyContent: 'center',
-  },
-  tileEquippedNeutral: {
-    borderColor: Colors.textMuted, backgroundColor: 'rgba(255,255,255,0.06)',
-  },
-  tileCheck: {
-    position: 'absolute', top: 8, right: 8, width: 17, height: 17, borderRadius: 9,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  tileLabel: { fontSize: 12, fontWeight: '800', textAlign: 'center', marginTop: 6 },
-  tileNoneLabel: { color: Colors.textMuted, fontSize: 12, fontWeight: '700', textAlign: 'center', marginTop: 6 },
+  loader: { marginVertical: 32 },
+  stateBox: { alignItems: 'center', paddingVertical: 28, gap: 12 },
+  stateTxt: { color: Colors.textSecondary, fontSize: 14 },
+  retryBtn: { minHeight: 44, paddingHorizontal: 20, borderRadius: 12, justifyContent: 'center', backgroundColor: Colors.primary },
+  retryTxt: { color: '#fff', fontSize: 14, fontWeight: '800' },
 
-  tileLocked: {
-    width: '47%', minHeight: 82, borderRadius: 14, borderWidth: 1, borderColor: Colors.borderSubtle,
-    backgroundColor: 'rgba(255,255,255,0.02)', padding: 10, alignItems: 'center', justifyContent: 'center',
-    opacity: 0.55,
+  scroll: { flexGrow: 0 },
+  scrollContent: { paddingBottom: 8 },
+  groupLabel: {
+    color: Colors.textSecondary, fontSize: 12, fontWeight: '800',
+    letterSpacing: 0.8, textTransform: 'uppercase',
+    marginTop: 8, marginBottom: 8, marginLeft: 4,
   },
-  tileLockedLabel: { color: Colors.textMuted, fontSize: 10.5, fontWeight: '700', textAlign: 'center', marginTop: 6 },
-  tileLockedProgress: { color: Colors.textMuted, fontSize: 9.5, marginTop: 4 },
+  group: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 16, borderWidth: 1, borderColor: Colors.glassBorder,
+    overflow: 'hidden', marginBottom: 12,
+  },
+  row: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    minHeight: 60, paddingVertical: 10, paddingHorizontal: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.separator,
+  },
+  iconBox: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  iconBoxLocked: { backgroundColor: 'rgba(255,255,255,0.05)' },
+  rowText: { flex: 1, minWidth: 0 },
+  rowLabel: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
+  rowMeta: { color: Colors.textSecondary, fontSize: 12, marginTop: 2 },
 
-  // ── TitleInfoModal ─────────────────────────────────────────────────────────
-  infoBackdrop: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.85)',
-    justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24,
-  },
-  infoCard: {
-    width: '100%', backgroundColor: Colors.bgDeep2, borderRadius: 22, borderWidth: 1,
-    padding: 28, alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.65, shadowRadius: 32, elevation: 20,
-  },
-  infoIconWrap: {
-    width: 60, height: 60, borderRadius: 18, borderWidth: 1,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 18,
-  },
-  infoTitle: { color: Colors.textPrimary, fontSize: 18, fontWeight: '800', marginBottom: 10, textAlign: 'center' },
-  infoBody: { color: Colors.textSecondary, fontSize: 14, lineHeight: 21, textAlign: 'center', marginBottom: 18 },
-  progressWrap: { width: '100%', marginBottom: 22 },
-  progressTrack: { height: 8, borderRadius: 4, backgroundColor: '#0A0A0A', overflow: 'hidden', marginBottom: 6 },
-  progressFill: { height: '100%', borderRadius: 4 },
-  progressLabel: { color: Colors.textMuted, fontSize: 11.5, fontWeight: '700', textAlign: 'center' },
-  infoCloseBtn: {
-    width: '100%', height: 50, borderRadius: 13, justifyContent: 'center', alignItems: 'center',
-    shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.40, shadowRadius: 12, elevation: 6,
-  },
-  infoCloseTxt: { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
+  lockedHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  lockedLabel: { flexShrink: 1, color: Colors.textSecondary, fontSize: 15, fontWeight: '700' },
+  rarityTag: { fontSize: 12, fontWeight: '700' },
+  condition: { color: Colors.textSecondary, fontSize: 13, lineHeight: 18, marginTop: 2 },
+  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  track: { flex: 1, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' },
+  fill: { height: '100%', borderRadius: 3 },
+  progressTxt: { color: Colors.textSecondary, fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
 });

@@ -6,6 +6,9 @@
 .cursor/
 .aider*
 skills-lock.json
+CLAUDE.md
+AGENTS.md
+.engram/
 
 # Outillage local installe a la racine par les skills (Playwright)
 /node_modules/

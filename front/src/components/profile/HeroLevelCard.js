@@ -5,6 +5,7 @@ import { Colors } from '../../constants/theme';
 import { xpToLevel, getRank } from '../../services';
 import AvatarFrame, { getFrameBleed } from './AvatarFrame';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { titleIcon } from '../../data/titleIcons';
 
 const AVATAR_SIZE = 90;
 const AVATAR_SLOT = 108; // espace réservé à l'avatar (avatarWrap)
@@ -20,6 +21,7 @@ export default function HeroLevelCard({
   profileTheme = null,  // PROFILE_THEMES entry — overrides visual rank when set
   titleLabel = null,    // Titre équipé (Section X) — libellé résolu côté appelant
   titleColor = Colors.textMuted, // Couleur de rareté du titre équipé
+  titleId = null,       // Identifiant du titre (choix de son icône)
 }) {
   const { level, currentInLevel, neededForNext, progress } = useMemo(
     () => xpToLevel(totalXP),
@@ -137,7 +139,7 @@ export default function HeroLevelCard({
           styles.titleBadge,
           { backgroundColor: `${titleColor}1F`, borderColor: `${titleColor}70`, shadowColor: titleColor },
         ]}>
-          <Ionicons name="sparkles" size={10} color={titleColor} style={{ marginRight: 4 }} />
+          <Ionicons name={titleIcon(titleId)} size={12} color={titleColor} style={{ marginRight: 5 }} />
           <Text style={[styles.titleBadgeText, { color: titleColor }]} numberOfLines={1}>{titleLabel}</Text>
         </View>
       )}

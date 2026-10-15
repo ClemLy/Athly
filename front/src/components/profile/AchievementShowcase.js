@@ -156,7 +156,7 @@ export default function AchievementShowcase({ achievements = [], stats }) {
         <View style={styles.statsBar}>
           <View style={{ flex: 1 }}>
             <Text style={styles.statsTxt}>
-              {stats.unlocked}/{stats.total} trophées débloqués
+              {stats.unlocked} sur {stats.total} trophées débloqués
             </Text>
             <View style={styles.statsBarTrack}>
               <View style={[styles.statsBarFill, { width: `${stats.percentage}%` }]} />
@@ -167,9 +167,8 @@ export default function AchievementShowcase({ achievements = [], stats }) {
       )}
 
       <TouchableOpacity accessibilityRole="button" style={styles.detailBtn} onPress={() => setDetailOpen(true)} activeOpacity={0.8}>
-        <Ionicons name="grid" size={15} color={Colors.gold} />
-        <Text style={styles.detailBtnText}>Voir le détail</Text>
-        <Ionicons name="chevron-forward" size={15} color={Colors.gold} />
+        <Text style={styles.detailBtnText}>Voir tous les trophées</Text>
+        <Ionicons name="chevron-forward" size={16} color={Colors.textSecondary} />
       </TouchableOpacity>
 
       {detailOpen && (
@@ -177,8 +176,8 @@ export default function AchievementShowcase({ achievements = [], stats }) {
           <Pressable accessible={false} style={styles.overlay} onPress={() => setDetailOpen(false)}>
             <Pressable accessibilityRole="button" style={styles.sheet} onPress={() => {}}>
               <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>Trophées {stats ? `· ${stats.unlocked}/${stats.total}` : ''}</Text>
-                <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button" onPress={() => setDetailOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={styles.sheetTitle} accessibilityRole="header">Trophées {stats ? `· ${stats.unlocked} sur ${stats.total}` : ''}</Text>
+                <TouchableOpacity accessibilityLabel="Fermer" accessibilityRole="button" style={styles.closeBtn} onPress={() => setDetailOpen(false)}>
                   <Ionicons name="close" size={22} color={Colors.textMuted} />
                 </TouchableOpacity>
               </View>
@@ -211,6 +210,8 @@ function AchievementBadge({ achievement, onPress }) {
   const { unlocked, color, icon, label } = achievement;
   return (
     <TouchableOpacity accessibilityRole="button"
+      accessibilityLabel={`${label}, ${unlocked ? 'débloqué' : 'verrouillé'}`}
+      accessibilityState={{ disabled: !unlocked }}
       style={styles.badge}
       onPress={unlocked ? onPress : undefined}
       activeOpacity={unlocked ? 0.8 : 1}
@@ -243,20 +244,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 10,
     marginBottom: 12,
   },
-  statsTxt: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 6 },
+  statsTxt: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600', marginBottom: 6 },
   statsBarTrack: {
     height: 6, borderRadius: 3,
     backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden',
   },
   statsBarFill: { height: '100%', backgroundColor: Colors.gold, borderRadius: 3 },
-  statsPct: { color: Colors.gold, fontSize: 14, fontWeight: '800' },
+  statsPct: { color: Colors.textPrimary, fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'] },
 
   detailBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    borderWidth: 1, borderColor: 'rgba(255,215,0,0.3)', backgroundColor: 'rgba(255,215,0,0.06)',
-    borderRadius: 12, paddingVertical: 11,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderWidth: 1, borderColor: Colors.glassBorder, backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 12, minHeight: 44, paddingHorizontal: 14,
   },
-  detailBtnText: { color: Colors.gold, fontSize: 13, fontWeight: '700' },
+  detailBtnText: { color: Colors.textPrimary, fontSize: 14, fontWeight: '700' },
+  closeBtn: {
+    width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
 
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.74)', justifyContent: 'flex-end' },
   sheet: {
@@ -272,7 +277,7 @@ const styles = StyleSheet.create({
   sheetTitle: { color: Colors.textPrimary, fontSize: 16, fontWeight: '800' },
   scrollArea: { flex: 1 },
   categoryLabel: {
-    color: Colors.textMuted, fontSize: 11, fontWeight: '800',
+    color: Colors.textSecondary, fontSize: 12, fontWeight: '800',
     letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10,
   },
 
@@ -301,11 +306,11 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
   },
   badgeName: {
-    color: Colors.textMuted,
-    fontSize: 10.5,
+    color: Colors.textSecondary,
+    fontSize: 12,
     fontWeight: '700',
     textAlign: 'center',
-    lineHeight: 13,
+    lineHeight: 15,
   },
   lockChip: {
     position: 'absolute', top: 8, right: 8,
