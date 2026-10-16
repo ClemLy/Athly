@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const app = require('../app');
 const User = require('../models/User');
 const CloudItem = require('../models/CloudItem');
+const Workout = require('../models/Workout');
 
 // Sauvegarde du compte : historique, séances enregistrées, exercices perso et
 // préférences, pour les retrouver sur un nouvel appareil.
@@ -31,6 +32,8 @@ describe('Cloud API — sauvegarde du compte', () => {
 
   beforeEach(async () => {
     await CloudItem.deleteMany();
+    await Workout.deleteMany();
+    await User.updateMany({}, { $set: { xp: 0, level: 0, xpFloor: null } });
   });
 
   afterAll(async () => {
@@ -122,5 +125,76 @@ describe('Cloud API — sauvegarde du compte', () => {
     const userService = require('../services/user.service');
     await userService.deleteAccount(String(userId));
     expect(await CloudItem.countDocuments({ user: userId })).toBe(0);
+  });
+
+  describe("XP du compte calculée à partir de l'historique sauvegardé", () => {
+    const me = () => User.findOne({ email: 'cloud@test.fr' });
+
+    it("l'XP du compte suit les séances sauvegardées, suppressions comprises", async () => {
+      await sync('logs', { puts: [log('log-a', 120), log('log-b', 300)] });
+      expect((await me()).xp).toBe(420);
+      await sync('logs', { dels: ['log-b'] });
+      expect((await me()).xp).toBe(120);
+    });
+
+    it("corrige le double comptage d'avant (XP gonflée par les séances)", async () => {
+      await User.updateOne({ email: 'cloud@test.fr' }, { $set: { xp: 5000 } });
+      await sync('logs', { puts: [log('log-a', 2500)] });
+      expect((await me()).xp).toBe(2500);
+    });
+
+    it("le total envoyé par l'app n'est plus pris tel quel une fois le compte sauvegardé", async () => {
+      await sync('logs', { puts: [log('log-a', 120)] });
+      const res = await request(app).post('/api/users/me/sync-xp').set('Authorization', `Bearer ${token}`).send({ xp: 14000 });
+      expect(res.statusCode).toBe(200);
+      expect(res.body.xp).toBe(120);
+    });
+
+    it("ignore une XP négative et applique le plafond d'ancienneté", async () => {
+      await sync('logs', { puts: [log('log-a', -5000), log('log-b', 999999)] });
+      const { XP_CEILING_PER_DAY } = require('../services/user.service');
+      expect((await me()).xp).toBe(XP_CEILING_PER_DAY);
+    });
+  });
+
+  describe('GET /api/cloud/recovery — reconstruire un historique perdu', () => {
+    const finished = (userId, minutesAgo, overrides = {}) => Workout.create({
+      user: userId, name: 'Séance Push', status: 'completed', durationSeconds: 1800, xpEarned: 200,
+      exercises: [{ name: 'Développé couché', targetMuscle: 'Pectoraux', sets: [{ weight: 80, reps: 8, completed: true }] }],
+      completedAt: new Date(Date.now() - minutesAgo * 60000),
+      ...overrides,
+    });
+
+    it("renvoie les séances terminées et l'XP acquise sans le double comptage", async () => {
+      const user = await User.findOne({ email: 'cloud@test.fr' });
+      await User.updateOne({ _id: user._id }, { $set: { xp: 10000 } });
+      await finished(user._id, 60);
+      await finished(user._id, 2000, { durationSeconds: 600 });            // < 15 min : 20 XP ajoutés
+      await finished(user._id, 3000, { shortSession: true });               // séance courte : 0
+      await finished(user._id, 4000, { serverXpAdded: false });            // déjà corrigée : 0
+      await Workout.create({ user: user._id, name: 'Brouillon', status: 'in_progress' });
+
+      const res = await list('recovery');
+      expect(res.statusCode).toBe(200);
+      expect(res.body.xpFloor).toBe(10000 - 200 - 20);
+      expect(res.body.workouts).toHaveLength(4);
+      expect(res.body.workouts[0].exercises[0].sets[0]).toEqual({ weight: 80, reps: 8, completed: true });
+    });
+
+    it("mémorise l'XP de référence avant que le recalcul ne la remplace", async () => {
+      const user = await User.findOne({ email: 'cloud@test.fr' });
+      await User.updateOne({ _id: user._id }, { $set: { xp: 8000 } });
+      await sync('logs', { puts: [log('log-a', 100)] });
+      const res = await list('recovery');
+      expect(res.body.xpFloor).toBe(8000);
+      expect((await User.findById(user._id)).xp).toBe(100);
+    });
+
+    it("🔒 ne renvoie jamais les séances d'un autre compte", async () => {
+      const other = await User.findOne({ email: 'cloud-autre@test.fr' });
+      await finished(other._id, 30);
+      const res = await list('recovery');
+      expect(res.body.workouts).toEqual([]);
+    });
   });
 });

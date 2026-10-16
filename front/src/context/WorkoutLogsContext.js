@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { AppState } from 'react-native';
 import { listLogs, addLog, removeLog, totalCumulativeXP, addRitualLog, addBonusXpLog, logsCloud } from '../services';
 import { syncXp, retryPendingXpSync } from '../services';
+import { maintainHistory } from '../services/historyRecovery.service';
 import { getErrorMessage } from '../utils/errorMessages';
 
 // Context global pour l'historique des séances finalisées (logs).
@@ -27,7 +28,10 @@ export function WorkoutLogsProvider({ children }) {
       // et se met à jour si un autre appareil a ajouté des séances.
       if (list.length > 0) setLoading(false);
       const merged = await logsCloud.pullAndMerge();
-      if (merged?.changed) {
+      // Sauvegarde joignable : séances perdues avant elle, doublons, XP déjà
+      // gagnée sur le compte (voir historyRecovery.service.js).
+      const recovered = merged ? await maintainHistory() : false;
+      if (merged?.changed || recovered) {
         list = await listLogs();
         setItems(list);
       }
@@ -56,7 +60,8 @@ export function WorkoutLogsProvider({ children }) {
         // Retour au premier plan : séances faites sur un autre appareil, et
         // envoi de ce qui n'a pas pu partir hors ligne.
         logsCloud.pullAndMerge().then(async (merged) => {
-          if (merged?.changed) setItems(await listLogs());
+          const recovered = merged ? await maintainHistory() : false;
+          if (merged?.changed || recovered) setItems(await listLogs());
         });
       }
       appState.current = nextState;

@@ -36,6 +36,28 @@ function plausibleXpCeiling(createdAt, now = Date.now()) {
   return (days + 1) * XP_CEILING_PER_DAY;
 }
 
+// Date de mise en ligne de sync-xp (commit du 2026-07-10) : à partir de là,
+// chaque séance terminée a été comptée deux fois dans user.xp.
+const SYNC_XP_RELEASE = new Date('2026-07-10T00:00:00.000Z');
+
+// XP qu'a ajoutée finalizeWorkout pour chaque séance terminée depuis
+// SYNC_XP_RELEASE (et avant la correction : serverXpAdded absent). Même règle
+// que l'ancien code : séance courte 0, moins de 15 min ÷ 10.
+async function legacyServerAddedXp(userId) {
+  const docs = await Workout.find({
+    user: userId,
+    status: { $in: Workout.FINAL_STATUSES },
+    serverXpAdded: { $exists: false },
+    updatedAt: { $gte: SYNC_XP_RELEASE },
+  }).select('xpEarned durationSeconds shortSession').lean();
+  return docs.reduce((sum, w) => {
+    const xp = Number(w.xpEarned) || 0;
+    const duration = Number(w.durationSeconds) || 0;
+    if (w.shortSession || duration < 300) return sum;
+    return sum + (duration < 900 ? Math.round(xp / 10) : xp);
+  }, 0);
+}
+
 class UserService {
   /**
    * Récupère le profil complet d'un utilisateur sans son mot de passe.
@@ -268,6 +290,12 @@ class UserService {
   async syncXp(userId, submittedXp) {
     const { levelFromXP, getRankForLevel, xpForLevel, MAX_LEVEL } = require('../utils/levelHelpers');
 
+    // Compte sauvegardé : l'XP se calcule à partir des séances sauvegardées,
+    // pas du total envoyé (voir recomputeXpFromBackup).
+    if (await CloudItem.exists({ user: userId, kind: 'logs' })) {
+      return this.recomputeXpFromBackup(userId);
+    }
+
     const user = await User.findById(userId).select('xp level rank createdAt');
     if (!user) throw userNotFound();
 
@@ -299,6 +327,65 @@ class UserService {
       rank:  user.rank,
       newlyUnlockedTitles,
     };
+  }
+
+  /**
+   * XP du compte = somme de l'XP de toutes les entrées sauvegardées de
+   * l'historique (séances, quêtes, rituels, bonus), bornée par le plafond
+   * d'ancienneté. Même chiffre que celui affiché dans l'app, puisque l'app
+   * calcule son total à partir des mêmes entrées. Une séance supprimée fait
+   * donc aussi baisser l'XP du compte.
+   *
+   * Avant ce calcul, l'XP du compte était gonflée : l'app envoyait son total
+   * (sync-xp), PUIS finalizeWorkout ajoutait encore l'XP de la séance. Le
+   * premier recalcul corrige ce double comptage, après avoir mémorisé xpFloor.
+   * @param {string} userId
+   */
+  async recomputeXpFromBackup(userId) {
+    const { levelFromXP, getRankForLevel, xpForLevel, MAX_LEVEL } = require('../utils/levelHelpers');
+    const user = await User.findById(userId).select('xp level rank createdAt xpFloor');
+    if (!user) throw userNotFound();
+    await this.ensureXpFloor(user);
+
+    const [agg] = await CloudItem.aggregate([
+      { $match: { user: new Types.ObjectId(String(userId)), kind: 'logs', deleted: false } },
+      { $group: {
+        _id: null,
+        xp: { $sum: { $max: [0, { $convert: { input: '$data.xpEarned', to: 'double', onError: 0, onNull: 0 } }] } },
+      } },
+    ]);
+    const ceiling = Math.min(xpForLevel(MAX_LEVEL), plausibleXpCeiling(user.createdAt));
+    const nextXp = Math.round(Math.min(agg ? agg.xp : 0, ceiling));
+
+    let newlyUnlockedTitles = [];
+    if (nextXp !== user.xp) {
+      user.xp    = nextXp;
+      user.level = levelFromXP(nextXp);
+      user.rank  = getRankForLevel(user.level);
+      await user.save();
+      try {
+        const { checkAndUnlockTitles } = require('../controllers/title.controller');
+        newlyUnlockedTitles = await checkAndUnlockTitles(userId);
+      } catch (_) {
+        // best-effort
+      }
+    }
+    return { level: user.level, xp: user.xp, rank: user.rank, newlyUnlockedTitles };
+  }
+
+  /**
+   * Mémorise une fois pour toutes l'XP acquise avant la sauvegarde du compte,
+   * sans le double comptage : XP du compte − XP ajoutée par le serveur pour
+   * chaque séance terminée depuis l'arrivée de sync-xp. Doit être appelée
+   * AVANT le premier recalcul (qui remplace user.xp). Idempotent.
+   * @param {import('mongoose').Document} user — avec xp, xpFloor
+   */
+  async ensureXpFloor(user) {
+    if (user.xpFloor != null) return user.xpFloor;
+    const inflation = await legacyServerAddedXp(user._id);
+    user.xpFloor = Math.max(0, Math.round((user.xp || 0) - inflation));
+    await User.updateOne({ _id: user._id, xpFloor: null }, { $set: { xpFloor: user.xpFloor } });
+    return user.xpFloor;
   }
 
   async addExperience(userId, xpAmount) {

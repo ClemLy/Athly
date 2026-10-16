@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as bigStorage from '../utils/bigStorage';
 
 // Chargés à la demande : les services qui utilisent ce module restent
 // importables dans les tests unitaires (sans React Native ni réseau).
@@ -31,14 +31,9 @@ const FLUSH_DELAY_MS = 1500;
 
 export const pendingKeyFor = (kind) => `athly:cloud:pending:${kind}:v1`;
 
-async function readJson(key, fallback) {
-  try {
-    const raw = await AsyncStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch (_) {
-    return fallback;
-  }
-}
+// Listes et file d'attente peuvent devenir volumineuses (premier envoi d'un
+// long historique) : stockage adapté aux grosses valeurs.
+const readJson = (key, fallback) => bigStorage.getJson(key, fallback);
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -89,7 +84,7 @@ export function mergeRemote(local, remote, pending, sortKey) {
 /**
  * @param {{ kind: string, storageKey?: string, read?: () => Promise<object[]>,
  *           write?: (items: object[]) => Promise<void>, sortKey?: (item: object) => any }} options
- *   `storageKey` : liste JSON sous une clé AsyncStorage. `read`/`write`
+ *   `storageKey` : liste JSON (voir utils/bigStorage.js). `read`/`write`
  *   remplacent ce stockage (préférences réparties sur plusieurs clés).
  */
 export function createCloudCollection({ kind, storageKey, read, write, sortKey }) {
@@ -98,7 +93,7 @@ export function createCloudCollection({ kind, storageKey, read, write, sortKey }
     const list = await readJson(storageKey, []);
     return Array.isArray(list) ? list : [];
   });
-  const writeItems = write || ((items) => AsyncStorage.setItem(storageKey, JSON.stringify(items)));
+  const writeItems = write || ((items) => bigStorage.setJson(storageKey, items));
 
   // Les lectures-écritures de la file d'attente passent une par une.
   let chain = Promise.resolve();
@@ -112,7 +107,7 @@ export function createCloudCollection({ kind, storageKey, read, write, sortKey }
   let flushing = null;
 
   const readPending = () => readJson(pendingKey, {});
-  const writePending = (p) => AsyncStorage.setItem(pendingKey, JSON.stringify(p));
+  const writePending = (p) => bigStorage.setJson(pendingKey, p);
 
   function scheduleFlush() {
     if (timer) clearTimeout(timer);
@@ -133,7 +128,8 @@ export function createCloudCollection({ kind, storageKey, read, write, sortKey }
   function transaction(fn) {
     const run = withLock(async () => {
       const before = await readItems();
-      const result = await fn();
+      // fn reçoit de quoi lire et écrire la liste sans repasser par le verrou.
+      const result = await fn({ read: readItems, write: writeItems });
       const ops = diffOps(before, await readItems());
       if (Object.keys(ops).length) await writePending({ ...(await readPending()), ...ops });
       return result;

@@ -1,5 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createCloudCollection } from './cloudCollection';
+import * as bigStorage from '../utils/bigStorage';
 import { resolveMuscleGroup, normalizeId } from '../constants/exerciseFilters';
 
 // CRUD des exercices personnalisés. Persiste dans AsyncStorage sous une clé dédiée.
@@ -44,21 +44,15 @@ function genId() {
 }
 
 async function readAll() {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    return [];
-  }
+  const parsed = await bigStorage.getJson(STORAGE_KEY, []);
+  return Array.isArray(parsed) ? parsed : [];
 }
 
 // Sauvegardé dans le compte (voir cloudCollection.js).
 export const customExercisesCloud = createCloudCollection({ kind: 'customExercises', storageKey: STORAGE_KEY, sortKey: (x) => x.createdAt });
 
 async function writeAll(items) {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  await bigStorage.setJson(STORAGE_KEY, items);
 }
 
 export async function listCustomExercises() {
@@ -147,5 +141,5 @@ export async function removeCustomExercise(id) {
 }
 
 export async function clearCustomExercises() {
-  await AsyncStorage.removeItem(STORAGE_KEY);
+  await bigStorage.removeItem(STORAGE_KEY);
 }

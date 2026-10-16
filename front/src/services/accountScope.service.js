@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as bigStorage from '../utils/bigStorage';
 
 // ─── Cloisonnement des données locales par compte ─────────────────────────────
 // Athly est "local-first" : l'historique des séances, les quêtes, les séances
@@ -20,11 +21,9 @@ const ARCHIVE_PREFIX = 'athly:archive:';
 // connecté récupère ses propres données archivées (et non un jeu vide hérité).
 const NO_OWNER = '__none__';
 
+// Petites valeurs, dans AsyncStorage.
 export const ACCOUNT_SCOPED_KEYS = [
-  'athly:workoutLogs:v1',
   '@athly_daily_quests',
-  'athly:customExercises:v1',
-  'athly:savedWorkouts:v1',
   'athly:workout:inprogress:v1',
   'athly:xp:isXpSynced:v1',
   'athly:pref:featuredTrophies:v1',
@@ -35,6 +34,15 @@ export const ACCOUNT_SCOPED_KEYS = [
   'athly:weight:reminder:dismissed_at:v1',
   'athly:tutorial:completed:v1',
   'athly:tutorial:pendingChapter:v1',
+  'athly:history:recovery:v1',
+];
+
+// Grosses valeurs, dans le stockage dédié (utils/bigStorage.js : morceaux sur
+// iOS / Android, IndexedDB sur le web) : déplacées une par une.
+export const ACCOUNT_SCOPED_BIG_KEYS = [
+  'athly:workoutLogs:v1',
+  'athly:customExercises:v1',
+  'athly:savedWorkouts:v1',
   // Modifications pas encore envoyées à la sauvegarde du compte (cloudCollection.js)
   'athly:cloud:pending:logs:v1',
   'athly:cloud:pending:savedWorkouts:v1',
@@ -43,6 +51,14 @@ export const ACCOUNT_SCOPED_KEYS = [
 ];
 
 const archiveKey = (userId, key) => `${ARCHIVE_PREFIX}${userId}:${key}`;
+
+// Déplace une grosse valeur (to = null : la supprime simplement).
+async function moveBig(from, to) {
+  const value = await bigStorage.getItem(from);
+  if (value == null) return;
+  if (to) await bigStorage.setItem(to, value);
+  await bigStorage.removeItem(from);
+}
 
 // Lecture de l'identifiant du compte dans le JWT (partie publique, non vérifiée
 // ici : la vérification est faite par le serveur à chaque requête).
@@ -95,6 +111,12 @@ export async function activateAccountScope(userId) {
     if (toRestore.length > 0) await AsyncStorage.multiSet(toRestore);
     await AsyncStorage.multiRemove(archived.map(([key]) => key));
 
+    // 3. Même chose pour les grosses valeurs
+    for (const key of ACCOUNT_SCOPED_BIG_KEYS) {
+      await moveBig(key, owner !== NO_OWNER ? archiveKey(owner, key) : null);
+      await moveBig(archiveKey(userId, key), key);
+    }
+
     await AsyncStorage.setItem(OWNER_KEY, userId);
     return true;
   } catch {
@@ -113,6 +135,10 @@ export async function clearAccountScope(userId) {
     const isActive = !userId || owner === userId;
     if (isActive) keys.push(...ACCOUNT_SCOPED_KEYS);
     await AsyncStorage.multiRemove(keys);
+    for (const key of ACCOUNT_SCOPED_BIG_KEYS) {
+      if (userId) await bigStorage.removeItem(archiveKey(userId, key));
+      if (isActive) await bigStorage.removeItem(key);
+    }
     if (isActive) await AsyncStorage.setItem(OWNER_KEY, NO_OWNER);
   } catch {
     // best effort
