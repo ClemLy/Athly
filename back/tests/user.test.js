@@ -130,6 +130,27 @@ describe('User API (Routes Protégées)', () => {
     });
   });
 
+  describe('PUT /api/users/me — changement de pseudo', () => {
+    it('✅ Change le pseudo visible et garde un tag unique', async () => {
+      const res = await request(app)
+        .put('/api/users/me')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ pseudo: 'Nouveau Nom' });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.user.pseudo).toBe('Nouveau Nom');
+      expect(res.body.user.discriminator).toMatch(/^\d{4}$/);
+    });
+
+    it('❌ 400 si le pseudo contient un #', async () => {
+      const res = await request(app)
+        .put('/api/users/me')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ pseudo: 'Pseudo#1234' });
+      expect(res.statusCode).toBe(400);
+    });
+  });
+
   describe('POST /api/users/me/sync-xp — syncXp (Section X)', () => {
     const { xpForLevel } = require('../utils/levelHelpers');
 
@@ -197,9 +218,33 @@ describe('User API (Routes Protégées)', () => {
       expect(user.unlockedTitles).toContain('PERFORM_LEVEL_10');
     });
 
+    it("❌ Un compte neuf ne peut pas s'attribuer une XP impossible en une requête", async () => {
+      const { XP_CEILING_PER_DAY } = require('../services/user.service');
+      const res = await request(app)
+        .post('/api/users/me/sync-xp')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ xp: xpForLevel(200) });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.xp).toBe(XP_CEILING_PER_DAY);
+      expect(res.body.level).toBeLessThan(50);
+    });
+
+    it("✅ Le plafond grandit avec l'ancienneté du compte", () => {
+      const { plausibleXpCeiling, XP_CEILING_PER_DAY } = require('../services/user.service');
+      const now = Date.now();
+      expect(plausibleXpCeiling(new Date(now), now)).toBe(XP_CEILING_PER_DAY);
+      expect(plausibleXpCeiling(new Date(now - 10 * 86400000), now)).toBe(11 * XP_CEILING_PER_DAY);
+    });
+
     it('✅ Clampe un xp aberrant (au-delà du niveau 200) sans planter', async () => {
+      // Compte ancien (plafond d'ancienneté dépassé) : seul le niveau max borne.
       // En dessous du plafond Joi (garde-fou grossier, 100M) mais bien
       // au-delà de xpForLevel(200) (~1.72M) — exerce le clamp du service.
+      await User.collection.updateOne(
+        { email: 'user@test.fr' },
+        { $set: { createdAt: new Date(Date.now() - 400 * 86400000) } },
+      );
       const res = await request(app)
         .post('/api/users/me/sync-xp')
         .set('Authorization', `Bearer ${token}`)

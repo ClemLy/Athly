@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createCloudCollection } from './cloudCollection';
 
 // CRUD des séances sauvegardées (favorites / réutilisables).
 // Schéma :
@@ -24,6 +25,9 @@ async function readAll() {
     return [];
   }
 }
+
+// Sauvegardé dans le compte (voir cloudCollection.js).
+export const savedWorkoutsCloud = createCloudCollection({ kind: 'savedWorkouts', storageKey: STORAGE_KEY, sortKey: (x) => x.createdAt });
 
 async function writeAll(items) {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
@@ -55,45 +59,51 @@ export async function listSavedWorkouts() {
 }
 
 export async function saveWorkout(input) {
-  const all = await readAll();
-  const now = Date.now();
-  const item = {
-    id: genId(),
-    name: String(input.name || 'Séance').trim() || 'Séance',
-    description: String(input.description || '').trim(),
-    exercises: sanitizeExercises(input.exercises),
-    isManual: !!input.isManual,
-    criteria: input.criteria || null,
-    createdAt: now,
-    updatedAt: now,
-  };
-  if (item.exercises.length === 0) throw new Error('La séance doit contenir au moins un exercice');
-  const next = [item, ...all];
-  await writeAll(next);
-  return item;
+  return savedWorkoutsCloud.transaction(async () => {
+    const all = await readAll();
+    const now = Date.now();
+    const item = {
+      id: genId(),
+      name: String(input.name || 'Séance').trim() || 'Séance',
+      description: String(input.description || '').trim(),
+      exercises: sanitizeExercises(input.exercises),
+      isManual: !!input.isManual,
+      criteria: input.criteria || null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    if (item.exercises.length === 0) throw new Error('La séance doit contenir au moins un exercice');
+    const next = [item, ...all];
+    await writeAll(next);
+    return item;
+  });
 }
 
 export async function updateSavedWorkout(id, patch) {
-  const all = await readAll();
-  const idx = all.findIndex((x) => x.id === id);
-  if (idx < 0) throw new Error('Séance introuvable');
-  const updated = {
-    ...all[idx],
-    ...patch,
-    name: patch.name !== undefined ? String(patch.name).trim() : all[idx].name,
-    description: patch.description !== undefined ? String(patch.description).trim() : all[idx].description,
-    exercises: patch.exercises !== undefined ? sanitizeExercises(patch.exercises) : all[idx].exercises,
-    updatedAt: Date.now(),
-  };
-  const next = [...all];
-  next[idx] = updated;
-  await writeAll(next);
-  return updated;
+  return savedWorkoutsCloud.transaction(async () => {
+    const all = await readAll();
+    const idx = all.findIndex((x) => x.id === id);
+    if (idx < 0) throw new Error('Séance introuvable');
+    const updated = {
+      ...all[idx],
+      ...patch,
+      name: patch.name !== undefined ? String(patch.name).trim() : all[idx].name,
+      description: patch.description !== undefined ? String(patch.description).trim() : all[idx].description,
+      exercises: patch.exercises !== undefined ? sanitizeExercises(patch.exercises) : all[idx].exercises,
+      updatedAt: Date.now(),
+    };
+    const next = [...all];
+    next[idx] = updated;
+    await writeAll(next);
+    return updated;
+  });
 }
 
 export async function removeSavedWorkout(id) {
-  const all = await readAll();
-  await writeAll(all.filter((x) => x.id !== id));
+  return savedWorkoutsCloud.transaction(async () => {
+    const all = await readAll();
+    await writeAll(all.filter((x) => x.id !== id));
+  });
 }
 
 export async function clearSavedWorkouts() {

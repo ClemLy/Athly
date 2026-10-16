@@ -6,6 +6,7 @@ import { getMyRecords } from '../../services';
 import { updateRecordsShowcase } from '../../services';
 import { BUILTIN_CATALOG } from '../../data/exerciseCatalog';
 import { indexExercise, searchExercises, normalizeText } from '../../data/exerciseSearch';
+import { SkeletonRows } from '../common/Skeleton';
 
 const CATALOG_BY_NAME = new Map(BUILTIN_CATALOG.map((e) => [normalizeText(e.name), e]));
 
@@ -93,7 +94,7 @@ export default function RecordsShowcasePicker({ visible, current = [], onSaved, 
           </View>
 
           {loading ? (
-            <View style={styles.loadingBox}><ActivityIndicator size="small" color={Colors.primary} /></View>
+            <SkeletonRows count={4} avatar={36} style={styles.loadingBox} label="Chargement de tes records" />
           ) : records.length === 0 ? (
             <View style={styles.emptyBox}>
               <Ionicons name="trophy-outline" size={32} color={Colors.textMuted} />
@@ -239,7 +240,7 @@ const styles = StyleSheet.create({
   },
   saveBtnDisabled: { opacity: 0.6 },
   saveBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
-  loadingBox: { paddingVertical: 40, alignItems: 'center' },
+  loadingBox: { paddingVertical: 16 },
   emptyBox: { alignItems: 'center', paddingVertical: 30, gap: 8 },
   emptyTitle: { color: Colors.textPrimary, fontSize: 14, fontWeight: '700', marginTop: 6 },
   emptyTxt: { color: Colors.textMuted, fontSize: 12.5, textAlign: 'center', lineHeight: 18, paddingHorizontal: 12 },

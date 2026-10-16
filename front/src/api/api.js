@@ -27,7 +27,13 @@ async function readApiCache(url) {
   }
 }
 
+// La sauvegarde du compte (/cloud/…) n'est jamais mise en cache : ses données
+// sont déjà sur le téléphone, et un historique complet dupliqué saturerait le
+// stockage d'Android (6 Mo par défaut).
+const NO_CACHE_PATTERN = /^\/?cloud\//;
+
 function writeApiCache(url, data) {
+  if (NO_CACHE_PATTERN.test(url)) return;
   // Fire-and-forget : un échec d'écriture du cache ne doit rien bloquer
   AsyncStorage.setItem(API_CACHE_PREFIX + url, JSON.stringify(data)).catch(() => {});
 }
@@ -155,6 +161,9 @@ API.interceptors.request.use(
     } else {
       delete config.headers.Authorization;
     }
+    // Jeton envoyé avec CETTE requête : sert à ne déconnecter que si c'est
+    // bien la session en cours qui est refusée (voir intercepteur de réponse).
+    config.sentToken = token || null;
     trackStart(config);
     return config;
   },
@@ -189,10 +198,18 @@ API.interceptors.response.use(
       err.toString = () => `HTTP ${err.status} ${err.statusText}`;
 
       // ── 401 hors routes d'auth : session expirée → déconnexion automatique ──
+      // Seulement si le jeton refusé est encore celui en place : une réponse
+      // lente partie avant la connexion (sans jeton) ou avec un ancien compte
+      // ne doit jamais déconnecter la session qui vient de s'ouvrir.
       const url = error.config?.url || '';
       if (err.status === 401 && !AUTH_ROUTE_PATTERN.test(url)) {
-        try { await removeToken(); } catch { /* ignore */ }
-        if (_signOutCallback) await _signOutCallback();
+        const sent = error.config?.sentToken || null;
+        let current = null;
+        try { current = await getToken(); } catch { /* ignore */ }
+        if (sent && sent === current) {
+          try { await removeToken(); } catch { /* ignore */ }
+          if (_signOutCallback) await _signOutCallback();
+        }
         err.userMessage = SESSION_EXPIRED_MSG;
         err.message = SESSION_EXPIRED_MSG;
         err.isSessionExpired = true;

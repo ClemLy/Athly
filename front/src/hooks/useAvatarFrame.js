@@ -25,6 +25,11 @@ function loadFromStorage() {
     .catch(() => {});
 }
 
+// Relit le cadre après une restauration depuis le compte (nouvel appareil).
+export function reloadAvatarFrame() {
+  loadFromStorage();
+}
+
 export function useAvatarFrame() {
   const [frame, setFrame] = useState(shared);
 

@@ -1,16 +1,20 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Modal, Animated, StyleSheet, Easing } from 'react-native';
+import { View, Text, Animated, StyleSheet, Easing } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { QUEST_XP, BONUS_XP } from '../../services/quest.service';
 
-// Animated slide-in toast rendered above everything via Modal.
+// Bandeau animé posé au-dessus de l'écran. Pas de <Modal> : sur iOS et
+// Android, un Modal transparent bloque tous les appuis tant qu'il est ouvert
+// (près de 3 s en pleine séance). Ici les appuis passent au travers.
 // Props:
 //   visible     bool   — mount/unmount controls the animation cycle
 //   questLabel  string — quest name (ignored when isBonus)
 //   isBonus     bool   — true for the all-3-quests bonus notification
 //   onHide      ()     — called after the toast finishes dismissing
 export default function QuestToast({ visible, questLabel, isBonus = false, onHide }) {
+  const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(-120)).current;
   const opacity    = useRef(new Animated.Value(0)).current;
 
@@ -64,43 +68,40 @@ export default function QuestToast({ visible, questLabel, isBonus = false, onHid
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, questLabel, isBonus]);
 
+  if (!visible) return null;
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      statusBarTranslucent
+    <Animated.View
+      style={[styles.toast, { top: insets.top + 12, transform: [{ translateY }], opacity }]}
+      pointerEvents="none"
+      accessibilityLiveRegion="polite"
+      accessibilityRole="alert"
     >
-      <Animated.View
-        style={[styles.toast, { transform: [{ translateY }], opacity }]}
-        pointerEvents="none"
-      >
-        <View style={[styles.iconWrap, isBonus && styles.iconWrapBonus]}>
-          <Ionicons
-            name={isBonus ? 'star' : 'checkmark-circle'}
-            size={20}
-            color={isBonus ? Colors.gold : Colors.primary}
-          />
-        </View>
-        <View style={styles.content}>
-          <Text style={styles.title} numberOfLines={1}>
-            {isBonus ? 'Bonus toutes quêtes !' : 'Quête remplie !'}
-          </Text>
-          <Text style={[styles.label, isBonus && styles.labelBonus]} numberOfLines={1}>
-            {isBonus
-              ? `+${BONUS_XP} XP bonus`
-              : `${questLabel}  ·  +${QUEST_XP} XP`}
-          </Text>
-        </View>
-      </Animated.View>
-    </Modal>
+      <View style={[styles.iconWrap, isBonus && styles.iconWrapBonus]}>
+        <Ionicons
+          name={isBonus ? 'star' : 'checkmark-circle'}
+          size={20}
+          color={isBonus ? Colors.gold : Colors.primary}
+        />
+      </View>
+      <View style={styles.content}>
+        <Text style={styles.title} numberOfLines={1}>
+          {isBonus ? 'Bonus toutes quêtes !' : 'Quête remplie !'}
+        </Text>
+        <Text style={[styles.label, isBonus && styles.labelBonus]} numberOfLines={1}>
+          {isBonus
+            ? `+${BONUS_XP} XP bonus`
+            : `${questLabel}  ·  +${QUEST_XP} XP`}
+        </Text>
+      </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   toast: {
     position: 'absolute',
-    top: 60,
+    zIndex: 1000,
     left: 16,
     right: 16,
     flexDirection: 'row',

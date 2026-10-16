@@ -7,7 +7,7 @@
 import React, { useEffect } from 'react';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { ActivityIndicator, View, Platform } from 'react-native';
+import { Platform } from 'react-native';
 
 import BottomTabs from './BottomTabs';
 import { navigationRef } from './navigationRef';
@@ -31,6 +31,7 @@ import LevelUpCelebration from '../components/profile/LevelUpCelebration';
 import ActivityFeedModal from '../components/social/ActivityFeedModal';
 import WeightReminderCheck from '../components/stats/WeightReminderCheck';
 import LobbyInviteCheck from '../components/workouts/LobbyInviteCheck';
+import BootScreen from '../components/common/BootScreen';
 
 import LoginScreen             from '../screens/Auth/LoginScreen';
 import RegisterScreen          from '../screens/Auth/RegisterScreen';
@@ -71,17 +72,6 @@ function MainApp() {
   );
 }
 
-function LoadingScreen() {
-  return (
-    <View
-      style={{ flex: 1, backgroundColor: Colors.backgroundDeep, justifyContent: 'center', alignItems: 'center' }}
-      accessibilityLabel="Chargement d'Athly"
-    >
-      <ActivityIndicator size="large" color={Colors.primary} />
-    </View>
-  );
-}
-
 export default function AppNavigator() {
   const { userToken, isLoading } = useAuth();
 
@@ -109,7 +99,7 @@ export default function AppNavigator() {
     })();
   }, [userToken]);
 
-  if (isLoading) return <LoadingScreen />;
+  if (isLoading) return <BootScreen />;
 
   return (
     <NavigationContainer
@@ -117,7 +107,7 @@ export default function AppNavigator() {
       theme={navTheme}
       linking={linking}
       documentTitle={documentTitle}
-      fallback={<LoadingScreen />}
+      fallback={<BootScreen />}
     >
       {/* key : à chaque connexion / déconnexion, tous les contextes repartent de
           zéro et relisent les données locales du compte actif. Aucune donnée

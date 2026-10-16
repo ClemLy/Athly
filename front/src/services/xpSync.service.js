@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import API from '../api/api';
+import { getToken } from '../utils/authStorage';
 
 // ─── Synchronisation XP locale → backend (Section X) ───────────────────────────
 // L'app reste local-first pour l'XP (AsyncStorage, réactif, jamais bloqué par
@@ -19,9 +20,9 @@ import API from '../api/api';
 const XP_SYNCED_FLAG_KEY = 'athly:xp:isXpSynced:v1';
 
 // Garde en mémoire (pas AsyncStorage) la dernière valeur réellement envoyée
-// avec succès cette session — évite de spammer l'API à chaque log ajouté
-// pendant une même séance si l'xp n'a pas bougé entre deux appels.
-let lastSyncedXp = null;
+// avec succès cette session, pour ce compte : évite de spammer l'API à chaque
+// log ajouté pendant une même séance si l'xp n'a pas bougé entre deux appels.
+let lastSynced = null;
 
 /**
  * Pousse `totalXP` (cumul local total, jamais un delta) vers le backend.
@@ -34,11 +35,19 @@ let lastSyncedXp = null;
 export async function syncXp(totalXP) {
   if (!Number.isFinite(totalXP) || totalXP < 0) return null;
   const rounded = Math.round(totalXP);
-  if (rounded === lastSyncedXp) return null; // rien de nouveau depuis le dernier sync réussi
+
+  // Pas connecté (écran de connexion) : rien à synchroniser. Sans ce garde, la
+  // requête partait sans jeton et son 401 pouvait revenir APRÈS la connexion.
+  let token = null;
+  try { token = await getToken(); } catch (_) { /* stockage indisponible */ }
+  if (!token) return null;
+
+  const key = `${token}:${rounded}`;
+  if (key === lastSynced) return null; // rien de nouveau depuis le dernier sync réussi
 
   try {
     const res = await API.post('/users/me/sync-xp', { xp: rounded });
-    lastSyncedXp = rounded;
+    lastSynced = key;
     AsyncStorage.setItem(XP_SYNCED_FLAG_KEY, 'true').catch(() => {});
     return res.data ?? null;
   } catch (_) {

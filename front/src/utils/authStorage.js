@@ -8,18 +8,27 @@ const SESSION_ONLY_KEY = 'athly_session_only';
 // expo-secure-store n'existe pas sur web : fallback localStorage
 const isWeb = Platform.OS === 'web';
 
-export async function saveToken(token) {
-  if (isWeb) { localStorage.setItem(KEY, token); return; }
+// Sur le web, "Rester connecté" décoché range le jeton dans sessionStorage :
+// il survit à un rafraîchissement de la page et disparaît à la fermeture de
+// l'onglet. Coché, il va dans localStorage (persistant).
+export async function saveToken(token, { sessionOnly = false } = {}) {
+  if (isWeb) {
+    const keep = sessionOnly ? sessionStorage : localStorage;
+    const drop = sessionOnly ? localStorage : sessionStorage;
+    drop.removeItem(KEY);
+    keep.setItem(KEY, token);
+    return;
+  }
   await SecureStore.setItemAsync(KEY, token);
 }
 
 export async function getToken() {
-  if (isWeb) return localStorage.getItem(KEY);
+  if (isWeb) return localStorage.getItem(KEY) || sessionStorage.getItem(KEY);
   return await SecureStore.getItemAsync(KEY);
 }
 
 export async function removeToken() {
-  if (isWeb) { localStorage.removeItem(KEY); return; }
+  if (isWeb) { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); return; }
   await SecureStore.deleteItemAsync(KEY);
 }
 

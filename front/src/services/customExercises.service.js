@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createCloudCollection } from './cloudCollection';
 import { resolveMuscleGroup, normalizeId } from '../constants/exerciseFilters';
 
 // CRUD des exercices personnalisés. Persiste dans AsyncStorage sous une clé dédiée.
@@ -53,6 +54,9 @@ async function readAll() {
   }
 }
 
+// Sauvegardé dans le compte (voir cloudCollection.js).
+export const customExercisesCloud = createCloudCollection({ kind: 'customExercises', storageKey: STORAGE_KEY, sortKey: (x) => x.createdAt });
+
 async function writeAll(items) {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
 }
@@ -62,78 +66,84 @@ export async function listCustomExercises() {
 }
 
 export async function addCustomExercise(input) {
-  const all = await readAll();
-  const now = Date.now();
-  const equipment = Array.isArray(input.equipment)
-    ? input.equipment.map((s) => String(s).trim()).filter(Boolean)
-    : [];
-  const targetMuscle = String(input.targetMuscle || '').trim();
-  const targetMuscleGroup = input.targetMuscleGroup || deriveGroup(targetMuscle);
-  const secondaryMuscles = Array.isArray(input.secondaryMuscles)
-    ? input.secondaryMuscles.map((s) => String(s).trim()).filter(Boolean)
-    : [];
-  const item = {
-    id: genId(),
-    name: String(input.name || '').trim(),
-    targetMuscleGroup,
-    targetMuscle,
-    secondaryMuscles,
-    equipment,
-    level: input.level || '',
-    ...deriveEquipFlags(equipment),
-    isCompound: deriveCompound(targetMuscleGroup, secondaryMuscles, input.isCompound),
-    videoUrl: String(input.videoUrl || '').trim(),
-    notes: String(input.notes || '').trim(),
-    isCustom: true,
-    createdAt: now,
-    updatedAt: now,
-  };
-  if (!item.name) throw new Error('Le nom est requis');
-  if (!item.targetMuscle) throw new Error('Le muscle principal est requis');
-  const next = [item, ...all];
-  await writeAll(next);
-  return item;
+  return customExercisesCloud.transaction(async () => {
+    const all = await readAll();
+    const now = Date.now();
+    const equipment = Array.isArray(input.equipment)
+      ? input.equipment.map((s) => String(s).trim()).filter(Boolean)
+      : [];
+    const targetMuscle = String(input.targetMuscle || '').trim();
+    const targetMuscleGroup = input.targetMuscleGroup || deriveGroup(targetMuscle);
+    const secondaryMuscles = Array.isArray(input.secondaryMuscles)
+      ? input.secondaryMuscles.map((s) => String(s).trim()).filter(Boolean)
+      : [];
+    const item = {
+      id: genId(),
+      name: String(input.name || '').trim(),
+      targetMuscleGroup,
+      targetMuscle,
+      secondaryMuscles,
+      equipment,
+      level: input.level || '',
+      ...deriveEquipFlags(equipment),
+      isCompound: deriveCompound(targetMuscleGroup, secondaryMuscles, input.isCompound),
+      videoUrl: String(input.videoUrl || '').trim(),
+      notes: String(input.notes || '').trim(),
+      isCustom: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+    if (!item.name) throw new Error('Le nom est requis');
+    if (!item.targetMuscle) throw new Error('Le muscle principal est requis');
+    const next = [item, ...all];
+    await writeAll(next);
+    return item;
+  });
 }
 
 export async function updateCustomExercise(id, patch) {
-  const all = await readAll();
-  const idx = all.findIndex((x) => x.id === id);
-  if (idx < 0) throw new Error('Exercice introuvable');
-  const equipment = Array.isArray(patch.equipment)
-    ? patch.equipment.map((s) => String(s).trim()).filter(Boolean)
-    : all[idx].equipment;
-  const targetMuscle = patch.targetMuscle !== undefined
-    ? String(patch.targetMuscle).trim()
-    : all[idx].targetMuscle;
-  const targetMuscleGroup = patch.targetMuscleGroup || deriveGroup(targetMuscle);
-  const secondaryMuscles = Array.isArray(patch.secondaryMuscles)
-    ? patch.secondaryMuscles.map((s) => String(s).trim()).filter(Boolean)
-    : all[idx].secondaryMuscles;
-  const updated = {
-    ...all[idx],
-    ...patch,
-    name: patch.name !== undefined ? String(patch.name).trim() : all[idx].name,
-    targetMuscle,
-    targetMuscleGroup,
-    secondaryMuscles,
-    equipment,
-    ...deriveEquipFlags(equipment),
-    isCompound: deriveCompound(targetMuscleGroup, secondaryMuscles, patch.isCompound),
-    isCustom: true,
-    updatedAt: Date.now(),
-  };
-  if (!updated.name) throw new Error('Le nom est requis');
-  if (!updated.targetMuscle) throw new Error('Le muscle principal est requis');
-  const next = [...all];
-  next[idx] = updated;
-  await writeAll(next);
-  return updated;
+  return customExercisesCloud.transaction(async () => {
+    const all = await readAll();
+    const idx = all.findIndex((x) => x.id === id);
+    if (idx < 0) throw new Error('Exercice introuvable');
+    const equipment = Array.isArray(patch.equipment)
+      ? patch.equipment.map((s) => String(s).trim()).filter(Boolean)
+      : all[idx].equipment;
+    const targetMuscle = patch.targetMuscle !== undefined
+      ? String(patch.targetMuscle).trim()
+      : all[idx].targetMuscle;
+    const targetMuscleGroup = patch.targetMuscleGroup || deriveGroup(targetMuscle);
+    const secondaryMuscles = Array.isArray(patch.secondaryMuscles)
+      ? patch.secondaryMuscles.map((s) => String(s).trim()).filter(Boolean)
+      : all[idx].secondaryMuscles;
+    const updated = {
+      ...all[idx],
+      ...patch,
+      name: patch.name !== undefined ? String(patch.name).trim() : all[idx].name,
+      targetMuscle,
+      targetMuscleGroup,
+      secondaryMuscles,
+      equipment,
+      ...deriveEquipFlags(equipment),
+      isCompound: deriveCompound(targetMuscleGroup, secondaryMuscles, patch.isCompound),
+      isCustom: true,
+      updatedAt: Date.now(),
+    };
+    if (!updated.name) throw new Error('Le nom est requis');
+    if (!updated.targetMuscle) throw new Error('Le muscle principal est requis');
+    const next = [...all];
+    next[idx] = updated;
+    await writeAll(next);
+    return updated;
+  });
 }
 
 export async function removeCustomExercise(id) {
-  const all = await readAll();
-  const next = all.filter((x) => x.id !== id);
-  await writeAll(next);
+  return customExercisesCloud.transaction(async () => {
+    const all = await readAll();
+    const next = all.filter((x) => x.id !== id);
+    await writeAll(next);
+  });
 }
 
 export async function clearCustomExercises() {

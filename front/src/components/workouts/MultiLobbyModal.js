@@ -12,6 +12,7 @@ import {
 import { useMyId } from '../../hooks/useMyId';
 import { getErrorMessage } from '../../utils/errorMessages';
 import UserAvatar from '../social/UserAvatar';
+import { SkeletonRows } from '../common/Skeleton';
 
 const POLL_MS = 3000;
 const INVITE_COOLDOWN_MS = 30000;
@@ -207,7 +208,7 @@ export default function MultiLobbyModal({
         </View>
 
         {loading ? (
-          <View style={styles.center}><ActivityIndicator size="large" color={Colors.primary} /></View>
+          <SkeletonRows count={3} avatar={44} style={styles.skeleton} label="Préparation du salon" />
         ) : error ? (
           <View style={styles.center}>
             <Ionicons name="alert-circle-outline" size={40} color={Colors.textMuted} />
@@ -378,6 +379,7 @@ export default function MultiLobbyModal({
 }
 
 const styles = StyleSheet.create({
+  skeleton: { paddingHorizontal: 20, paddingTop: 24 },
   root: { flex: 1, backgroundColor: Colors.bgAbyss },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 8 },
   closeBtn: {

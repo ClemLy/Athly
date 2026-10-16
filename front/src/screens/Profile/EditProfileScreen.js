@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   StatusBar,
+  useWindowDimensions,
 } from 'react-native';
 
 import { Colors } from '../../constants/theme';
@@ -40,7 +41,7 @@ function normalizeObjectif(val) {
 // vide : on n'invente pas de sexe ou d'objectif à la place de l'utilisateur.
 function formFromUser(user) {
   return {
-    name:          user?.name || '',
+    pseudo:        user?.pseudo || user?.name || '',
     poids:         user?.poids?.toString() || '',
     taille:        user?.taille?.toString() || '',
     poidsCible:    user?.poidsCible?.toString() || '',
@@ -59,6 +60,13 @@ export default function EditProfileScreen({ navigation }) {
   const savedRef = useRef(false);
   const [leaveAction, setLeaveAction] = useState(null);
 
+  // Ouvert directement (lien, rechargement de la page) : le profil n'est pas
+  // encore chargé, on le demande pour ne pas afficher un formulaire vide.
+  useEffect(() => {
+    if (!user) refetchUser();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Synchronise le formulaire si le contexte user se met à jour (ex: premier chargement)
   useEffect(() => {
     if (!user) return;
@@ -66,7 +74,7 @@ export default function EditProfileScreen({ navigation }) {
     initialRef.current = JSON.stringify(next);
     setFormData(next);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.name]);
+  }, [user?.pseudo]);
 
   // Quitter avec des modifications non enregistrées demande confirmation.
   const dirty = JSON.stringify(formData) !== initialRef.current;
@@ -90,11 +98,12 @@ export default function EditProfileScreen({ navigation }) {
 
   const handleUpdate = useCallback(async () => {
     // Validation locale (mêmes règles que le serveur) avant envoi
-    const nameVal = formData.name.trim();
+    const nameVal = formData.pseudo.trim();
     const errs = {};
-    if (!nameVal) errs.name = 'Le pseudo est obligatoire.';
-    else if (nameVal.length < 2) errs.name = 'Le pseudo doit faire au moins 2 caractères.';
-    else if (nameVal.length > 30) errs.name = 'Le pseudo ne peut pas dépasser 30 caractères.';
+    if (!nameVal) errs.pseudo = 'Le pseudo est obligatoire.';
+    else if (nameVal.length < 2) errs.pseudo = 'Le pseudo doit faire au moins 2 caractères.';
+    else if (nameVal.length > 30) errs.pseudo = 'Le pseudo ne peut pas dépasser 30 caractères.';
+    else if (/[#<>]/.test(nameVal)) errs.pseudo = 'Le pseudo ne peut pas contenir les caractères # < >.';
 
     // Bornes identiques au serveur (back/validators/user.validator.js)
     const num = (v) => parseFloat(String(v || '').replace(',', '.'));
@@ -126,7 +135,7 @@ export default function EditProfileScreen({ navigation }) {
     const parsedRythme     = parseInt(formData.rythme, 10)                       || null;
 
     const payload = {
-      name: nameVal,
+      pseudo: nameVal,
       ...(formData.sexe          && { sexe:          formData.sexe }),
       ...(formData.niveauSportif && { niveauSportif: formData.niveauSportif }),
       ...(formData.objectif      && { objectif:      formData.objectif.toLowerCase() }),
@@ -177,10 +186,14 @@ export default function EditProfileScreen({ navigation }) {
     }
   }, [refetchUser, showToast]);
 
-  // Bouton "Enregistrer" dans l'en-tête, recréé quand l'état de chargement change
+  // Bouton "Enregistrer" dans l'en-tête, recréé quand l'état de chargement change.
+  // Sur un petit écran (iPhone SE), il déborderait à côté du titre : le bouton
+  // du bas du formulaire suffit.
+  const { width } = useWindowDimensions();
+  const compactHeader = width < 360;
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerRight: () => (
+      headerRight: compactHeader ? () => null : () => (
         <TouchableOpacity accessibilityRole="button"
           accessibilityLabel="Enregistrer le profil"
           onPress={() => handleUpdateRef.current()}
@@ -192,7 +205,7 @@ export default function EditProfileScreen({ navigation }) {
         </TouchableOpacity>
       ),
     });
-  }, [navigation, loading]);
+  }, [navigation, loading, compactHeader]);
 
   return (
     <View style={styles.root}>
@@ -209,11 +222,11 @@ export default function EditProfileScreen({ navigation }) {
         {/* ═══ IDENTITÉ ══════════════════════════════════════════════════════ */}
         <SectionLabel label="Identité" />
         <SettingsGroup>
-          <SettingsRow label="Pseudo" last error={errors.name}>
+          <SettingsRow label="Pseudo" last error={errors.pseudo}>
             <TextInput
-              style={[styles.inlineInput, errors.name && styles.inlineInputError]}
-              value={formData.name}
-              onChangeText={(v) => set('name', v)}
+              style={[styles.inlineInput, errors.pseudo && styles.inlineInputError]}
+              value={formData.pseudo}
+              onChangeText={(v) => set('pseudo', v)}
               accessibilityLabel="Pseudo"
               autoCapitalize="none"
               autoCorrect={false}
@@ -383,7 +396,7 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 16, paddingTop: 8 },
 
   // ── Native header ────────────────────────────────────────────────────────────
-  headerSaveBtn: { marginRight: 4 },
+  headerSaveBtn: { marginRight: 16 },
   headerSaveTxt: { color: Colors.primary, fontSize: 15, fontWeight: '800' },
 
   // ── Section labels (iOS style) ───────────────────────────────────────────────

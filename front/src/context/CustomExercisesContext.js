@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import {
   listCustomExercises,
+  customExercisesCloud,
   addCustomExercise,
   updateCustomExercise,
   removeCustomExercise,
@@ -25,6 +26,10 @@ export function CustomExercisesProvider({ children }) {
     try {
       const list = await listCustomExercises();
       setItems(list);
+      // Nouvel appareil : rien en local, on attend la sauvegarde du compte.
+      if (list.length > 0) setLoading(false);
+      const merged = await customExercisesCloud.pullAndMerge();
+      if (merged?.changed) setItems(await listCustomExercises());
     } catch (e) {
       setError(getErrorMessage(e, 'Tes données n\'ont pas pu être chargées.'));
     } finally {

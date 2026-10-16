@@ -6,6 +6,14 @@ const Joi = require('joi');
  */
 const userSchemas = {
   updateProfile: Joi.object({
+    // Mêmes règles qu'à l'inscription (pas de "#", séparateur du tag Pseudo#1234)
+    pseudo: Joi.string().trim().min(2).max(30).pattern(/^[^#<>]+$/).pattern(/^[\p{L}\p{N}\p{P}\p{S}\p{Zs}]+$/u, "printable").messages({
+      "string.min":          "Le pseudo doit contenir au moins 2 caractères.",
+      "string.max":          "Le pseudo ne peut pas dépasser 30 caractères.",
+      "string.pattern.base": "Le pseudo ne peut pas contenir les caractères # < >.",
+      "string.pattern.name": "Le pseudo contient des caractères non autorisés.",
+      "string.empty":        "Le pseudo est obligatoire.",
+    }),
     name: Joi.string().trim().min(2).max(30),
     age: Joi.number().min(12).max(100),
     sexe: Joi.string().valid("H", "F", "Autre"),
