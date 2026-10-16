@@ -19,6 +19,7 @@ import EmberParticles       from '../../components/profile/EmberParticles';
 import AchievementShowcase  from '../../components/profile/AchievementShowcase';
 import FriendShowcaseGrid   from '../../components/profile/FriendShowcaseGrid';
 import PersonalRecordsList  from '../../components/profile/PersonalRecordsList';
+import ProfileSkeleton      from '../../components/profile/ProfileSkeleton';
 import { resolveExerciseMeta } from '../../data/majorExercises';
 import { getFriendshipTitle } from '../../data/friendshipTitles';
 import { getErrorMessage } from '../../utils/errorMessages';
@@ -127,8 +128,26 @@ export default function FriendProfileScreen({ route, navigation }) {
       <View style={styles.root}>
         <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
         <LinearGradient colors={buildBgGradient(false, false, false)} style={StyleSheet.absoluteFill} pointerEvents="none" />
-        <View style={[styles.centered, { paddingTop: topPad }]}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+        <View style={[styles.scrollContent, { paddingTop: topPad }]}>
+          <ProfileSkeleton
+            tiles={2}
+            header={(
+              <View style={styles.header}>
+                <TouchableOpacity
+                  accessibilityLabel="Retour"
+                  accessibilityRole="button"
+                  style={styles.backBtn}
+                  onPress={() => navigation.goBack()}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">
+                  {pseudo ? `Profil de ${pseudo}` : 'Profil'}
+                </Text>
+              </View>
+            )}
+          />
         </View>
       </View>
     );
@@ -333,7 +352,6 @@ const styles = StyleSheet.create({
   root:   { flex: 1, backgroundColor: Colors.bgAbyss },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
   headerTitle: { flex: 1, color: Colors.textPrimary, fontSize: 18, fontWeight: '800' },

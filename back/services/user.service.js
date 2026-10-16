@@ -18,6 +18,23 @@ function userNotFound() {
 /**
  * Service gérant la logique liée aux utilisateurs (profil, progression, XP).
  */
+// ─── Plafond de vraisemblance de l'XP synchronisée ───────────────────────────
+// L'XP est calculée sur le téléphone (local-first) : sans garde, une seule
+// requête suffisait à s'offrir le niveau 200 et la tête du classement. Le
+// plafond grandit avec l'ancienneté du compte, à un rythme qu'aucun joueur
+// réel n'atteint (2 séances XP par jour, quêtes, objets, coupons compris) :
+// un vrai joueur n'est jamais bridé, un compte neuf ne peut pas tricher.
+// Désactivé en développement local pour garder les outils de test.
+const XP_CEILING_PER_DAY = 15000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function plausibleXpCeiling(createdAt, now = Date.now()) {
+  if (require("../config/env").nodeEnv === "development") return Infinity;
+  const created = createdAt ? new Date(createdAt).getTime() : now;
+  const days = Math.max(0, Math.floor((now - created) / DAY_MS));
+  return (days + 1) * XP_CEILING_PER_DAY;
+}
+
 class UserService {
   /**
    * Récupère le profil complet d'un utilisateur sans son mot de passe.
@@ -59,6 +76,22 @@ class UserService {
    * @param {Object} updateData - Les données à modifier (poids, taille, etc.).
    */
   async updateUser(userId, updateData) {
+    // Changement de pseudo : le tag #1234 doit rester unique pour ce pseudo.
+    // On garde le tag actuel s'il est libre, sinon on en tire un nouveau.
+    if (updateData.pseudo) {
+      const current = await User.findById(userId).select("pseudo discriminator").lean();
+      if (!current) throw userNotFound();
+      const samePseudo = String(current.pseudo || "").toLowerCase() === updateData.pseudo.toLowerCase();
+      if (!samePseudo) {
+        const taken = await User.exists({ pseudo: updateData.pseudo, discriminator: current.discriminator, _id: { $ne: userId } })
+          .collation({ locale: "en", strength: 2 });
+        if (taken || !current.discriminator) {
+          const { uniqueDiscriminator } = require("./auth.service");
+          updateData = { ...updateData, discriminator: await uniqueDiscriminator(updateData.pseudo) };
+        }
+      }
+    }
+
     // $set explicite : seuls les champs validés par Joi (user.validator.js) sont modifiés
     const updatedUser = await User.findByIdAndUpdate(userId, { $set: updateData }, {
       returnDocument: "after",
@@ -233,10 +266,11 @@ class UserService {
   async syncXp(userId, submittedXp) {
     const { levelFromXP, getRankForLevel, xpForLevel, MAX_LEVEL } = require('../utils/levelHelpers');
 
-    const user = await User.findById(userId).select('xp level rank');
+    const user = await User.findById(userId).select('xp level rank createdAt');
     if (!user) throw userNotFound();
 
-    const clampedXp = Math.max(0, Math.min(submittedXp, xpForLevel(MAX_LEVEL)));
+    const ceiling = Math.min(xpForLevel(MAX_LEVEL), plausibleXpCeiling(user.createdAt));
+    const clampedXp = Math.max(0, Math.min(submittedXp, ceiling));
     const nextXp = Math.max(user.xp || 0, clampedXp);
 
     let newlyUnlockedTitles = [];
@@ -281,3 +315,5 @@ class UserService {
 }
 
 module.exports = new UserService();
+module.exports.plausibleXpCeiling = plausibleXpCeiling;
+module.exports.XP_CEILING_PER_DAY = XP_CEILING_PER_DAY;

@@ -1,4 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import { Platform } from 'react-native';
 import { getToken, removeToken, saveToken, setSessionOnly, getSessionOnly } from '../utils/authStorage';
 import { setSignOutCallback, purgeApiCache } from '../api/api';
 import { activateAccountScope, userIdFromToken } from '../services/accountScope.service';
@@ -12,7 +13,10 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const bootstrap = async () => {
       try {
-        const sessionOnly = await getSessionOnly();
+        // Session courte sur iOS et Android : elle se termine quand l'app est
+        // fermée. Sur le web, le jeton vit dans sessionStorage et disparaît
+        // tout seul à la fermeture de l'onglet (un rafraîchissement le garde).
+        const sessionOnly = Platform.OS !== 'web' && await getSessionOnly();
         if (sessionOnly) {
           await removeToken();
         } else {
@@ -36,7 +40,7 @@ export const AuthProvider = ({ children }) => {
   const signIn = async (token, rememberMe = true) => {
     // Bascule sur les données locales de ce compte (voir accountScope.service.js)
     await activateAccountScope(userIdFromToken(token));
-    await saveToken(token);
+    await saveToken(token, { sessionOnly: !rememberMe });
     await setSessionOnly(!rememberMe);
     setUserToken(token);
   };

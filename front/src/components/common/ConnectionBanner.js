@@ -4,6 +4,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { subscribeSlowRequests } from '../../api/api';
+import { useAuth } from '../../context/AuthContext';
+
+const TAB_BAR_HEIGHT = 56; // voir navigation/BottomTabs.js
 
 // ─── Bandeau d'état de connexion ──────────────────────────────────────────────
 // Deux situations expliquées en clair, sans bloquer l'écran :
@@ -30,6 +33,7 @@ function useOnline() {
 
 export default function ConnectionBanner() {
   const insets = useSafeAreaInsets();
+  const { userToken } = useAuth();
   const online = useOnline();
   const [slow, setSlow] = useState(false);
   const anim = useRef(new Animated.Value(0)).current;
@@ -58,10 +62,12 @@ export default function ConnectionBanner() {
       accessibilityRole="alert"
       style={[
         s.wrap,
-        { top: insets.top + 8 },
+        // En bas, au-dessus de la barre d'onglets : ne masque ni les titres ni
+        // les boutons d'en-tête, ni les messages (toasts) qui arrivent en haut.
+        { bottom: insets.bottom + (userToken ? TAB_BAR_HEIGHT + 10 : 16) },
         {
           opacity: anim,
-          transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) }],
+          transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
         },
       ]}
     >

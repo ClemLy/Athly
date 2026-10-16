@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   StatusBar,
-  ActivityIndicator,
   TouchableOpacity,
   Animated,
 } from 'react-native';
@@ -46,6 +45,7 @@ import EmberParticles   from '../../components/profile/EmberParticles';
 import StreakBadge      from '../../components/profile/StreakBadge';
 import BorderPicker     from '../../components/profile/BorderPicker';
 import TitlePickerModal from '../../components/profile/TitlePickerModal';
+import ProfileSkeleton  from '../../components/profile/ProfileSkeleton';
 
 
 // Niveaux d'entrée de chaque rang (voir getRank) : sert à annoncer le prochain.
@@ -63,7 +63,7 @@ function buildBgGradient(isGod, isLegend, isElite, isBlood) {
 
 export default function ProfileScreen({ navigation }) {
   const { sessionLogs: logs, activityLogs, totalXP, loading: logsLoading } = useWorkoutLogs();
-  const { user, loading: profileLoading, refetch: refetchUser } = useUser();
+  const { user, loaded: profileLoaded, refetch: refetchUser } = useUser();
   const [borderPickerVisible, setBorderPickerVisible] = useState(false);
   const [titlePickerVisible, setTitlePickerVisible] = useState(false);
   const { shapeId, colorId, selectShape, selectColor } = useAvatarFrame();
@@ -127,12 +127,16 @@ export default function ProfileScreen({ navigation }) {
 
   const insets = useSafeAreaInsets();
 
+  // Prêt dès que l'historique local est lu et que le profil est connu (en
+  // cache ou reçu) : sans ça, l'écran restait noir pendant un démarrage lent
+  // du serveur. En attendant, la silhouette du profil s'affiche.
+  const ready = !logsLoading && (!!user || profileLoaded);
   const opacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (!profileLoading && !logsLoading) {
+    if (ready) {
       Animated.timing(opacity, { toValue: 1, duration: 240, useNativeDriver: true }).start();
     }
-  }, [profileLoading, logsLoading, opacity]);
+  }, [ready, opacity]);
 
   // Rafraîchit l'utilisateur, les trophées mis en avant et les dev settings à chaque focus
   useFocusEffect(
@@ -243,19 +247,19 @@ export default function ProfileScreen({ navigation }) {
     return nextLevel ? `${getRank(nextLevel).name} au niv. ${nextLevel}` : 'Rang maximum atteint';
   }, [level]);
 
-  if (profileLoading && !user && logsLoading) {
+  if (!ready) {
     return (
       <View style={styles.root}>
         <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
         <LinearGradient colors={bgColors} style={StyleSheet.absoluteFill} pointerEvents="none" />
-        <View style={[styles.centered, { paddingTop: topPad }]}>
-          <ActivityIndicator size="large" color={Colors.primary} />
+        <View style={[styles.scrollContent, { paddingTop: topPad }]}>
+          <ProfileSkeleton />
         </View>
       </View>
     );
   }
 
-  const userName    = (user && user.name) || 'Athlète';
+  const userName    = (user && (user.pseudo || user.name)) || 'Athlète';
   const userInitial = userName.charAt(0).toUpperCase();
 
   const onPressRecord = (record) => {
@@ -500,7 +504,6 @@ const styles = StyleSheet.create({
   root:   { flex: 1, backgroundColor: Colors.bgAbyss },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 52 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
   headerTitle: { flex: 1, color: Colors.textPrimary, fontSize: 28, fontWeight: '900', letterSpacing: -0.5 },

@@ -17,6 +17,11 @@ jest.mock('../../api/api', () => ({
   default: { post: (...args) => mockPost(...args) },
 }));
 
+const mockGetToken = jest.fn();
+jest.mock('../../utils/authStorage', () => ({
+  getToken: (...args) => mockGetToken(...args),
+}));
+
 const XP_SYNCED_FLAG_KEY = 'athly:xp:isXpSynced:v1';
 
 describe('xpSync.service — synchronisation XP locale → backend (Section X)', () => {
@@ -29,6 +34,7 @@ describe('xpSync.service — synchronisation XP locale → backend (Section X)',
     jest.resetModules();
     jest.clearAllMocks();
     mockSetItem.mockResolvedValue(undefined);
+    mockGetToken.mockResolvedValue('jeton-test');
     ({ syncXp, retryPendingXpSync } = require('../xpSync.service'));
   });
 
@@ -76,6 +82,23 @@ describe('xpSync.service — synchronisation XP locale → backend (Section X)',
       await syncXp(undefined);
 
       expect(mockPost).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('syncXp — sans session', () => {
+    it("✅ N'appelle pas l'API quand personne n'est connecté", async () => {
+      mockGetToken.mockResolvedValue(null);
+      const result = await syncXp(1200);
+      expect(result).toBeNull();
+      expect(mockPost).not.toHaveBeenCalled();
+    });
+
+    it('✅ Resynchronise la même valeur après un changement de compte', async () => {
+      mockPost.mockResolvedValue({ data: { success: true } });
+      await syncXp(500);
+      mockGetToken.mockResolvedValue('jeton-autre-compte');
+      await syncXp(500);
+      expect(mockPost).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Pressable, TextInput,
-  StatusBar, ActivityIndicator, RefreshControl, Share,
+  StatusBar, RefreshControl, Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -12,6 +12,7 @@ import { useUser } from '../../context/UserContext';
 import { useMyId } from '../../hooks/useMyId';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import { ConfirmModal } from '../../components/common';
+import { SkeletonRows } from '../../components/common/Skeleton';
 import FriendshipLevelUpModal from '../../components/social/FriendshipLevelUpModal';
 import FriendPreviewModal from '../../components/social/FriendPreviewModal';
 import AddFriendModal from '../../components/social/AddFriendModal';
@@ -256,7 +257,7 @@ export default function SocialScreen({ navigation }) {
       </View>
 
       {loading ? (
-        <View style={styles.loadingBox}><ActivityIndicator size="large" color={Colors.primary} /></View>
+        <SkeletonRows count={6} style={styles.loadingList} label="Chargement de tes amis" />
       ) : (
         <ScrollView
           contentContainerStyle={styles.content}
@@ -618,7 +619,7 @@ function XpLeaderboard({ period }) {
     return () => { cancelled = true; };
   }, [period]);
 
-  if (rows === null) return <View style={styles.inlineLoading}><ActivityIndicator color={Colors.primary} /></View>;
+  if (rows === null) return <SkeletonRows count={5} avatar={36} label="Chargement du classement" />;
   if (error) return <Text style={styles.emptySmall}>Classement indisponible pour le moment.</Text>;
 
   const valueOf = (e) => (period === 'week' ? (e.weeklyXp ?? 0) : (e.user.xp ?? 0));
@@ -743,7 +744,7 @@ function RecordsLeaderboard() {
       />
 
       {loading ? (
-        <View style={styles.inlineLoading}><ActivityIndicator color={Colors.primary} /></View>
+        <SkeletonRows count={4} avatar={36} label="Chargement des records" />
       ) : rows.length === 0 ? (
         <View style={[styles.card, styles.emptyCardSmall]}>
           <Ionicons name="barbell-outline" size={22} color={Colors.textMuted} />
@@ -1133,7 +1134,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: Colors.cardDeep, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
   },
-  loadingBox: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingList: { paddingHorizontal: 16, paddingTop: 16 },
   content: { paddingHorizontal: 16 },
   pressed: { opacity: 0.75 },
 
@@ -1249,7 +1250,6 @@ const styles = StyleSheet.create({
   emptyCardSmall: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   emptyBodySmall: { flex: 1, color: Colors.textSecondary, fontSize: 14, lineHeight: 20 },
   emptySmall: { color: Colors.textMuted, fontSize: 14, marginTop: 8, textAlign: 'center' },
-  inlineLoading: { paddingVertical: 30, alignItems: 'center' },
 
   // ── Classement ──
   pillRow: {

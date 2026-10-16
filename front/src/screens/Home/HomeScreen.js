@@ -32,6 +32,7 @@ import HeroSessionCard from '../../components/home/HeroSessionCard';
 import WeekCard from '../../components/home/WeekCard';
 import DailyQuestsCard from '../../components/home/DailyQuestsCard';
 import RecoveryRitualsCard from '../../components/home/RecoveryRitualsCard';
+import { SkeletonGroup, Skeleton } from '../../components/common/Skeleton';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 import { useDevSettings } from '../../hooks';
@@ -244,7 +245,14 @@ export default function HomeScreen({ navigation }) {
         />
 
         <Animated.View style={{ opacity }}>
-          {loading ? null : isFirstTime ? (
+          {loading ? (
+            <SkeletonGroup style={styles.skeleton} label="Chargement de ton accueil">
+              <Skeleton h={190} r={22} />
+              <Skeleton h={128} r={18} />
+              <Skeleton w={130} h={14} />
+              <Skeleton h={150} r={18} />
+            </SkeletonGroup>
+          ) : isFirstTime ? (
             <EmptyHomeState
               onStart={startRecommended}
               onBrowseTemplates={goToTemplates}
@@ -421,6 +429,7 @@ const styles = StyleSheet.create({
   },
 
   activeBlock: {},
+  skeleton: { gap: 16 },
   section: {
     marginTop: 24,
   },

@@ -19,6 +19,7 @@ import {
 import { ConfirmModal } from '../../components/common';
 import { InfoModal } from '../../components/common';
 import { getErrorMessage } from '../../utils/errorMessages';
+import { SkeletonRows } from '../../components/common/Skeleton';
 
 export default function CustomExercisesScreen({ navigation }) {
   const { items, loading, remove } = useCustomExercises();
@@ -93,9 +94,7 @@ export default function CustomExercisesScreen({ navigation }) {
       </View>
 
       {loading ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyText}>Chargement…</Text>
-        </View>
+        <SkeletonRows count={5} avatar={44} style={styles.skeleton} label="Chargement de tes exercices" />
       ) : items.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="library-outline" size={42} color={Colors.textMuted} />
@@ -141,6 +140,7 @@ export default function CustomExercisesScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
+  skeleton: { paddingHorizontal: 16, paddingTop: 12 },
   safe: { flex: 1, backgroundColor: Colors.background },
   header: {
     flexDirection: 'row',

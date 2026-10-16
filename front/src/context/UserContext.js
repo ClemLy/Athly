@@ -6,6 +6,9 @@ const UserContext = createContext(null);
 export function UserProvider({ children }) {
   const [user,    setUser]    = useState(null);
   const [loading, setLoading] = useState(false);
+  // Vrai dès qu'une première réponse (ou un échec) est arrivée : distingue
+  // "pas encore chargé" (silhouette) de "chargement impossible" (message).
+  const [loaded,  setLoaded]  = useState(false);
 
   const refetch = useCallback(async () => {
     setLoading(true);
@@ -21,11 +24,12 @@ export function UserProvider({ children }) {
       if (!error?.isSessionExpired && error?.status === 404) triggerSignOut();
     } finally {
       setLoading(false);
+      setLoaded(true);
     }
   }, []);
 
   return (
-    <UserContext.Provider value={{ user, setUser, loading, refetch }}>
+    <UserContext.Provider value={{ user, setUser, loading, loaded, refetch }}>
       {children}
     </UserContext.Provider>
   );

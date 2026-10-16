@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { useQuests } from '../../context/QuestContext';
+import { SkeletonGroup, Skeleton } from '../common/Skeleton';
 import { QUEST_XP, BONUS_XP } from '../../services';
 
 export default function DailyQuestsCard() {
@@ -10,9 +11,21 @@ export default function DailyQuestsCard() {
 
   if (loading) {
     return (
-      <View style={styles.card}>
-        <ActivityIndicator size="small" color={Colors.primary} />
-      </View>
+      <SkeletonGroup style={[styles.card, styles.skeleton]} label="Chargement des quêtes du jour">
+        <View style={styles.skeletonHead}>
+          <Skeleton w={110} h={11} />
+          <Skeleton w={40} h={11} />
+        </View>
+        {[0, 1, 2].map((i) => (
+          <View key={i} style={styles.skeletonRow}>
+            <Skeleton w={28} h={28} r={9} />
+            <View style={styles.skeletonText}>
+              <Skeleton w={i === 1 ? '55%' : '70%'} h={12} />
+              <Skeleton h={5} r={3} />
+            </View>
+          </View>
+        ))}
+      </SkeletonGroup>
     );
   }
 
@@ -114,6 +127,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
   },
+  skeleton: { gap: 16 },
+  skeletonHead: { flexDirection: 'row', justifyContent: 'space-between' },
+  skeletonRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  skeletonText: { flex: 1, gap: 8 },
   cardAllDone: {
     borderColor: Colors.primary + '40',
     shadowColor: Colors.primary,

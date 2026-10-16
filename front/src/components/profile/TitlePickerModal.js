@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import { getTitles, equipTitle, RARITY_META, haptics } from '../../services';
 import { titleIcon } from '../../data/titleIcons';
+import { SkeletonRows } from '../common/Skeleton';
 
 // ─── TitlePickerModal ─────────────────────────────────────────────────────────
 // Liste des titres : ceux débloqués s'équipent d'un tap, ceux à débloquer
@@ -93,7 +94,7 @@ export default function TitlePickerModal({ visible, onClose }) {
           ) : null}
 
           {status === 'loading' ? (
-            <ActivityIndicator size="small" color={Colors.primary} style={s.loader} />
+            <SkeletonRows count={5} avatar={34} style={s.loader} label="Chargement des titres" />
           ) : status === 'error' ? (
             <View style={s.stateBox}>
               <Text style={s.stateTxt}>Les titres n'ont pas pu être chargés.</Text>
@@ -233,7 +234,7 @@ const s = StyleSheet.create({
   },
   errorTxt: { flex: 1, color: Colors.textPrimary, fontSize: 13, lineHeight: 18 },
 
-  loader: { marginVertical: 32 },
+  loader: { marginVertical: 8 },
   stateBox: { alignItems: 'center', paddingVertical: 28, gap: 12 },
   stateTxt: { color: Colors.textSecondary, fontSize: 14 },
   retryBtn: { minHeight: 44, paddingHorizontal: 20, borderRadius: 12, justifyContent: 'center', backgroundColor: Colors.primary },

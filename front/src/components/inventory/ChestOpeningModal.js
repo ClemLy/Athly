@@ -34,11 +34,15 @@ const STAGE_H = 360;
 const HINGE_Y = 250;   // charnière du couvercle dans la scène (centre du coffre)
 const ITEM_Y = 118;    // centre de l'objet révélé
 const MEDAL = 132;
+const PANEL_H = 340;   // texte + boutons + marges, sous la scène
 
 export default function ChestOpeningModal({ visible, drawnItem, chestsLeft = 0, onClose, onOpenAnother }) {
   const reduced = useReducedMotion();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const W = Math.min(width - 48, 420);
+  // Petits écrans (iPhone SE, 568 px de haut) : la scène rétrécit pour que le
+  // texte et les deux boutons restent visibles sous l'objet révélé.
+  const k = Math.min(1, Math.max(0.6, (height - PANEL_H) / STAGE_H));
   const [done, setDone] = useState(false);
 
   const rarityKey = drawnItem?.rarity in STAGING ? drawnItem.rarity : 'common';
@@ -169,127 +173,136 @@ export default function ChestOpeningModal({ visible, drawnItem, chestsLeft = 0, 
 
   return (
     <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={done ? onClose : skip}>
-      <Pressable
-        style={styles.backdrop}
-        onPress={done ? undefined : skip}
-        accessible={!done}
-        accessibilityRole={done ? undefined : 'button'}
-        accessibilityLabel={done ? undefined : 'Ouverture du coffre. Touche pour voir le résultat.'}
-      >
-        <View style={[styles.stage, { width: W }]} pointerEvents="none">
-          {/* Halo radial */}
-          <Animated.View style={[styles.abs, { left: W / 2 - 300, top: ITEM_Y + 40 - 300, opacity: a.bloom }]}>
-            <Glow size={600} color={light} />
-          </Animated.View>
-
-          {/* Rayons (épique et légendaire) */}
-          {stage.rays ? (
+      <View style={styles.backdrop}>
+        {/* Zone "toucher pour passer" SOUS la scène (et non autour) : elle ne
+            contient pas les boutons du résultat, pas de bouton imbriqué. */}
+        {!done ? (
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={skip}
+            accessibilityRole="button"
+            accessibilityLabel="Ouverture du coffre. Touche pour voir le résultat."
+          />
+        ) : null}
+        <View style={{ width: W, height: STAGE_H * k }} pointerEvents="none">
+          <View
+            style={[styles.stage, { width: W }, k < 1 && { marginTop: -STAGE_H * (1 - k) / 2, transform: [{ scale: k }] }]}
+            pointerEvents="none"
+          >
+            {/* Halo radial */}
+            <Animated.View style={[styles.abs, { left: W / 2 - 300, top: ITEM_Y + 40 - 300, opacity: a.bloom }]}>
+              <Glow size={600} color={light} />
+            </Animated.View>
+  
+            {/* Rayons (épique et légendaire) */}
+            {stage.rays ? (
+              <Animated.View
+                style={[styles.abs, {
+                  left: W / 2 - 230, top: ITEM_Y - 230,
+                  opacity: a.item.interpolate({ inputRange: [0, 1], outputRange: [0, 0.9] }),
+                  transform: [{ rotate: a.rays.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }],
+                }]}
+              >
+                <Rays size={460} color={light} count={rarityKey === 'legendary' ? 14 : 10} />
+              </Animated.View>
+            ) : null}
+  
+            {/* Lueur derrière le coffre pendant la charge */}
+            <Animated.View style={[styles.abs, { left: W / 2 - 180, top: HINGE_Y - 180, opacity: a.leak }]}>
+              <Glow size={360} color={light} />
+            </Animated.View>
+  
+            {/* Faisceau qui jaillit du coffre (ancré en bas) */}
             <Animated.View
               style={[styles.abs, {
-                left: W / 2 - 230, top: ITEM_Y - 230,
-                opacity: a.item.interpolate({ inputRange: [0, 1], outputRange: [0, 0.9] }),
-                transform: [{ rotate: a.rays.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] }) }],
+                left: W / 2 - 100, top: 0, width: 200, height: HINGE_Y,
+                opacity: a.beam.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 1, 0.85] }),
+                transform: [
+                  { translateY: a.beam.interpolate({ inputRange: [0, 1], outputRange: [HINGE_Y / 2, 0] }) },
+                  { scaleY: a.beam.interpolate({ inputRange: [0, 1], outputRange: [0.01, 1] }) },
+                ],
               }]}
             >
-              <Rays size={460} color={light} count={rarityKey === 'legendary' ? 14 : 10} />
+              <Beam width={200} height={HINGE_Y} color={light} />
             </Animated.View>
-          ) : null}
-
-          {/* Lueur derrière le coffre pendant la charge */}
-          <Animated.View style={[styles.abs, { left: W / 2 - 180, top: HINGE_Y - 180, opacity: a.leak }]}>
-            <Glow size={360} color={light} />
-          </Animated.View>
-
-          {/* Faisceau qui jaillit du coffre (ancré en bas) */}
-          <Animated.View
-            style={[styles.abs, {
-              left: W / 2 - 100, top: 0, width: 200, height: HINGE_Y,
-              opacity: a.beam.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 1, 0.85] }),
-              transform: [
-                { translateY: a.beam.interpolate({ inputRange: [0, 1], outputRange: [HINGE_Y / 2, 0] }) },
-                { scaleY: a.beam.interpolate({ inputRange: [0, 1], outputRange: [0.01, 1] }) },
-              ],
-            }]}
-          >
-            <Beam width={200} height={HINGE_Y} color={light} />
-          </Animated.View>
-
-          {/* Coffre */}
-          <Animated.View
-            style={[styles.abs, {
-              left: chestLeft, top: chestTop, width: CHEST, height: CHEST,
-              opacity: Animated.multiply(a.enter, a.chestOut.interpolate({ inputRange: [0, 1], outputRange: [1, 0] })),
-              transform: [
-                { translateY: a.enter.interpolate({ inputRange: [0, 1], outputRange: [-36, 0] }) },
-                { translateY: a.chestOut.interpolate({ inputRange: [0, 1], outputRange: [0, 70] }) },
-                { scale: a.chestOut.interpolate({ inputRange: [0, 1], outputRange: [1, 0.9] }) },
-              ],
-            }]}
-          >
-            <View style={StyleSheet.absoluteFill}><ChestShadow size={CHEST} /></View>
-            <Animated.View style={[StyleSheet.absoluteFill, {
-              transform: [
-                { translateY: 60 },
-                { rotate: a.tilt.interpolate({ inputRange: [-10, 10], outputRange: ['-10deg', '10deg'] }) },
-                { translateY: -60 },
-              ],
-            }]}>
-              <View style={StyleSheet.absoluteFill}><ChestBody size={CHEST} /></View>
-              <Animated.View style={[StyleSheet.absoluteFill, { opacity: a.lid }]}>
-                <ChestInterior size={CHEST} color={light} />
-              </Animated.View>
-              <Animated.View style={[StyleSheet.absoluteFill, { opacity: a.leak }]}>
-                <ChestLeak size={CHEST} color={light} />
-              </Animated.View>
+  
+            {/* Coffre */}
+            <Animated.View
+              style={[styles.abs, {
+                left: chestLeft, top: chestTop, width: CHEST, height: CHEST,
+                opacity: Animated.multiply(a.enter, a.chestOut.interpolate({ inputRange: [0, 1], outputRange: [1, 0] })),
+                transform: [
+                  { translateY: a.enter.interpolate({ inputRange: [0, 1], outputRange: [-36, 0] }) },
+                  { translateY: a.chestOut.interpolate({ inputRange: [0, 1], outputRange: [0, 70] }) },
+                  { scale: a.chestOut.interpolate({ inputRange: [0, 1], outputRange: [1, 0.9] }) },
+                ],
+              }]}
+            >
+              <View style={StyleSheet.absoluteFill}><ChestShadow size={CHEST} /></View>
               <Animated.View style={[StyleSheet.absoluteFill, {
                 transform: [
-                  { perspective: 700 },
-                  { rotateX: a.lid.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '-78deg'] }) },
+                  { translateY: 60 },
+                  { rotate: a.tilt.interpolate({ inputRange: [-10, 10], outputRange: ['-10deg', '10deg'] }) },
+                  { translateY: -60 },
                 ],
               }]}>
-                <ChestLid size={CHEST} />
+                <View style={StyleSheet.absoluteFill}><ChestBody size={CHEST} /></View>
+                <Animated.View style={[StyleSheet.absoluteFill, { opacity: a.lid }]}>
+                  <ChestInterior size={CHEST} color={light} />
+                </Animated.View>
+                <Animated.View style={[StyleSheet.absoluteFill, { opacity: a.leak }]}>
+                  <ChestLeak size={CHEST} color={light} />
+                </Animated.View>
+                <Animated.View style={[StyleSheet.absoluteFill, {
+                  transform: [
+                    { perspective: 700 },
+                    { rotateX: a.lid.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '-78deg'] }) },
+                  ],
+                }]}>
+                  <ChestLid size={CHEST} />
+                </Animated.View>
               </Animated.View>
             </Animated.View>
-          </Animated.View>
-
-          {/* Onde de choc */}
-          {stage.shock ? (
-            <Animated.View style={[styles.abs, styles.shock, {
-              left: W / 2 - 80, top: ITEM_Y - 80, borderColor: light,
-              opacity: a.shock.interpolate({ inputRange: [0, 0.1, 1], outputRange: [0, 0.8, 0] }),
-              transform: [{ scale: a.shock.interpolate({ inputRange: [0, 1], outputRange: [0.3, 2.6] }) }],
-            }]} />
-          ) : null}
-
-          {/* Étincelles qui montent */}
-          {sparks.slice(0, stage.sparks).map((v, i) => (
-            <Animated.View
-              key={i}
-              style={[styles.abs, {
-                left: W / 2 + sparkSeeds[i].x, top: HINGE_Y - 20,
-                opacity: v.interpolate({ inputRange: [0, 0.2, 0.7, 1], outputRange: [0, 1, 0.8, 0] }),
-                transform: [
-                  { translateY: v.interpolate({ inputRange: [0, 1], outputRange: [0, -200] }) },
-                  { scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.1] }) },
-                ],
-              }]}
-            >
-              <Sparkle size={sparkSeeds[i].size * 2} color={i % 3 === 0 ? '#FFFFFF' : light} />
+  
+            {/* Onde de choc */}
+            {stage.shock ? (
+              <Animated.View style={[styles.abs, styles.shock, {
+                left: W / 2 - 80, top: ITEM_Y - 80, borderColor: light,
+                opacity: a.shock.interpolate({ inputRange: [0, 0.1, 1], outputRange: [0, 0.8, 0] }),
+                transform: [{ scale: a.shock.interpolate({ inputRange: [0, 1], outputRange: [0.3, 2.6] }) }],
+              }]} />
+            ) : null}
+  
+            {/* Étincelles qui montent */}
+            {sparks.slice(0, stage.sparks).map((v, i) => (
+              <Animated.View
+                key={i}
+                style={[styles.abs, {
+                  left: W / 2 + sparkSeeds[i].x, top: HINGE_Y - 20,
+                  opacity: v.interpolate({ inputRange: [0, 0.2, 0.7, 1], outputRange: [0, 1, 0.8, 0] }),
+                  transform: [
+                    { translateY: v.interpolate({ inputRange: [0, 1], outputRange: [0, -200] }) },
+                    { scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.1] }) },
+                  ],
+                }]}
+              >
+                <Sparkle size={sparkSeeds[i].size * 2} color={i % 3 === 0 ? '#FFFFFF' : light} />
+              </Animated.View>
+            ))}
+  
+            {/* Objet révélé */}
+            <Animated.View style={[styles.abs, {
+              left: W / 2 - MEDAL / 2, top: ITEM_Y - MEDAL / 2,
+              opacity: a.item.interpolate({ inputRange: [0, 0.25, 1], outputRange: [0, 1, 1] }),
+              transform: [
+                { translateY: a.item.interpolate({ inputRange: [0, 1], outputRange: [HINGE_Y - ITEM_Y, 0] }) },
+                { translateY: a.float.interpolate({ inputRange: [0, 1], outputRange: [0, -7] }) },
+                { scale: a.item.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }) },
+              ],
+            }]}>
+              <Medallion icon={item?.icon ?? 'help-circle-outline'} color={light} />
             </Animated.View>
-          ))}
-
-          {/* Objet révélé */}
-          <Animated.View style={[styles.abs, {
-            left: W / 2 - MEDAL / 2, top: ITEM_Y - MEDAL / 2,
-            opacity: a.item.interpolate({ inputRange: [0, 0.25, 1], outputRange: [0, 1, 1] }),
-            transform: [
-              { translateY: a.item.interpolate({ inputRange: [0, 1], outputRange: [HINGE_Y - ITEM_Y, 0] }) },
-              { translateY: a.float.interpolate({ inputRange: [0, 1], outputRange: [0, -7] }) },
-              { scale: a.item.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }) },
-            ],
-          }]}>
-            <Medallion icon={item?.icon ?? 'help-circle-outline'} color={light} />
-          </Animated.View>
+          </View>
         </View>
 
         {/* Texte et actions */}
@@ -300,6 +313,8 @@ export default function ChestOpeningModal({ visible, drawnItem, chestsLeft = 0, 
             transform: [{ translateY: a.text.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
           }]}
           accessibilityViewIsModal={done}
+          accessibilityElementsHidden={!done}
+          importantForAccessibility={done ? 'auto' : 'no-hide-descendants'}
         >
           <Text style={[styles.rarityLabel, { color: tone }]}>{rarity.label}</Text>
           <Text style={styles.itemName} accessibilityRole="header">{item?.name ?? drawnItem.itemType}</Text>
@@ -330,8 +345,8 @@ export default function ChestOpeningModal({ visible, drawnItem, chestsLeft = 0, 
           ) : null}
         </Animated.View>
 
-        {!done ? <Text style={styles.hint}>Touche pour passer</Text> : null}
-      </Pressable>
+        {!done ? <Text style={styles.hint} pointerEvents="none">Touche pour passer</Text> : null}
+      </View>
     </Modal>
   );
 }

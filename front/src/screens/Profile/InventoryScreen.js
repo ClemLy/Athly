@@ -23,6 +23,7 @@ import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 import { getErrorMessage } from '../../utils/errorMessages';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SkeletonGroup, Skeleton } from '../../components/common/Skeleton';
 
 const MIN_LEVEL_FOR_CHEST = 11;
 const RARITY_ORDER = ['unique', 'legendary', 'epic', 'rare', 'common'];
@@ -53,7 +54,7 @@ const CLAIM_EQUIP_ACTION = {
 
 export default function InventoryScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const { user, refetch } = useUser();
+  const { user, loaded, refetch } = useUser();
   const { addBonusXp, totalXP } = useWorkoutLogs();
   const { showToast } = useToast();
   const { colorId, selectShape, selectColor } = useAvatarFrame();
@@ -210,16 +211,39 @@ export default function InventoryScreen({ navigation }) {
         {/* marginTop porté par le wrapper (et non la carte) pour que le
             spotlight du tutoriel épouse pile la carte, sans décalage vertical. */}
         <View ref={chestRef} onLayout={onChestLayout} collapsable={false} style={styles.chestSpot}>
-          <ChestCard
-            count={chestCount}
-            locked={chestLocked}
-            busy={busy}
-            minutesToward={minutesToward}
-            onOpen={handleOpenChest}
-          />
+          {user ? (
+            <ChestCard
+              count={chestCount}
+              locked={chestLocked}
+              busy={busy}
+              minutesToward={minutesToward}
+              onOpen={handleOpenChest}
+            />
+          ) : !loaded ? (
+            <SkeletonGroup style={styles.skeletonChest} label="Chargement de ton inventaire">
+              <View style={styles.skeletonChestTop}>
+                <Skeleton w={64} h={64} r={16} />
+                <View style={{ flex: 1, gap: 10 }}>
+                  <Skeleton w="60%" h={16} r={6} />
+                  <Skeleton w="85%" h={11} />
+                </View>
+              </View>
+              <Skeleton h={52} r={14} />
+            </SkeletonGroup>
+          ) : (
+            <View style={styles.loadError} accessibilityRole="alert">
+              <Ionicons name="cloud-offline-outline" size={28} color={Colors.textMuted} />
+              <Text style={styles.emptyTitle}>Ton inventaire n'a pas pu être chargé</Text>
+              <Text style={styles.emptyTxt}>Vérifie ta connexion, puis réessaie. Tes objets sont en sécurité.</Text>
+              <TouchableOpacity accessibilityRole="button" style={styles.retryBtn} onPress={refetch} activeOpacity={0.85}>
+                <Text style={styles.retryTxt}>Réessayer</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* ── Objets ── */}
+        {user ? (<>
         <View style={styles.sectionRow}>
           <Text style={styles.sectionLabel}>Mes objets</Text>
           <View style={styles.gelChip} accessible accessibilityLabel={`Gels de streak chargés : ${gels} sur 3`}>
@@ -246,6 +270,7 @@ export default function InventoryScreen({ navigation }) {
             />
           ))
         )}
+        </>) : null}
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -519,6 +544,20 @@ const styles = StyleSheet.create({
 
   // ── Vide ──
   emptyBox: { alignItems: 'center', paddingVertical: 32, paddingHorizontal: 20 },
+  skeletonChest: {
+    gap: 18, padding: 18, borderRadius: 20, borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)', backgroundColor: Colors.cardDeep,
+  },
+  skeletonChestTop: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  loadError: {
+    alignItems: 'center', gap: 6, paddingVertical: 28, paddingHorizontal: 20, borderRadius: 20,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', backgroundColor: Colors.cardDeep,
+  },
+  retryBtn: {
+    marginTop: 12, minHeight: 44, paddingHorizontal: 22, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.primary,
+  },
+  retryTxt: { color: '#fff', fontSize: 15, fontWeight: '700' },
   emptyTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700', marginBottom: 4 },
   emptyTxt: { color: Colors.textSecondary, fontSize: 13, lineHeight: 19, textAlign: 'center' },
 });
