@@ -143,6 +143,10 @@ export function WorkoutInProgressProvider({ children }) {
         : (stateSnapshot.durationSeconds || 0),
     }, workoutLogs.items); // prevLogs pour calcul streak + multiplicateur XP
 
+    // Lien avec la séance enregistrée par le serveur : évite toute confusion
+    // lors d'une récupération d'historique (historyRecovery.service.js).
+    if (stateSnapshot.id) log.serverWorkoutId = String(stateSnapshot.id);
+
     // Anti-cheat 5 min : séance forcée trop courte → 0 XP + flag shortSession
     if (options && options.shortSession) {
       log.xpEarned = 0;

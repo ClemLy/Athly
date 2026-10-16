@@ -1,6 +1,5 @@
 const Workout = require("../models/Workout");
 const User = require("../models/User");
-const { levelFromXP } = require("../utils/levelHelpers");
 const { addItemAtomic } = require("./inventory.service");
 const { checkAndUnlockTitles } = require("../controllers/title.controller");
 
@@ -201,14 +200,13 @@ class WorkoutService {
       const start = workout.createdAt ? new Date(workout.createdAt) : new Date();
       workout.durationSeconds = Math.max(0, Math.floor((new Date() - start) / 1000));
     }
+    // L'XP du compte n'est plus ajoutée ici : elle vient de l'app (sync-xp,
+    // puis la sauvegarde du compte). L'ajouter en plus comptait chaque séance
+    // deux fois (voir user.service.js → recomputeXpFromBackup).
+    workout.serverXpAdded = false;
     await workout.save();
 
     const user = await User.findById(userId);
-    if (user) {
-      user.xp = (user.xp || 0) + xp;
-      user.level = levelFromXP(user.xp);
-      await user.save();
-    }
 
     // Titres (Section X) : cumul de séries + conditions événementielles
     // (night owl, loup solitaire...). Best-effort, ne bloque jamais la
@@ -267,19 +265,16 @@ class WorkoutService {
     const isShort = options.shortSession === true || duration < 300;
     // La durée réelle et le statut "trop courte" sont enregistrés : ils
     // décident si la séance compte pour le groupe de streak.
-    await Workout.updateOne({ _id: workout._id }, { $set: { durationSeconds: duration, shortSession: isShort } });
+    await Workout.updateOne({ _id: workout._id }, { $set: { durationSeconds: duration, shortSession: isShort, serverXpAdded: false } });
     if (isShort) {
       xp = 0;
     } else if (duration < 900) {
       xp = Math.round(xp / 10);
     }
 
+    // XP du compte : non ajoutée ici (même raison que completeWorkout). La
+    // valeur `xp` reste renvoyée à titre indicatif.
     const user = await User.findById(userId);
-    if (user) {
-      user.xp = (user.xp || 0) + xp;
-      user.level = levelFromXP(user.xp);
-      await user.save();
-    }
 
     // ── Coffres à l'effort ───────────────────────────────────────────────────
     // Seules les séances légitimes (non short-session, durée >= 300 s)

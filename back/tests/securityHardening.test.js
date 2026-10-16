@@ -190,7 +190,7 @@ describe('Audit de sécurité : non-régression', () => {
       expect(res.body.workout.status).toBe('draft');
     });
 
-    it("finaliser deux fois la même séance n'attribue l'XP qu'une seule fois", async () => {
+    it("finaliser deux fois la même séance : une seule finalisation acceptée, sans XP ajoutée par le serveur", async () => {
       const alice = await createAndLoginUser('AliceFinal', 'alice.final@athly.fr');
       const draft = await Workout.create({ user: alice.userId, name: 'Séance', status: 'in_progress' });
 
@@ -202,8 +202,10 @@ describe('Audit de sécurité : non-régression', () => {
       const statuses = [a.statusCode, b.statusCode].sort();
       expect(statuses).toEqual([200, 409]);
 
+      // L'XP du compte vient de l'app (sync-xp / sauvegarde), jamais de la
+      // finalisation : sinon chaque séance compterait deux fois.
       const user = await User.findById(alice.userId).select('xp');
-      expect(user.xp).toBe(100); // 100 XP de base, une seule fois
+      expect(user.xp).toBe(0);
     });
 
     it('/complete après /finalize ne redonne pas d\'XP', async () => {
@@ -216,7 +218,7 @@ describe('Audit de sécurité : non-régression', () => {
       expect(complete.statusCode).toBe(200);
       expect(complete.body.stats.xp).toBe(0);
       const user = await User.findById(alice.userId).select('xp');
-      expect(user.xp).toBe(100);
+      expect(user.xp).toBe(0);
     });
 
     it('une durée déclarée absurde est plafonnée (pas de coffres en rafale)', async () => {

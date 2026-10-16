@@ -1,9 +1,9 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createCloudCollection } from './cloudCollection';
+import * as bigStorage from '../utils/bigStorage';
 import { resolveMuscleGroup, normalizeId } from '../constants/exerciseFilters';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Service de statistiques (100% local AsyncStorage).
+// Service de statistiques (local-first, sauvegardé dans le compte).
 // Fournit :
 //   1. CRUD des logs de séances finalisées
 //   2. Calculs purs (memo-friendly) : totalVolume, distribution musculaire, XP
@@ -26,14 +26,8 @@ function genId() {
 }
 
 async function readAll() {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    return [];
-  }
+  const parsed = await bigStorage.getJson(STORAGE_KEY, []);
+  return Array.isArray(parsed) ? parsed : [];
 }
 
 // Historique sauvegardé dans le compte (voir cloudCollection.js) : chaque
@@ -41,7 +35,7 @@ async function readAll() {
 export const logsCloud = createCloudCollection({ kind: 'logs', storageKey: STORAGE_KEY, sortKey: (l) => l.date });
 
 async function writeAll(items) {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  await bigStorage.setJson(STORAGE_KEY, items);
 }
 
 // ─── XP & Niveaux ────────────────────────────────────────────────────────────
@@ -213,7 +207,7 @@ export function computeWorkoutStats(workout) {
   return { totalVolume, setsCompleted, muscleDistribution, xpEarned };
 }
 
-// Construit un log à partir d'un workout state. Attaché à AsyncStorage par addLog().
+// Construit un log à partir d'un workout state. Enregistré par addLog().
 // prevLogs : logs existants (avant cette séance) — sert à calculer le streak actif
 // et appliquer le multiplicateur XP correspondant.
 export function buildLogFromWorkout(workout, prevLogs = []) {
@@ -297,8 +291,11 @@ export async function addLog(log) {
     // Les rituels ont leur propre quota (1/jour) géré dans addRitualLog.
     if (log.type !== 'ritual') {
       const todayKey = log.date ? log.date.slice(0, 10) : new Date().toISOString().slice(0, 10);
+      // Seules les séances comptent : un objet consommé, un bonus ou une
+      // récompense de quête ne prend pas la place d'une séance du jour.
       const xpSessionsToday = all.filter(
-        (l) => l.type !== 'ritual' && l.date && l.date.slice(0, 10) === todayKey && (Number(l.xpEarned) || 0) > 0,
+        (l) => l.type !== 'ritual' && l.type !== 'item_bonus' && l.type !== 'quest_reward'
+          && l.date && l.date.slice(0, 10) === todayKey && (Number(l.xpEarned) || 0) > 0,
       );
       if (xpSessionsToday.length >= 2) xpEarned = 0;
     }
@@ -375,7 +372,7 @@ export async function removeLog(id) {
 }
 
 export async function clearLogs() {
-  await AsyncStorage.removeItem(STORAGE_KEY);
+  await bigStorage.removeItem(STORAGE_KEY);
 }
 
 // ─── Helpers période ────────────────────────────────────────────────────────

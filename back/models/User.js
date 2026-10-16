@@ -180,6 +180,11 @@ const UserSchema = new mongoose.Schema(
     //    detectAndApplyStreakBreak dans groupStreak.controller.js).
     totalShakesSent:           { type: Number, default: 0, min: 0 },
     totalSetsCompleted:        { type: Number, default: 0, min: 0 },
+    // XP déjà acquise avant la sauvegarde du compte, une fois retiré le double
+    // comptage des séances (voir user.service.js → ensureXpFloor). Sert à
+    // rendre l'XP des anciennes quêtes et rituels à un joueur qui a perdu son
+    // historique. null : pas encore calculée.
+    xpFloor:                   { type: Number, default: null, min: 0 },
     consecutiveStreakGelSaves: { type: Number, default: 0, min: 0 },
 
     // Cosmétiques Uniques définitivement débloqués (réclamés depuis

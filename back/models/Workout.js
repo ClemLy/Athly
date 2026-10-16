@@ -50,6 +50,9 @@ const WorkoutSchema = new mongoose.Schema(
     // Séance validée en moins de 5 min (0 XP) : ne compte ni pour la série
     // personnelle ni pour le groupe de streak.
     shortSession: { type: Boolean, default: false },
+    // false : finalisée après la correction du double comptage (l'XP n'a pas
+    // été ajoutée au compte côté serveur). Absent : séance plus ancienne.
+    serverXpAdded: { type: Boolean },
   },
   { timestamps: true }
 );

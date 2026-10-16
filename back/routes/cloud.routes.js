@@ -9,6 +9,7 @@ const { sync } = require('../validators/cloud.validator');
 
 router.use(auth);
 
+router.get('/recovery',    cloud.recovery);
 router.get('/:kind',       cloud.list);
 router.post('/:kind/sync', validate(sync), cloud.sync);
 

@@ -170,17 +170,19 @@ describe('Anti-cheat temporel — finalizeWorkout()', () => {
 
   // ── XP crédité sur le User ────────────────────────────────────────────────
   describe('Crédit XP utilisateur', () => {
-    it('user.xp est incrémenté du montant post-anti-cheat', async () => {
+    it("user.xp n'est plus modifié par la finalisation (pas de double comptage)", async () => {
       const user = makeUserStub(5_000);
       WorkoutModel.findOne.mockResolvedValue(makeWorkoutStub(1000));
       UserModel.findById.mockResolvedValue(user);
 
-      await workoutService.finalizeWorkout(
+      const res = await workoutService.finalizeWorkout(
         FAKE_USER_ID, FAKE_WORKOUT_ID, { durationSeconds: 1200 },
       );
 
-      expect(user.xp).toBe(6_000); // 5000 + 1000
-      expect(user.save).toHaveBeenCalledTimes(1);
+      // L'app a déjà envoyé son total (sync-xp) : ajouter 1000 ici le doublait.
+      expect(user.xp).toBe(5_000);
+      expect(user.save).not.toHaveBeenCalled();
+      expect(res.stats.xp).toBe(1000); // valeur indicative toujours renvoyée
     });
 
     it('session courte : user.xp n\'est pas modifié (+ 0)', async () => {

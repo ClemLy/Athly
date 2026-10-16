@@ -42,7 +42,13 @@
       "expo-secure-store",
       "expo-notifications",
       "expo-status-bar",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "./plugins/withAndroidStorageSize",
+        {
+          "sizeMB": 64
+        }
+      ]
     ],
     "extra": {
       "eas": {

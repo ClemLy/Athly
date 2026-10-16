@@ -1,5 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createCloudCollection } from './cloudCollection';
+import * as bigStorage from '../utils/bigStorage';
 
 // CRUD des séances sauvegardées (favorites / réutilisables).
 // Schéma :
@@ -16,21 +16,15 @@ function genId() {
 }
 
 async function readAll() {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    return [];
-  }
+  const parsed = await bigStorage.getJson(STORAGE_KEY, []);
+  return Array.isArray(parsed) ? parsed : [];
 }
 
 // Sauvegardé dans le compte (voir cloudCollection.js).
 export const savedWorkoutsCloud = createCloudCollection({ kind: 'savedWorkouts', storageKey: STORAGE_KEY, sortKey: (x) => x.createdAt });
 
 async function writeAll(items) {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  await bigStorage.setJson(STORAGE_KEY, items);
 }
 
 // Renvoie les exos "épurés" pour stockage en MODÈLE : on conserve la structure
@@ -107,7 +101,7 @@ export async function removeSavedWorkout(id) {
 }
 
 export async function clearSavedWorkouts() {
-  await AsyncStorage.removeItem(STORAGE_KEY);
+  await bigStorage.removeItem(STORAGE_KEY);
 }
 
 // Construit un workout instanciable depuis une séance sauvegardée.

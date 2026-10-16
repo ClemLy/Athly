@@ -2,6 +2,9 @@
 
 const CloudItem = require('../models/CloudItem');
 const { CLOUD_KINDS } = require('../models/CloudItem');
+const User = require('../models/User');
+const Workout = require('../models/Workout');
+const userService = require('../services/user.service');
 
 // ─── Sauvegarde du compte (voir models/CloudItem.js) ──────────────────────────
 
@@ -85,7 +88,54 @@ exports.sync = async (req, res, next) => {
     ];
     if (ops.length > 0) await CloudItem.bulkWrite(ops, { ordered: true });
 
-    return res.status(200).json({ success: true, saved: puts.length, deleted: dels.length });
+    // L'XP du compte suit l'historique sauvegardé (voir recomputeXpFromBackup)
+    let xp;
+    if (kind === 'logs' && ops.length > 0) {
+      xp = (await userService.recomputeXpFromBackup(user)).xp;
+    }
+
+    return res.status(200).json({ success: true, saved: puts.length, deleted: dels.length, xp });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/cloud/recovery : de quoi reconstruire un historique perdu avant la
+// sauvegarde du compte.
+//  - workouts : séances terminées enregistrées par le serveur (exercices,
+//    séries, durée, date) ;
+//  - xpFloor : XP déjà acquise avant la sauvegarde (quêtes et rituels
+//    compris), sans le double comptage (voir user.service → ensureXpFloor).
+// ─────────────────────────────────────────────────────────────────────────────
+exports.recovery = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id).select('xp xpFloor');
+    if (!user) throw businessError(404, 'Ce compte est introuvable.', 'USER_NOT_FOUND');
+    const xpFloor = await userService.ensureXpFloor(user);
+
+    const workouts = await Workout.find({ user: req.user.id, status: { $in: Workout.FINAL_STATUSES } })
+      .select('name date completedAt updatedAt durationSeconds shortSession exercises.name exercises.targetMuscle exercises.sets.weight exercises.sets.reps exercises.sets.completed')
+      .sort({ updatedAt: -1 })
+      .limit(5000)
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      xpFloor,
+      workouts: workouts.map((w) => ({
+        id: String(w._id),
+        name: w.name,
+        finishedAt: w.completedAt || w.updatedAt || w.date,
+        durationSeconds: w.durationSeconds || 0,
+        shortSession: !!w.shortSession,
+        exercises: (w.exercises || []).map((e) => ({
+          name: e.name,
+          targetMuscle: e.targetMuscle || '',
+          sets: (e.sets || []).map((st) => ({ weight: st.weight || 0, reps: st.reps || 0, completed: !!st.completed })),
+        })),
+      })),
+    });
   } catch (err) {
     next(err);
   }
