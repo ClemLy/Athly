@@ -27,7 +27,13 @@ async function readApiCache(url) {
   }
 }
 
+// La sauvegarde du compte (/cloud/…) n'est jamais mise en cache : ses données
+// sont déjà sur le téléphone, et un historique complet dupliqué saturerait le
+// stockage d'Android (6 Mo par défaut).
+const NO_CACHE_PATTERN = /^\/?cloud\//;
+
 function writeApiCache(url, data) {
+  if (NO_CACHE_PATTERN.test(url)) return;
   // Fire-and-forget : un échec d'écriture du cache ne doit rien bloquer
   AsyncStorage.setItem(API_CACHE_PREFIX + url, JSON.stringify(data)).catch(() => {});
 }

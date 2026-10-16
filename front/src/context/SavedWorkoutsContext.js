@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import {
   listSavedWorkouts,
+  savedWorkoutsCloud,
   saveWorkout,
   updateSavedWorkout,
   removeSavedWorkout,
@@ -23,6 +24,10 @@ export function SavedWorkoutsProvider({ children }) {
     try {
       const list = await listSavedWorkouts();
       setItems(list);
+      // Nouvel appareil : rien en local, on attend la sauvegarde du compte.
+      if (list.length > 0) setLoading(false);
+      const merged = await savedWorkoutsCloud.pullAndMerge();
+      if (merged?.changed) setItems(await listSavedWorkouts());
     } catch (e) {
       setError(getErrorMessage(e, 'Tes données n\'ont pas pu être chargées.'));
     } finally {

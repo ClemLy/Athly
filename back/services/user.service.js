@@ -7,6 +7,7 @@ const StreakGroup    = require("../models/StreakGroup");
 const ActivityEvent  = require("../models/ActivityEvent");
 const WeightHistory  = require("../models/WeightHistory");
 const WorkoutLobby   = require("../models/WorkoutLobby");
+const CloudItem      = require("../models/CloudItem");
 
 function userNotFound() {
   const err = new Error("Ce compte est introuvable.");
@@ -118,6 +119,7 @@ class UserService {
       ExerciseRecord.deleteMany({ user: id }),
       Workout.deleteMany({ user: id }),
       WeightHistory.deleteMany({ user: id }),
+      CloudItem.deleteMany({ user: id }),
       Friendship.deleteMany({ $or: [{ requester: id }, { recipient: id }] }),
       ActivityEvent.deleteMany({ actor: id }),
       ActivityEvent.updateMany({ "reactions.user": id }, { $pull: { reactions: { user: id } } }),

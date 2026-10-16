@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { savePref } from '../services/cloudPrefs.service';
 import { DEV_TOOLS_ENABLED } from '../constants/devTools';
 
 const THEME_KEY    = 'athly:pref:profileTheme:v1';
@@ -41,6 +42,7 @@ export function useDevSettings() {
   const setProfileThemeId = useCallback(async (id) => {
     setProfileThemeIdState(id);
     try { await AsyncStorage.setItem(THEME_KEY, id); } catch (_) {}
+    savePref('profileTheme', id).catch(() => {});
   }, []);
 
   const setGodMode = useCallback(async (val) => {

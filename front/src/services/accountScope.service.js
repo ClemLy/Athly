@@ -35,6 +35,11 @@ export const ACCOUNT_SCOPED_KEYS = [
   'athly:weight:reminder:dismissed_at:v1',
   'athly:tutorial:completed:v1',
   'athly:tutorial:pendingChapter:v1',
+  // Modifications pas encore envoyées à la sauvegarde du compte (cloudCollection.js)
+  'athly:cloud:pending:logs:v1',
+  'athly:cloud:pending:savedWorkouts:v1',
+  'athly:cloud:pending:customExercises:v1',
+  'athly:cloud:pending:prefs:v1',
 ];
 
 const archiveKey = (userId, key) => `${ARCHIVE_PREFIX}${userId}:${key}`;

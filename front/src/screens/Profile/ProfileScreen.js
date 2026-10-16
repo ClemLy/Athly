@@ -63,7 +63,7 @@ function buildBgGradient(isGod, isLegend, isElite, isBlood) {
 
 export default function ProfileScreen({ navigation }) {
   const { sessionLogs: logs, activityLogs, totalXP, loading: logsLoading } = useWorkoutLogs();
-  const { user, loaded: profileLoaded, refetch: refetchUser } = useUser();
+  const { user, loaded: profileLoaded, refetch: refetchUser, restoredAt } = useUser();
   const [borderPickerVisible, setBorderPickerVisible] = useState(false);
   const [titlePickerVisible, setTitlePickerVisible] = useState(false);
   const { shapeId, colorId, selectShape, selectColor } = useAvatarFrame();
@@ -146,6 +146,13 @@ export default function ProfileScreen({ navigation }) {
       reloadDevSettings();
     }, [refetchUser, reloadFeatured, reloadDevSettings]),
   );
+
+  // Vitrine et thème restaurés depuis le compte (nouvel appareil)
+  useEffect(() => {
+    if (!restoredAt) return;
+    reloadFeatured();
+    reloadDevSettings();
+  }, [restoredAt, reloadFeatured, reloadDevSettings]);
 
   // ─── Records mis en avant (Section III) ──────────────────────────────────
   // Source de vérité backend (ExerciseRecord), pas les logs locaux — pour

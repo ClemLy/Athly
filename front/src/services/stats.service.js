@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createCloudCollection } from './cloudCollection';
 import { resolveMuscleGroup, normalizeId } from '../constants/exerciseFilters';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -34,6 +35,10 @@ async function readAll() {
     return [];
   }
 }
+
+// Historique sauvegardé dans le compte (voir cloudCollection.js) : chaque
+// écriture est répercutée sur le serveur, y compris les suppressions.
+export const logsCloud = createCloudCollection({ kind: 'logs', storageKey: STORAGE_KEY, sortKey: (l) => l.date });
 
 async function writeAll(items) {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
@@ -283,51 +288,55 @@ export async function listLogs() {
 }
 
 export async function addLog(log) {
-  const all = await readAll();
+  return logsCloud.transaction(async () => {
+    const all = await readAll();
 
-  let xpEarned = Number(log.xpEarned) || 0;
+    let xpEarned = Number(log.xpEarned) || 0;
 
-  // Anti-cheat quotidien : max 2 séances avec XP par jour calendaire.
-  // Les rituels ont leur propre quota (1/jour) géré dans addRitualLog.
-  if (log.type !== 'ritual') {
-    const todayKey = log.date ? log.date.slice(0, 10) : new Date().toISOString().slice(0, 10);
-    const xpSessionsToday = all.filter(
-      (l) => l.type !== 'ritual' && l.date && l.date.slice(0, 10) === todayKey && (Number(l.xpEarned) || 0) > 0,
-    );
-    if (xpSessionsToday.length >= 2) xpEarned = 0;
-  }
+    // Anti-cheat quotidien : max 2 séances avec XP par jour calendaire.
+    // Les rituels ont leur propre quota (1/jour) géré dans addRitualLog.
+    if (log.type !== 'ritual') {
+      const todayKey = log.date ? log.date.slice(0, 10) : new Date().toISOString().slice(0, 10);
+      const xpSessionsToday = all.filter(
+        (l) => l.type !== 'ritual' && l.date && l.date.slice(0, 10) === todayKey && (Number(l.xpEarned) || 0) > 0,
+      );
+      if (xpSessionsToday.length >= 2) xpEarned = 0;
+    }
 
-  const finalLog = { ...log, xpEarned };
-  await writeAll([finalLog, ...all]);
-  return finalLog;
+    const finalLog = { ...log, xpEarned };
+    await writeAll([finalLog, ...all]);
+    return finalLog;
+  });
 }
 
 // Crée un log de rituel (max 1 par jour). Retourne null si déjà effectué aujourd'hui.
 export async function addRitualLog(ritualId, ritualLabel, durationSeconds = 300, xpEarned = 20) {
-  const all = await readAll();
-  const todayKey = new Date().toISOString().slice(0, 10);
-  const ritualToday = all.find(
-    (l) => l.type === 'ritual' && l.date && l.date.slice(0, 10) === todayKey,
-  );
-  if (ritualToday) return null;
+  return logsCloud.transaction(async () => {
+    const all = await readAll();
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const ritualToday = all.find(
+      (l) => l.type === 'ritual' && l.date && l.date.slice(0, 10) === todayKey,
+    );
+    if (ritualToday) return null;
 
-  const log = {
-    id: genId(),
-    date: new Date().toISOString(),
-    name: ritualLabel,
-    type: 'ritual',
-    ritualId,
-    exercises: [],
-    totalVolume: 0,
-    setsCompleted: 0,
-    totalSets: 0,
-    muscleDistribution: {},
-    durationSeconds,
-    xpEarned,
-    notes: '',
-  };
-  await writeAll([log, ...all]);
-  return log;
+    const log = {
+      id: genId(),
+      date: new Date().toISOString(),
+      name: ritualLabel,
+      type: 'ritual',
+      ritualId,
+      exercises: [],
+      totalVolume: 0,
+      setsCompleted: 0,
+      totalSets: 0,
+      muscleDistribution: {},
+      durationSeconds,
+      xpEarned,
+      notes: '',
+    };
+    await writeAll([log, ...all]);
+    return log;
+  });
 }
 
 // Enregistre un gain d'XP dont la source n'est pas une séance (objet
@@ -336,29 +345,33 @@ export async function addRitualLog(ritualId, ritualLabel, durationSeconds = 300,
 // des logs) avec les gains accordés côté backend. Exclu du streak et de
 // l'historique de séances (voir WorkoutLogsContext : sessionLogs/activityLogs).
 export async function addBonusXpLog(source, xpEarned) {
-  if (!xpEarned || xpEarned <= 0) return null;
-  const all = await readAll();
-  const log = {
-    id: genId(),
-    date: new Date().toISOString(),
-    name: source,
-    type: 'item_bonus',
-    exercises: [],
-    totalVolume: 0,
-    setsCompleted: 0,
-    totalSets: 0,
-    muscleDistribution: {},
-    durationSeconds: 0,
-    xpEarned: Math.round(xpEarned),
-    notes: '',
-  };
-  await writeAll([log, ...all]);
-  return log;
+  return logsCloud.transaction(async () => {
+    if (!xpEarned || xpEarned <= 0) return null;
+    const all = await readAll();
+    const log = {
+      id: genId(),
+      date: new Date().toISOString(),
+      name: source,
+      type: 'item_bonus',
+      exercises: [],
+      totalVolume: 0,
+      setsCompleted: 0,
+      totalSets: 0,
+      muscleDistribution: {},
+      durationSeconds: 0,
+      xpEarned: Math.round(xpEarned),
+      notes: '',
+    };
+    await writeAll([log, ...all]);
+    return log;
+  });
 }
 
 export async function removeLog(id) {
-  const all = await readAll();
-  await writeAll(all.filter((x) => x.id !== id));
+  return logsCloud.transaction(async () => {
+    const all = await readAll();
+    await writeAll(all.filter((x) => x.id !== id));
+  });
 }
 
 export async function clearLogs() {
@@ -786,18 +799,22 @@ function makeDebugLog(xpEarned, dayOffset = 0, logName = '[DEBUG:XP]') {
 
 // Injecte `amount` XP bruts, sans anti-cheat.
 export async function debugAddXP(amount) {
-  const all = await readAll();
-  await writeAll([makeDebugLog(Math.max(0, Math.round(amount))), ...all]);
+  return logsCloud.transaction(async () => {
+    const all = await readAll();
+    await writeAll([makeDebugLog(Math.max(0, Math.round(amount))), ...all]);
+  });
 }
 
 // Met le total XP au niveau exact de `targetXP` (injecte le delta manquant).
 // Ne fait rien si on est déjà au-dessus.
 export async function debugSetXP(targetXP) {
-  const all = await readAll();
-  const current = all.reduce((s, l) => s + (Number(l.xpEarned) || 0), 0);
-  const delta = Math.max(0, Math.round(targetXP) - current);
-  if (delta === 0) return;
-  await writeAll([makeDebugLog(delta), ...all]);
+  return logsCloud.transaction(async () => {
+    const all = await readAll();
+    const current = all.reduce((s, l) => s + (Number(l.xpEarned) || 0), 0);
+    const delta = Math.max(0, Math.round(targetXP) - current);
+    if (delta === 0) return;
+    await writeAll([makeDebugLog(delta), ...all]);
+  });
 }
 
 // Injecte suffisamment de sessions + XP pour déverrouiller tous les trophées :
@@ -805,44 +822,50 @@ export async function debugSetXP(targetXP) {
 //   - Promesse  : level  >= 10  → xpForLevel(10) XP minimum
 //   - Centurion : sessions >= 50 → 50 logs minimum
 export async function debugUnlockAll(currentSessions) {
-  const all = await readAll();
-  const currentXP = all.reduce((s, l) => s + (Number(l.xpEarned) || 0), 0);
-  const xpNeeded = Math.max(0, xpForLevel(10) - currentXP);
-  const sessionsNeeded = Math.max(0, 50 - (Number(currentSessions) || 0));
+  return logsCloud.transaction(async () => {
+    const all = await readAll();
+    const currentXP = all.reduce((s, l) => s + (Number(l.xpEarned) || 0), 0);
+    const xpNeeded = Math.max(0, xpForLevel(10) - currentXP);
+    const sessionsNeeded = Math.max(0, 50 - (Number(currentSessions) || 0));
 
-  if (xpNeeded === 0 && sessionsNeeded === 0) return; // tout déjà débloqué
+    if (xpNeeded === 0 && sessionsNeeded === 0) return; // tout déjà débloqué
 
-  const newLogs = [];
-  // Un log avec l'XP nécessaire (dayOffset 0 = aujourd'hui)
-  if (xpNeeded > 0) newLogs.push(makeDebugLog(xpNeeded, 0));
-  // Sessions fantômes sur des jours distincts (pas d'XP → pas d'anti-cheat pertinent)
-  for (let i = 0; i < sessionsNeeded; i++) {
-    newLogs.push(makeDebugLog(0, i + 1));
-  }
-  await writeAll([...newLogs, ...all]);
+    const newLogs = [];
+    // Un log avec l'XP nécessaire (dayOffset 0 = aujourd'hui)
+    if (xpNeeded > 0) newLogs.push(makeDebugLog(xpNeeded, 0));
+    // Sessions fantômes sur des jours distincts (pas d'XP → pas d'anti-cheat pertinent)
+    for (let i = 0; i < sessionsNeeded; i++) {
+      newLogs.push(makeDebugLog(0, i + 1));
+    }
+    await writeAll([...newLogs, ...all]);
+  });
 }
 
 // Positionne le total XP exactement au niveau `targetLevel`.
 // Préserve les vrais logs, supprime les anciens logs DEBUG, injecte le delta.
 export async function debugSetLevel(targetLevel) {
-  const level = Math.max(0, Math.min(200, Math.round(Number(targetLevel) || 0)));
-  const all = await readAll();
-  // Retire uniquement les logs XP debug — les logs STREAK et SESSION restent intacts
-  const nonXpLogs = all.filter((l) => l.name !== '[DEBUG:XP]' && l.name !== '[DEBUG]');
-  const nonXpXP = nonXpLogs.reduce((s, l) => s + (Number(l.xpEarned) || 0), 0);
-  const targetXP = xpForLevel(level);
-  if (targetXP > nonXpXP) {
-    await writeAll([makeDebugLog(targetXP - nonXpXP, 0, '[DEBUG:XP]'), ...nonXpLogs]);
-  } else {
-    await writeAll(nonXpLogs);
-  }
+  return logsCloud.transaction(async () => {
+    const level = Math.max(0, Math.min(200, Math.round(Number(targetLevel) || 0)));
+    const all = await readAll();
+    // Retire uniquement les logs XP debug — les logs STREAK et SESSION restent intacts
+    const nonXpLogs = all.filter((l) => l.name !== '[DEBUG:XP]' && l.name !== '[DEBUG]');
+    const nonXpXP = nonXpLogs.reduce((s, l) => s + (Number(l.xpEarned) || 0), 0);
+    const targetXP = xpForLevel(level);
+    if (targetXP > nonXpXP) {
+      await writeAll([makeDebugLog(targetXP - nonXpXP, 0, '[DEBUG:XP]'), ...nonXpLogs]);
+    } else {
+      await writeAll(nonXpLogs);
+    }
+  });
 }
 
 // Injecte `count` sessions fictives réparties sur les `count` derniers jours.
 export async function debugAddSessions(count = 50) {
-  const all = await readAll();
-  const newLogs = Array.from({ length: count }, (_, i) => makeDebugLog(150, i + 1, '[DEBUG:SESSION]'));
-  await writeAll([...newLogs, ...all]);
+  return logsCloud.transaction(async () => {
+    const all = await readAll();
+    const newLogs = Array.from({ length: count }, (_, i) => makeDebugLog(150, i + 1, '[DEBUG:SESSION]'));
+    await writeAll([...newLogs, ...all]);
+  });
 }
 
 // Helper : log debug avec exercices et répétitions réels pour les stats.
@@ -872,44 +895,52 @@ function makeRepsDebugLog(dayOffset, reps) {
 
 // Injecte des séances simulant ~totalReps répétitions complétées.
 export async function debugSimulateReps(totalReps = 3000) {
-  const repsPerSession = 200;
-  const numSessions = Math.ceil(totalReps / repsPerSession);
-  const all = await readAll();
-  const newLogs = Array.from({ length: numSessions }, (_, i) =>
-    makeRepsDebugLog(i + 1, repsPerSession)
-  );
-  await writeAll([...newLogs, ...all]);
+  return logsCloud.transaction(async () => {
+    const repsPerSession = 200;
+    const numSessions = Math.ceil(totalReps / repsPerSession);
+    const all = await readAll();
+    const newLogs = Array.from({ length: numSessions }, (_, i) =>
+      makeRepsDebugLog(i + 1, repsPerSession)
+    );
+    await writeAll([...newLogs, ...all]);
+  });
 }
 
 // Simule une série de `days` jours consécutifs (injecte 1 session par jour).
 // Remplace les anciens logs DEBUG de streak.
 export async function debugSetStreak(days) {
-  const n = Math.max(1, Math.min(365, Math.round(Number(days) || 0)));
-  const all = await readAll();
-  // Retire uniquement les logs STREAK debug — les logs XP et SESSION restent intacts
-  const nonStreakLogs = all.filter((l) => l.name !== '[DEBUG:STREAK]');
-  const streakLogs = Array.from({ length: n }, (_, i) => makeDebugLog(0, i, '[DEBUG:STREAK]'));
-  await writeAll([...streakLogs, ...nonStreakLogs]);
+  return logsCloud.transaction(async () => {
+    const n = Math.max(1, Math.min(365, Math.round(Number(days) || 0)));
+    const all = await readAll();
+    // Retire uniquement les logs STREAK debug — les logs XP et SESSION restent intacts
+    const nonStreakLogs = all.filter((l) => l.name !== '[DEBUG:STREAK]');
+    const streakLogs = Array.from({ length: n }, (_, i) => makeDebugLog(0, i, '[DEBUG:STREAK]'));
+    await writeAll([...streakLogs, ...nonStreakLogs]);
+  });
 }
 
 // Décale les séances XP d'aujourd'hui à hier, réinitialisant le quota quotidien (max 2/jour).
 export async function debugResetDailyXP() {
-  const all = await readAll();
-  const todayKey = new Date().toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-  const updated = all.map((l) => {
-    if (l.date && l.date.slice(0, 10) === todayKey && (Number(l.xpEarned) || 0) > 0) {
-      return { ...l, date: l.date.replace(todayKey, yesterday) };
-    }
-    return l;
+  return logsCloud.transaction(async () => {
+    const all = await readAll();
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const updated = all.map((l) => {
+      if (l.date && l.date.slice(0, 10) === todayKey && (Number(l.xpEarned) || 0) > 0) {
+        return { ...l, date: l.date.replace(todayKey, yesterday) };
+      }
+      return l;
+    });
+    await writeAll(updated);
   });
-  await writeAll(updated);
 }
 
 // Supprime tous les logs DEBUG (tous les types : XP, STREAK, SESSION, REPS, legacy).
 export async function debugClearDebugLogs() {
-  const all = await readAll();
-  await writeAll(all.filter((l) => !String(l.name || '').startsWith('[DEBUG')));
+  return logsCloud.transaction(async () => {
+    const all = await readAll();
+    await writeAll(all.filter((l) => !String(l.name || '').startsWith('[DEBUG')));
+  });
 }
 
 // ─── Détection PRs dans un log fraîchement enregistré ───────────────────────

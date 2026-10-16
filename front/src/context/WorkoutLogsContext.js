@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { AppState } from 'react-native';
-import { listLogs, addLog, removeLog, totalCumulativeXP, addRitualLog, addBonusXpLog } from '../services';
+import { listLogs, addLog, removeLog, totalCumulativeXP, addRitualLog, addBonusXpLog, logsCloud } from '../services';
 import { syncXp, retryPendingXpSync } from '../services';
 import { getErrorMessage } from '../utils/errorMessages';
 
@@ -19,8 +19,18 @@ export function WorkoutLogsProvider({ children }) {
     setLoading(true);
     setError(null);
     try {
-      const list = await listLogs();
+      let list = await listLogs();
       setItems(list);
+      // Historique sauvegardé dans le compte : sur un nouvel appareil (rien en
+      // local), on attend sa restauration (silhouettes) plutôt que d'afficher
+      // "Prêt à démarrer" à un habitué. Sinon l'écran s'affiche tout de suite
+      // et se met à jour si un autre appareil a ajouté des séances.
+      if (list.length > 0) setLoading(false);
+      const merged = await logsCloud.pullAndMerge();
+      if (merged?.changed) {
+        list = await listLogs();
+        setItems(list);
+      }
       // Check-up de cohérence au démarrage (Section X) : pousse le total XP
       // local vers le backend, fire-and-forget — voir xpSync.service.js.
       syncXp(totalCumulativeXP(list));
@@ -43,6 +53,11 @@ export function WorkoutLogsProvider({ children }) {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (appState.current.match(/inactive|background/) && nextState === 'active') {
         retryPendingXpSync(totalCumulativeXP(items));
+        // Retour au premier plan : séances faites sur un autre appareil, et
+        // envoi de ce qui n'a pas pu partir hors ligne.
+        logsCloud.pullAndMerge().then(async (merged) => {
+          if (merged?.changed) setItems(await listLogs());
+        });
       }
       appState.current = nextState;
     });
