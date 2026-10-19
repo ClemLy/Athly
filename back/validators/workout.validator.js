@@ -30,6 +30,8 @@ const numberLike = Joi.alternatives()
 const setRule = Joi.object({
   weight:    numberLike,
   reps:      numberLike,
+  seconds:   numberLike,
+  warmup:    Joi.boolean(),
   completed: Joi.boolean(),
   timestamp: Joi.date().allow(null),
 }).unknown(true);

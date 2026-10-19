@@ -31,8 +31,8 @@ export default function useSetLogging(exerciseIndex, exercise) {
     const last = history?.lastSession;
     if (!last || !Array.isArray(last.sets)) return [];
     return last.sets
-      .filter((s) => s && s.completed && (toNum(s.weight) > 0 || toNum(s.reps) > 0))
-      .map((s) => ({ weight: toNum(s.weight), reps: toNum(s.reps) }));
+      .filter((s) => s && s.completed && !s.warmup && (toNum(s.weight) > 0 || toNum(s.reps) > 0 || toNum(s.seconds) > 0))
+      .map((s) => ({ weight: toNum(s.weight), reps: toNum(s.reps), seconds: toNum(s.seconds) }));
   }, [history]);
 
   // Série i de la dernière fois ; au-delà, on reprend la dernière série faite.
@@ -43,10 +43,16 @@ export default function useSetLogging(exerciseIndex, exercise) {
 
   const change = useCallback((i, patch) => {
     if (exerciseIndex < 0) return;
-    const cur = sets[i] || {};
-    const weight = patch.weight !== undefined ? patch.weight : cur.weight;
-    const reps = patch.reps !== undefined ? patch.reps : cur.reps;
-    actions.updateSet(exerciseIndex, i, { weight: toNum(weight), reps: toNum(reps) });
+    const clean = {};
+    ['weight', 'reps', 'seconds'].forEach((k) => { if (patch[k] !== undefined) clean[k] = toNum(patch[k]); });
+    actions.updateSet(exerciseIndex, i, clean);
+  }, [actions, exerciseIndex]);
+
+  // Série d'échauffement : hors XP, records et objectif du jour.
+  const toggleWarmup = useCallback((i) => {
+    if (exerciseIndex < 0 || sets[i]?.completed) return;
+    haptics.selection();
+    actions.updateSet(exerciseIndex, i, { warmup: !sets[i]?.warmup });
   }, [actions, exerciseIndex, sets]);
 
   // Renvoie true si la série vient d'être validée (utile pour lancer le repos).
@@ -54,13 +60,15 @@ export default function useSetLogging(exerciseIndex, exercise) {
     if (exerciseIndex < 0) return false;
     const cur = sets[i] || {};
     const completing = !cur.completed;
-    // Chaque champ laissé vide reprend la valeur de la dernière fois.
-    if (completing && (!toNum(cur.weight) || !toNum(cur.reps))) {
+    // Chaque champ laissé vide reprend la valeur de la dernière fois
+    // (pas pour une série d'échauffement : elle est plus légère par nature).
+    if (completing && !cur.warmup && (!toNum(cur.weight) || !toNum(cur.reps) || !toNum(cur.seconds))) {
       const prev = previousFor(i);
       if (prev) {
         actions.updateSet(exerciseIndex, i, {
           weight: toNum(cur.weight) || prev.weight,
           reps: toNum(cur.reps) || prev.reps,
+          ...(prev.seconds ? { seconds: toNum(cur.seconds) || prev.seconds } : {}),
         });
       }
     }
@@ -102,6 +110,7 @@ export default function useSetLogging(exerciseIndex, exercise) {
     suggestion: history?.suggestedNext || null,
     change,
     toggle,
+    toggleWarmup,
     usePrevious,
     addSet,
     removeLast,

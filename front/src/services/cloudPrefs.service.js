@@ -8,6 +8,7 @@ import { createCloudCollection } from './cloudCollection';
 
 const PREF_KEYS = {
   profileTheme: 'athly:pref:profileTheme:v1',
+  practice: 'athly:pref:practice:v1',
 };
 
 const FRAME_SHAPE_KEY = 'athly:avatarShape:v1';

@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useWorkoutState } from '../hooks';
 import { useWorkoutLogs } from './WorkoutLogsContext';
 import { useQuests } from './QuestContext';
+import { useUser } from './UserContext';
 import { buildLogFromWorkout, findNewPRsInLog } from '../services';
 
 // Context global pour la séance en cours.
@@ -29,6 +30,9 @@ export function WorkoutInProgressProvider({ children }) {
   const bundle = useWorkoutState({});
   const workoutLogs = useWorkoutLogs();
   const questContext = useQuests();
+  // Poids du corps (profil) : sert au volume et à l'XP de la calisthénie
+  const { user } = useUser();
+  const bodyweightKg = Number(user?.poids) || undefined;
 
   const [startedAt, setStartedAt] = useState(null);
   const [lobbyId, setLobbyId] = useState(null);
@@ -137,6 +141,7 @@ export function WorkoutInProgressProvider({ children }) {
     const stateSnapshot = bundle.state;
     const log = buildLogFromWorkout({
       ...stateSnapshot,
+      bodyweightKg,
       notes: (options && options.notes) || stateSnapshot.notes || '',
       durationSeconds: (options && options.durationSeconds != null)
         ? options.durationSeconds
@@ -204,7 +209,7 @@ export function WorkoutInProgressProvider({ children }) {
       newPRs,
       dailyCapReached,
     };
-  }, [bundle.state, bundle.actions, workoutLogs, questContext, clearSaved]);
+  }, [bundle.state, bundle.actions, workoutLogs, questContext, clearSaved, bodyweightKg]);
 
   const value = useMemo(() => ({
     ...bundle,

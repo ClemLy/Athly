@@ -15,6 +15,7 @@
 // catalogue (ids `bx-<clé>`) que les séances types (identifiées par leur nom).
 
 import { normalizeId } from '../constants/exerciseFilters';
+import { catalogEntryFor } from './exerciseCatalog';
 
 const COMMIT = 'f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5';
 const BASE = `https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@${COMMIT}/exercises`;
@@ -285,13 +286,19 @@ const ALIASES = {
   'elevations-arriere': 'oiseau-halteres',
 };
 
-// Démo de l'exercice ({ frames: [url départ, url arrivée] }) ou null.
+// Démo de l'exercice, ou null :
+//  - { frames: [url départ, url arrivée] } : photos réelles (prioritaires) ;
+//  - { figure: spec } : mannequin animé (calisthénie, échauffements), quand
+//    aucune photo fiable n'existe.
 export function getExerciseDemo(exercise) {
-  if (!exercise || !exercise.name) return null;
+  if (!exercise) return null;
+  if (exercise.demoFigure && !exercise.name) return { figure: exercise.demoFigure };
+  if (!exercise.name) return null;
   const key = normalizeId(exercise.name);
   const slug = DEMOS[key] || DEMOS[ALIASES[key]];
-  if (!slug) return null;
-  return { frames: [`${BASE}/${slug}/0.jpg`, `${BASE}/${slug}/1.jpg`] };
+  if (slug) return { frames: [`${BASE}/${slug}/0.jpg`, `${BASE}/${slug}/1.jpg`] };
+  const figure = exercise.demoFigure || catalogEntryFor(exercise)?.demoFigure;
+  return figure ? { figure } : null;
 }
 
 // Exposé pour les tests (validation des correspondances).

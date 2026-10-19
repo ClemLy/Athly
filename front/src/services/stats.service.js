@@ -1,5 +1,6 @@
 import { createCloudCollection } from './cloudCollection';
 import * as bigStorage from '../utils/bigStorage';
+import { bodyweightFactorFor, trackingFor } from '../data/exerciseCatalog';
 import { resolveMuscleGroup, normalizeId } from '../constants/exerciseFilters';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -142,27 +143,47 @@ export function getRank(level) {
   return           { name: 'Novice',             tier: 'novice',      color: '#FE7439', glowColor: null,                    shimmer: false };
 }
 
-// Formule : par exercice, XP = setsCompleted × 10 + (volume × multiplier) / 20
+// Poids du corps par défaut quand le profil n'en a pas (kg)
+export const DEFAULT_BODYWEIGHT = 70;
+
+// Part du poids du corps soulevée par l'exercice (0 en salle, 0,65 pour une
+// pompe, 1 pour une traction…), stockée sur le log ou retrouvée au catalogue.
+const bwOf = (ex) => (typeof ex?.bwFactor === 'number' ? ex.bwFactor : bodyweightFactorFor(ex));
+const isWarmup = (s) => !!(s && s.warmup);
+const secondsOf = (s) => Number(s && s.seconds) || 0;
+
+// Charge réelle d'une série : lest + part du poids du corps
+export function effectiveLoad(ex, set, bodyweightKg = DEFAULT_BODYWEIGHT) {
+  return (Number(set && set.weight) || 0) + bwOf(ex) * (Number(bodyweightKg) || DEFAULT_BODYWEIGHT);
+}
+
+// Formule : par exercice, XP = séries × 10 + (volume × multiplier) / 20
+//   - volume = charge réelle × répétitions (le poids du corps compte en
+//     calisthénie : une traction ≈ son propre poids)
 //   - multiplier = 1.2 si isCompound, 1 sinon
-// Bodyweight (volume=0) : 10 XP/set. Session ~10 sets ≈ 100–250 XP de base.
+//   - tenue chronométrée : + secondes × 3 × difficulté² (planche sur les
+//     coudes ≈ 0,5 XP/s, planche complète ≈ 3,3 XP/s)
+// Les séries d'échauffement ne comptent pas.
 export function computeXP(log) {
   let xp = 0;
   if (!log || !Array.isArray(log.exercises)) return 0;
+  const bw = Number(log.bodyweightKg) || DEFAULT_BODYWEIGHT;
   for (const ex of log.exercises) {
     if (!Array.isArray(ex.sets)) continue;
     let exVolume = 0;
     let exSetsCompleted = 0;
+    let holdXp = 0;
+    const factor = bwOf(ex);
     for (const s of ex.sets) {
-      if (!s) continue;
-      if (s.completed) {
-        exSetsCompleted += 1;
-        const w = Number(s.weight) || 0;
-        const r = Number(s.reps) || 0;
-        if (w && r) exVolume += w * r;
-      }
+      if (!s || !s.completed || isWarmup(s)) continue;
+      exSetsCompleted += 1;
+      const r = Number(s.reps) || 0;
+      const sec = secondsOf(s);
+      if (r) exVolume += effectiveLoad(ex, s, bw) * r;
+      else if (sec) holdXp += sec * 3 * Math.max(0.15, factor) ** 2;
     }
     const multiplier = ex.isCompound ? 1.2 : 1;
-    xp += exSetsCompleted * 10 + (exVolume * multiplier) / 20;
+    xp += exSetsCompleted * 10 + (exVolume * multiplier) / 20 + holdXp;
   }
   return Math.round(xp);
 }
@@ -178,29 +199,34 @@ export function computeWorkoutStats(workout) {
   if (!workout || !Array.isArray(workout.exercises)) {
     return { totalVolume: 0, setsCompleted: 0, muscleDistribution: {}, xpEarned: 0 };
   }
+  const bw = Number(workout.bodyweightKg) || DEFAULT_BODYWEIGHT;
   for (const ex of workout.exercises) {
     if (!Array.isArray(ex.sets)) continue;
     let exVolume = 0;
     let exCompletedReps = 0;
+    let holdEquivalent = 0;
     for (const s of ex.sets) {
-      if (!s || !s.completed) continue;
-      const w = Number(s.weight) || 0;
+      if (!s || !s.completed || isWarmup(s)) continue;
       const r = Number(s.reps) || 0;
-      if (w && r) {
-        exVolume += w * r;
-        totalVolume += w * r;
+      const load = effectiveLoad(ex, s, bw);
+      if (load && r) {
+        exVolume += load * r;
+        totalVolume += load * r;
+      } else if (secondsOf(s)) {
+        // Tenue : pas de tonnage, mais compte dans la répartition musculaire
+        holdEquivalent += (bwOf(ex) * bw * secondsOf(s)) / 3;
       }
       if (r > 0) exCompletedReps += r;
       setsCompleted += 1;
     }
     // Inclure aussi les exercices poids du corps (weight=0) si des reps ont été effectuées
-    if (exVolume > 0 || exCompletedReps > 0) {
+    if (exVolume > 0 || exCompletedReps > 0 || holdEquivalent > 0) {
       // Un groupe stocké « other » (ancien bug) est traité comme inconnu.
       const stored = ex.targetMuscleGroup && ex.targetMuscleGroup !== 'other' ? ex.targetMuscleGroup : null;
       const groupId = stored
         || resolveMuscleGroup(ex.targetMuscle)
         || 'other';
-      muscleDistribution[groupId] = (muscleDistribution[groupId] || 0) + exVolume;
+      muscleDistribution[groupId] = (muscleDistribution[groupId] || 0) + exVolume + holdEquivalent;
     }
   }
   const xpEarned = computeXP(workout);
@@ -237,10 +263,16 @@ export function buildLogFromWorkout(workout, prevLogs = []) {
             || null,
           targetMuscle: ex.targetMuscle || '',
           isCompound: !!ex.isCompound,
+          // Calisthénie : part du poids du corps et mode de suivi, figés au
+          // moment de la séance (le catalogue peut évoluer ensuite).
+          ...(bwOf(ex) ? { bwFactor: bwOf(ex) } : {}),
+          ...(trackingFor(ex) === 'time' ? { tracking: 'time' } : {}),
           sets: Array.isArray(ex.sets)
             ? ex.sets.map((s) => ({
                 weight: Number((s && s.weight) || 0),
                 reps: Number((s && s.reps) || 0),
+                ...(secondsOf(s) ? { seconds: secondsOf(s) } : {}),
+                ...(isWarmup(s) ? { warmup: true } : {}),
                 completed: !!(s && s.completed),
               }))
             : [],
@@ -249,11 +281,13 @@ export function buildLogFromWorkout(workout, prevLogs = []) {
     totalVolume: stats.totalVolume,
     setsCompleted: stats.setsCompleted,
     totalSets: (Array.isArray(workout && workout.exercises) ? workout.exercises : []).reduce(
-      (n, ex) => n + (Array.isArray(ex.sets) ? ex.sets.length : 0), 0,
+      (n, ex) => n + (Array.isArray(ex.sets) ? ex.sets.filter((st) => !isWarmup(st)).length : 0), 0,
     ),
     muscleDistribution: stats.muscleDistribution,
     xpEarned,
     durationSeconds: duration,
+    bodyweightKg: Number(workout && workout.bodyweightKg) || DEFAULT_BODYWEIGHT,
+    ...(workout && workout.warmup ? { warmup: workout.warmup } : {}),
     notes: (workout && workout.notes) || '',
     streakAtFinish: streak,
     xpMultiplier: streakData.multiplier,
@@ -545,15 +579,21 @@ export function aggregateExercise(logs, exerciseRef) {
   let prWeight = 0;
   let prVolume = 0;
   let prEstimate1RM = 0;
+  let prReps = 0;
+  let prSeconds = 0;
 
-  // Points pour le graphique : { date, maxWeight, volume }
+  // Points pour le graphique : { date, maxWeight, volume, maxReps, maxSeconds }
   const points = sessions.map((s) => {
     let maxW = 0;
     let volume = 0;
+    let maxR = 0;
+    let maxS = 0;
     for (const set of s.sets) {
-      if (!set || !set.completed) continue;
+      if (!set || !set.completed || isWarmup(set)) continue;
       const w = Number(set.weight) || 0;
       const r = Number(set.reps) || 0;
+      if (r > maxR) maxR = r;
+      if (secondsOf(set) > maxS) maxS = secondsOf(set);
       if (w > maxW) maxW = w;
       if (w && r) volume += w * r;
       // Estimation Epley du 1RM = w × (1 + r/30)
@@ -564,13 +604,17 @@ export function aggregateExercise(logs, exerciseRef) {
     }
     if (maxW > prWeight) prWeight = maxW;
     if (volume > prVolume) prVolume = volume;
-    return { date: s.date, maxWeight: maxW, volume };
+    if (maxR > prReps) prReps = maxR;
+    if (maxS > prSeconds) prSeconds = maxS;
+    return { date: s.date, maxWeight: maxW, volume, maxReps: maxR, maxSeconds: maxS };
   });
 
   return {
     points,
     prWeight,
     prVolume,
+    prReps,
+    prSeconds,
     prEstimate1RM: Math.round(prEstimate1RM * 10) / 10,
     totalSessions: sessions.length,
     suggestedNext: suggestNextWeight(sessions),
@@ -587,8 +631,10 @@ export function aggregateExercise(logs, exerciseRef) {
 //
 export function suggestNextWeight(sessions) {
   if (!Array.isArray(sessions) || sessions.length === 0) return null;
-  const last = sessions[sessions.length - 1]; // ordre asc → dernier = plus récent
-  if (!last || !Array.isArray(last.sets) || last.sets.length === 0) return null;
+  const lastRaw = sessions[sessions.length - 1]; // ordre asc → dernier = plus récent
+  if (!lastRaw || !Array.isArray(lastRaw.sets)) return null;
+  const last = { ...lastRaw, sets: lastRaw.sets.filter((st) => !isWarmup(st)) };
+  if (last.sets.length === 0) return null;
   const maxWeight = last.sets.reduce((m, s) => {
     const w = Number(s && s.weight) || 0;
     return w > m ? w : m;
@@ -951,21 +997,22 @@ export function findNewPRsInLog(newLog, allLogs) {
   const prs = [];
   for (const ex of newLog.exercises) {
     if (!Array.isArray(ex.sets) || ex.sets.length === 0) continue;
-    const newMax = ex.sets.reduce((m, s) => {
-      if (!s || !s.completed) return m;
-      const w = Number(s.weight) || 0;
-      return w > m ? w : m;
-    }, 0);
-    if (newMax <= 0) continue;
+    const done = ex.sets.filter((st) => st && st.completed && !isWarmup(st));
+    const maxOf = (fn) => done.reduce((m, st) => Math.max(m, fn(st)), 0);
+    const newW = maxOf((st) => Number(st.weight) || 0);
     const oldStats = aggregateExercise(olderLogs, ex);
-    const oldMax = oldStats.prWeight || 0;
-    if (newMax > oldMax) {
-      prs.push({
-        name: ex.name,
-        oldPR: oldMax,
-        newPR: newMax,
-        delta: Math.round((newMax - oldMax) * 10) / 10,
-      });
+    // Record de charge en priorité ; sans charge (poids du corps), record de
+    // répétitions ; pour une tenue, record de durée.
+    let unit = 'kg'; let newPR = newW; let oldPR = oldStats.prWeight || 0;
+    if (newW <= 0) {
+      const sec = maxOf(secondsOf);
+      if (sec > 0) { unit = 's'; newPR = sec; oldPR = oldStats.prSeconds || 0; }
+      else { unit = 'reps'; newPR = maxOf((st) => Number(st.reps) || 0); oldPR = oldStats.prReps || 0; }
+      // Première fois : pas de « record » à fêter sans charge
+      if (!oldStats.totalSessions) continue;
+    }
+    if (newPR > 0 && newPR > oldPR) {
+      prs.push({ name: ex.name, oldPR, newPR, unit, delta: Math.round((newPR - oldPR) * 10) / 10 });
     }
   }
   return prs;

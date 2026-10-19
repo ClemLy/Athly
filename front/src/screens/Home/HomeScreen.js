@@ -33,18 +33,21 @@ import WeekCard from '../../components/home/WeekCard';
 import DailyQuestsCard from '../../components/home/DailyQuestsCard';
 import RecoveryRitualsCard from '../../components/home/RecoveryRitualsCard';
 import { SkeletonGroup, Skeleton } from '../../components/common/Skeleton';
+import { usePractice } from '../../hooks/usePractice';
 import TutorialOverlay from '../../components/tutorial/TutorialOverlay';
 import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 import { useDevSettings } from '../../hooks';
 import { MOCK_TUTORIAL_LOGS } from '../../data/mockTutorialStats';
 import { formatWeight, plural } from '../../utils/format';
 import { weekDays, weekTotals, recommendationReason, greeting, todayLabel } from '../../data/homeInsights';
+import { estimateMinutes } from '../../data/workoutPreview';
 
 // Écran d'accueil. Bascule entre EmptyHomeState (compte vierge) et état actif
 // (séance recommandée + stats semaine + récents) selon `logs.length`.
 // Anim de fade au premier rendu pour éviter le flash empty→active.
 //
 export default function HomeScreen({ navigation }) {
+  const { practice } = usePractice();
   const { sessionLogs: logs, activityLogs, loading, totalXP } = useWorkoutLogs();
   const { forceShowRituals, reload: reloadDevSettings } = useDevSettings();
 
@@ -145,8 +148,8 @@ export default function HomeScreen({ navigation }) {
   const workoutLogs = useMemo(() => activeLogs.filter((l) => l.type !== 'ritual'), [activeLogs]);
   const recommendedGroup = useMemo(() => recommendNextMuscleGroup(workoutLogs), [workoutLogs]);
   const recommendedTemplate = useMemo(
-    () => findTemplateForGroup(recommendedGroup) || TEMPLATES[0],
-    [recommendedGroup],
+    () => findTemplateForGroup(recommendedGroup, practice) || TEMPLATES[0],
+    [recommendedGroup, practice],
   );
   const streak = useMemo(() => computeStreak(activeLogs), [activeLogs]);
   const { level, progress: levelProgress } = useMemo(() => xpToLevel(activeXP), [activeXP]);
@@ -265,7 +268,7 @@ export default function HomeScreen({ navigation }) {
                   templateName={recommendedTemplate ? recommendedTemplate.name : 'Séance'}
                   reason={recommendedReason}
                   exerciseCount={recommendedTemplate ? recommendedTemplate.buildExercises().length : 0}
-                  durationMin={recommendedTemplate ? recommendedTemplate.estimatedDurationMin : 0}
+                  durationMin={recommendedTemplate ? estimateMinutes(recommendedTemplate.buildExercises()) : 0}
                   groupId={recommendedGroup}
                   onStart={startRecommended}
                   onBrowse={goToTemplates}

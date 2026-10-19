@@ -12,7 +12,7 @@ import { useChartWidth } from '../../hooks/useChartWidth';
 // `points` : sortie de stats.service.aggregateExercise().points
 //   Array<{ date, maxWeight, volume }>
 //
-// `metric` : 'maxWeight' (par défaut) ou 'volume'
+// `metric` : 'maxWeight' (par défaut), 'volume', 'maxReps' ou 'maxSeconds'
 //
 function formatDate(iso) {
   const d = new Date(iso);
@@ -81,7 +81,7 @@ export default function ExerciseStatsChart({ points = [], metric = 'maxWeight', 
         fromZero={false}
         segments={segments}
         formatYLabel={formatY}
-        yAxisSuffix={metric === 'volume' ? '' : ' kg'}
+        yAxisSuffix={metric === 'volume' || metric === 'maxReps' ? '' : metric === 'maxSeconds' ? ' s' : ' kg'}
         chartConfig={CHART_CONFIG}
         style={styles.chart}
       />

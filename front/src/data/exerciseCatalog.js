@@ -16,6 +16,7 @@ import {
   MUSCLE_GROUPS,
   resolveMuscleGroup,
 } from '../constants/exerciseFilters';
+import { CALI_EXERCISES } from './calisthenics';
 
 const yt = (q) => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
 
@@ -477,6 +478,69 @@ export const BUILTIN_CATALOG = [
 ];
 
 // ---------------------------------------------------------------------------
+// Calisthénie (data/calisthenics.js) : enrichit les exercices existants du même
+// nom (mêmes records, même historique) et ajoute les autres.
+// ---------------------------------------------------------------------------
+function caliFields(c) {
+  return {
+    family: c.family,
+    rung: c.rung,
+    level: c.level,
+    tracking: c.track === 'time' ? 'time' : 'reps',
+    target: c.target || (c.track === 'time' ? [20, 45] : [8, 12]),
+    bwFactor: typeof c.bw === 'number' ? c.bw : 0,
+    unilateral: !!c.uni,
+    weighted: !!c.weighted,
+    cues: c.cues || [],
+    demoFigure: c.demo || null,
+  };
+}
+
+(function mergeCalisthenics() {
+  const byName = new Map(BUILTIN_CATALOG.map((e) => [normalizeId(e.name), e]));
+  for (const c of CALI_EXERCISES) {
+    const eq = ['Poids du corps', ...(c.eq || [])];
+    const existing = byName.get(normalizeId(c.name));
+    if (existing) {
+      Object.assign(existing, caliFields(c), {
+        disciplines: ['salle', 'calisthenie'],
+        equipment: Array.from(new Set([...existing.equipment, ...eq])),
+      });
+      continue;
+    }
+    const entry = exo(c.name, c.g, c.m, c.s || [], eq, c.level, { isFreeWeight: true, isMachine: false });
+    Object.assign(entry, caliFields(c), { disciplines: ['calisthenie'] });
+    BUILTIN_CATALOG.push(entry);
+    byName.set(normalizeId(c.name), entry);
+  }
+}());
+
+// Index par nom (exercices des séances types, anciens logs : seul le nom compte)
+const META_BY_NAME = new Map(BUILTIN_CATALOG.map((e) => [normalizeId(e.name), e]));
+
+/** Fiche complète du catalogue pour un exercice (par nom), ou null. */
+export function catalogEntryFor(exercise) {
+  if (!exercise || !exercise.name) return null;
+  return META_BY_NAME.get(normalizeId(exercise.name)) || null;
+}
+
+/** 'time' si l'exercice se tient en secondes (gainage, skills), sinon 'reps'. */
+export function trackingFor(exercise) {
+  if (!exercise) return 'reps';
+  if (exercise.tracking) return exercise.tracking;
+  return catalogEntryFor(exercise)?.tracking || 'reps';
+}
+
+/** Part du poids du corps soulevée (0 si l'exercice n'en dépend pas). */
+export function bodyweightFactorFor(exercise) {
+  if (!exercise) return 0;
+  if (typeof exercise.bwFactor === 'number') return exercise.bwFactor;
+  return catalogEntryFor(exercise)?.bwFactor || 0;
+}
+
+export const isCalisthenics = (ex) => Array.isArray(ex?.disciplines) && ex.disciplines.includes('calisthenie');
+
+// ---------------------------------------------------------------------------
 // Catalogue combiné (built-in + custom)
 // ---------------------------------------------------------------------------
 
@@ -508,10 +572,20 @@ export function filterCatalog(catalog, filters) {
   const lv = normalizeId(f.level || '');
 
   const subIds = subs.map(normalizeId);
-  const order = { debutant: 0, intermediaire: 1, avance: 2 };
+  const order = { debutant: 0, intermediaire: 1, avance: 2, elite: 3 };
+  // Calisthénie : matériel DISPONIBLE (tout ce que l'exercice demande doit
+  // être là), au lieu de « au moins un des équipements cochés » en salle.
+  const discipline = f.discipline || null;
+  const available = Array.isArray(f.available) ? f.available.map(normalizeId) : null;
 
   return (Array.isArray(catalog) ? catalog : []).filter((ex) => {
     if (!ex) return false;
+    if (discipline === 'calisthenie' && !ex.isCustom && !isCalisthenics(ex)) return false;
+    if (discipline === 'salle' && !ex.isCustom && Array.isArray(ex.disciplines) && !ex.disciplines.includes('salle')) return false;
+    if (available) {
+      const needs = (Array.isArray(ex.equipment) ? ex.equipment : []).map(normalizeId).filter((id) => id !== 'poids-du-corps');
+      if (!needs.every((id) => available.includes(id))) return false;
+    }
     // Sous-muscles
     if (subIds.length > 0) {
       const candidates = [ex.targetMuscle, ...(Array.isArray(ex.secondaryMuscles) ? ex.secondaryMuscles : [])]
@@ -551,6 +625,15 @@ export function filterCatalog(catalog, filters) {
 function pickScore(ex, level) {
   let s = 0;
   const lv = normalizeId(ex.level || '');
+  if (isCalisthenics(ex) && ex.family) {
+    // Calisthénie : on vise le niveau choisi, puis celui juste en dessous.
+    const order = { debutant: 0, intermediaire: 1, avance: 2, elite: 3 };
+    const gap = (order[level] ?? 1) - (order[lv] ?? 1);
+    if (gap === 0) s += 4;
+    else if (gap === 1) s += 1;
+    else s -= 2 * Math.abs(gap);
+    return s;
+  }
   if (level === 'debutant') {
     if (ex.isMachine) s += 3;
     if (ex.isFreeWeight && !ex.isMachine) s += 0;
@@ -613,9 +696,13 @@ export function generateWorkout(selection) {
   const level = sel.level || '';
   const durationMin = Number(sel.durationMin) || 60;
   const customExercises = Array.isArray(sel.customExercises) ? sel.customExercises : [];
+  const discipline = sel.discipline || null;
+  const available = discipline === 'calisthenie' ? (Array.isArray(sel.available) ? sel.available : []) : null;
 
   const catalog = getCombinedCatalog(customExercises);
-  const filtered = filterCatalog(catalog, { groups, subMuscles, equipment, level });
+  const filtered = filterCatalog(catalog, {
+    groups, subMuscles, equipment: discipline === 'calisthenie' ? [] : equipment, level, discipline, available,
+  });
 
   const targetCount = exerciseCountFor(durationMin);
 
@@ -652,6 +739,9 @@ export function generateWorkout(selection) {
   });
 
   const seen = new Set();
+  // Calisthénie : une seule variante par famille (pas trois sortes de pompes)
+  const usedFamilies = new Set();
+  const familyFree = (ex) => discipline !== 'calisthenie' || !ex.family || !usedFamilies.has(ex.family);
   const picked = [];
   let idx = 0;
   let safety = targetCount * Math.max(1, buckets.length) * 4;
@@ -662,13 +752,14 @@ export function generateWorkout(selection) {
       let chosen = null;
       while (b.pool.length > 0) {
         const cand = b.pool.shift();
-        if (!seen.has(cand.id)) {
+        if (!seen.has(cand.id) && familyFree(cand)) {
           chosen = cand;
           break;
         }
       }
       if (chosen) {
         seen.add(chosen.id);
+        if (chosen.family) usedFamilies.add(chosen.family);
         picked.push(chosen);
       }
     }
@@ -679,7 +770,7 @@ export function generateWorkout(selection) {
   // Complète depuis le pool global filtré si besoin (lui aussi shuffled)
   if (picked.length < targetCount) {
     const shuffledAll = weightedShuffle(filtered, (ex) => weightFromScore(pickScore(ex, level)));
-    for (const ex of shuffledAll) {
+    for (const ex of [...shuffledAll.filter(familyFree), ...shuffledAll]) {
       if (picked.length >= targetCount) break;
       if (!seen.has(ex.id)) {
         seen.add(ex.id);
@@ -690,6 +781,7 @@ export function generateWorkout(selection) {
 
   // Construit le nom
   const name = (() => {
+    if (discipline === 'calisthenie' && groups.length !== 1 && subMuscles.length !== 1) return 'Séance calisthénie';
     if (subMuscles.length === 1) return `Séance ${subMuscles[0]}`;
     if (groups.length === 1) {
       const g = MUSCLE_GROUPS.find((x) => x.id === groups[0]);

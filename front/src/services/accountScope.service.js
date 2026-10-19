@@ -28,6 +28,7 @@ export const ACCOUNT_SCOPED_KEYS = [
   'athly:xp:isXpSynced:v1',
   'athly:pref:featuredTrophies:v1',
   'athly:pref:profileTheme:v1',
+  'athly:pref:practice:v1',
   'athly:avatarColor:v1',
   'athly:avatarShape:v1',
   'athly:birthday:shown_date:v1',

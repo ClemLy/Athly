@@ -20,6 +20,7 @@ import InfoModal from '../common/InfoModal';
 import ActionSheetModal from '../common/ActionSheetModal';
 import ExerciseDemoModal from '../workouts/ExerciseDemoModal';
 import { getExerciseDemo } from '../../data/exerciseMedia';
+import ExerciseFigure from '../figure/ExerciseFigure';
 
 // Carte d'exercice de la séance en cours.
 //
@@ -75,7 +76,11 @@ function ExerciseCard({
   const icon = pickExerciseIcon(item);
   const primary = primaryMuscleLabel(item);
   const secondary = secondaryMusclesLabels(item);
-  const equipment = primaryEquipmentLabel(item);
+  // Calisthénie : la fourchette visée parle plus que le matériel (« 8 à 12 réps »)
+  const caliTarget = Array.isArray(item?.target) && item.family
+    ? `${item.target[0]} à ${item.target[1]} ${item.tracking === 'time' ? 's' : 'réps'}${item.unilateral ? ' par côté' : ''}`
+    : null;
+  const equipment = caliTarget || primaryEquipmentLabel(item);
   const sets = Array.isArray(item.sets) ? item.sets : [];
   const doneSets = sets.filter((s) => s && s.completed).length;
   const isDone = !!item.done || (sets.length > 0 && doneSets === sets.length);
@@ -113,7 +118,9 @@ function ExerciseCard({
           accessibilityLabel={demo ? `Voir le mouvement : ${name}` : `Voir une vidéo : ${name}`}
           hitSlop={4}
         >
-          {demo ? (
+          {demo?.figure ? (
+            <ExerciseFigure spec={demo.figure} t={0.75} style={styles.thumbFig} />
+          ) : demo ? (
             <Image source={{ uri: demo.frames[0] }} style={styles.thumbImg} resizeMode="cover" />
           ) : (
             <Ionicons name={icon} size={24} color={Colors.primary} />
@@ -218,6 +225,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  thumbFig: { width: '100%', height: '100%', aspectRatio: undefined },
   thumbImg: { width: '100%', height: '100%' },
   playBadge: {
     position: 'absolute',

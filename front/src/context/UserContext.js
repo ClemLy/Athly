@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, useCallback, useRef } from 
 import API, { triggerSignOut } from '../api/api';
 import { prefsCloud, seedFromProfile } from '../services/cloudPrefs.service';
 import { reloadAvatarFrame } from '../hooks/useAvatarFrame';
+import { reloadPractice } from '../hooks/usePractice';
 
 const UserContext = createContext(null);
 
@@ -30,6 +31,7 @@ export function UserProvider({ children }) {
           Promise.all([prefsCloud.pullAndMerge(), seedFromProfile(res.data.user)])
             .then(([prefs, seeded]) => {
               if (seeded.frame) reloadAvatarFrame();
+              if (prefs?.changed) reloadPractice();
               if (prefs?.changed || seeded.featured) setRestoredAt(Date.now());
             })
             .catch(() => {});

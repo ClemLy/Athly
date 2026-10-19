@@ -16,6 +16,7 @@ import {
 } from '../../constants/exerciseFilters';
 import SetTable from './SetTable';
 import ActionSheetModal from '../common/ActionSheetModal';
+import { trackingFor, bodyweightFactorFor, catalogEntryFor } from '../../data/exerciseCatalog';
 
 // Bloc exercice pour la vue "Voir tous les exercices" (all-in-one).
 // Affiche le titre, les muscles et le SetTable compact (avec « + Série »).
@@ -104,6 +105,10 @@ function InlineExerciseBlock({ exercise, exerciseIndex, onRemoveExercise, onRepl
         onUsePrevious={log.usePrevious}
         onAdd={log.addSet}
         onRemoveLast={log.canRemoveLast ? log.removeLast : null}
+        onToggleWarmup={log.toggleWarmup}
+        tracking={trackingFor(exercise)}
+        bodyweight={bodyweightFactorFor(exercise) > 0}
+        target={catalogEntryFor(exercise)?.target || null}
         compact
       />
 

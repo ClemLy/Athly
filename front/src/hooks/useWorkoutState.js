@@ -50,12 +50,19 @@ function reducer(state, action) {
       return { ...state, ...action.payload };
 
     case ACTIONS.UPDATE_SET: {
-      const { exerciseIndex, setIndex, weight, reps } = action.payload;
+      // Champs d'une série : weight, reps, seconds (tenue chronométrée),
+      // warmup (série d'échauffement, hors XP et records). Seuls les champs
+      // fournis sont modifiés.
+      const { exerciseIndex, setIndex } = action.payload;
+      const patch = {};
+      ['weight', 'reps', 'seconds', 'warmup'].forEach((k) => {
+        if (action.payload[k] !== undefined) patch[k] = action.payload[k];
+      });
       const exercises = [...state.exercises];
       const target = exercises[exerciseIndex];
       if (!target) return state;
       const sets = [...(target.sets || [])];
-      sets[setIndex] = { ...sets[setIndex], weight, reps };
+      sets[setIndex] = { ...sets[setIndex], ...patch };
       exercises[exerciseIndex] = { ...target, sets };
       return { ...state, exercises };
     }
@@ -115,7 +122,7 @@ function reducer(state, action) {
       const oldSets = Array.isArray(old.sets) ? old.sets : [];
       // On conserve le nombre de sets et les reps cibles, on remet à zéro le poids et la complétion.
       const sets = oldSets.length > 0
-        ? oldSets.map((s) => ({ weight: 0, reps: Number(s.reps) || 0, completed: false }))
+        ? oldSets.map((s) => ({ weight: 0, reps: Number(s.reps) || 0, seconds: Number(s.seconds) || 0, completed: false }))
         : [{ weight: 0, reps: 0, completed: false }];
       exercises[exerciseIndex] = {
         ...exercise,
@@ -139,6 +146,8 @@ function reducer(state, action) {
         ? exercise.sets.map((s) => ({
             weight: s.weight ?? 0,
             reps:   s.reps   ?? 0,
+            ...(s.seconds ? { seconds: s.seconds } : {}),
+            ...(s.warmup ? { warmup: true } : {}),
             completed: s.completed ?? false,
           }))
         : Array.from({ length: count }, () => ({ weight: 0, reps: 0, completed: false }));
@@ -280,8 +289,8 @@ export default function useWorkoutState(initial = {}) {
   }, []);
 
   // Wrappers d'action
-  const updateSet = useCallback((exerciseIndex, setIndex, { weight, reps }) => {
-    dispatch({ type: ACTIONS.UPDATE_SET, payload: { exerciseIndex, setIndex, weight, reps } });
+  const updateSet = useCallback((exerciseIndex, setIndex, patch) => {
+    dispatch({ type: ACTIONS.UPDATE_SET, payload: { exerciseIndex, setIndex, ...patch } });
     debouncedSave();
   }, [debouncedSave]);
 
@@ -359,10 +368,17 @@ export default function useWorkoutState(initial = {}) {
     return { totalVolume, setsCompleted, xpEstimated };
   }, [state.exercises]);
 
+  // Échauffement guidé (optionnel) : { routineId, durationSeconds, drillsDone }
+  // ou { skipped: true }. Gardé avec la séance, puis dans l'historique.
+  const setWarmup = useCallback((warmup) => {
+    dispatch({ type: ACTIONS.SET_WORKOUT, payload: { warmup } });
+  }, []);
+
   return {
     state,
     dispatch,
     actions: {
+      setWarmup,
       updateSet,
       toggleSet,
       addSet,

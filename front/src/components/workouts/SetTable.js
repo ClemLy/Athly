@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import SetRow from '../cards/SetRow';
 import { Colors } from '../../constants/theme';
 
-// Tableau des séries : Série | Précédent | kg | Réps | ✓
+// Tableau des séries : Série | Précédent | kg (ou Lest) | Réps (ou Secondes) | ✓
 //
 // Props :
 //   - sets          : array<{ weight, reps, completed }>
@@ -24,42 +24,60 @@ function HeaderCell({ children, style }) {
 }
 
 export default function SetTable({
-  sets = [], onToggle, onChange, previousFor, onUsePrevious, onAdd, onRemoveLast, compact = false,
+  sets = [], onToggle, onChange, previousFor, onUsePrevious, onAdd, onRemoveLast, onToggleWarmup,
+  tracking = 'reps', bodyweight = false, target = null, showWarmupHint = false, compact = false,
 }) {
+  const timed = tracking === 'time';
   // Mémorise les valeurs auto-remplies pour propager chaque frappe (sans ça,
   // dès que les séries suivantes ont reps=3, elles ne suivent plus quand
   // l'utilisateur tape « 0 » pour finir « 30 »).
-  const lastAutoFill = useRef({ weight: 0, reps: 0 });
+  const lastAutoFill = useRef({ weight: 0, reps: 0, seconds: 0 });
 
   const handleChange = useCallback((i, patch) => {
     if (!onChange) return;
     onChange(i, patch);
-    if (i !== 0) return;
+    const first = sets.findIndex((s) => !s.warmup);
+    if (i !== first) return;
 
-    const newWeight = Number(patch.weight) || 0;
-    const newReps = Number(patch.reps) || 0;
-    if (newWeight <= 0 || newReps <= 0) return;
+    const cur = { ...sets[i], ...patch };
+    const next = {
+      weight: Number(cur.weight) || 0,
+      reps: Number(cur.reps) || 0,
+      seconds: Number(cur.seconds) || 0,
+    };
+    // Série de référence complète : charge (ou poids du corps) ET répétitions,
+    // ou une durée pour une tenue.
+    const complete = timed ? next.seconds > 0 : next.reps > 0 && (next.weight > 0 || bodyweight);
+    if (!complete) return;
 
     const prev = lastAutoFill.current;
     sets.forEach((s, idx) => {
-      if (idx === 0 || s.completed) return;
+      if (idx <= i || s.completed || s.warmup) return;
       const sw = Number(s.weight) || 0;
       const sr = Number(s.reps) || 0;
-      const isEmpty = sw === 0 && sr === 0;
-      const wasAutoFilled = sw === prev.weight && sr === prev.reps && (prev.weight > 0 || prev.reps > 0);
+      const ss = Number(s.seconds) || 0;
+      const isEmpty = sw === 0 && sr === 0 && ss === 0;
+      const wasAutoFilled = sw === prev.weight && sr === prev.reps && ss === prev.seconds
+        && (prev.weight > 0 || prev.reps > 0 || prev.seconds > 0);
       if (!isEmpty && !wasAutoFilled) return;
-      onChange(idx, { weight: newWeight, reps: newReps });
+      onChange(idx, timed ? { seconds: next.seconds } : { weight: next.weight, reps: next.reps });
     });
-    lastAutoFill.current = { weight: newWeight, reps: newReps };
-  }, [onChange, sets]);
+    lastAutoFill.current = next;
+  }, [onChange, sets, timed, bodyweight]);
 
   return (
     <View style={[styles.table, compact && styles.tableCompact]}>
       <View style={styles.headerRow}>
         <HeaderCell style={styles.colSet}>Série</HeaderCell>
-        <HeaderCell style={styles.colPrev}>Précédent</HeaderCell>
-        <HeaderCell style={styles.colWeight}>kg</HeaderCell>
-        <HeaderCell style={styles.colReps}>Réps</HeaderCell>
+        <HeaderCell style={styles.colPrev}>{previousFor && previousFor(0) ? 'Précédent' : target ? 'Objectif' : 'Précédent'}</HeaderCell>
+        {timed ? (
+          <HeaderCell style={styles.colSeconds}>Secondes</HeaderCell>
+        ) : (
+          <>
+            <HeaderCell style={styles.colWeight}>{bodyweight ? 'Lest' : 'kg'}</HeaderCell>
+            <HeaderCell style={styles.colReps}>Réps</HeaderCell>
+          </>
+        )}
         <View style={styles.colCheck} />
       </View>
 
@@ -75,12 +93,22 @@ export default function SetTable({
             setData={s}
             compact={compact}
             previous={previousFor ? previousFor(i) : null}
+            tracking={tracking}
+            bodyweight={bodyweight}
+            target={target}
             onToggle={() => onToggle && onToggle(i)}
             onChange={(patch) => handleChange(i, patch)}
             onUsePrevious={onUsePrevious ? () => onUsePrevious(i) : undefined}
+            onToggleWarmup={onToggleWarmup ? () => onToggleWarmup(i) : undefined}
           />
         ))
       )}
+
+      {showWarmupHint && onToggleWarmup ? (
+        <Text style={styles.hint}>
+          Touche un numéro de série pour la marquer en échauffement : elle ne comptera ni dans l’XP ni dans tes records.
+        </Text>
+      ) : null}
 
       {(onAdd || onRemoveLast) ? (
         <View style={styles.footer}>
@@ -140,7 +168,13 @@ const styles = StyleSheet.create({
   colPrev: { flex: 1, textAlign: 'left', paddingHorizontal: 6 },
   colWeight: { width: 74 },
   colReps: { width: 62 },
+  colSeconds: { width: 136 },
   colCheck: { width: 52 },
+  hint: {
+    color: Colors.textMuted, fontSize: 12.5, lineHeight: 18,
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.06)',
+  },
 
   empty: { paddingVertical: 22, alignItems: 'center' },
   emptyText: { color: Colors.textMuted, fontSize: 13 },

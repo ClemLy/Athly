@@ -5,13 +5,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   FlatList,
-  Modal,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
-import { TEMPLATES, instantiateWorkout } from '../../data/workoutTemplates';
+import { TEMPLATES, CALI_TEMPLATES, instantiateWorkout } from '../../data/workoutTemplates';
+import { usePractice, PRACTICES } from '../../hooks/usePractice';
+import { CALI_LEVELS } from '../../data/calisthenics';
 import ResumeWorkoutCard from '../../components/workouts/ResumeWorkoutCard';
 import { useWorkoutInProgress } from '../../context/WorkoutInProgressContext';
 import { useSavedWorkouts } from '../../context/SavedWorkoutsContext';
@@ -24,21 +24,14 @@ import MultiLobbyModal from '../../components/workouts/MultiLobbyModal';
 import ConfirmModal from '../../components/common/ConfirmModal';
 import InfoModal from '../../components/common/InfoModal';
 import ActionSheetModal from '../../components/common/ActionSheetModal';
+import WorkoutPreviewSheet from '../../components/workouts/WorkoutPreviewSheet';
+import { estimateMinutes, lastDoneLabel } from '../../data/workoutPreview';
 import { getErrorMessage } from '../../utils/errorMessages';
 import { plural } from '../../utils/format';
 
 // Page d'entrée "Séances".
 // Header : titre + 2 icônes (Mes exercices, Créer un exercice).
 // Body : callout Builder, section "Mes séances" sauvegardées, templates rapides.
-
-// « il y a 3 j » pour la dernière fois qu'une séance a été faite.
-function lastDoneLabel(date) {
-  if (!date) return null;
-  const days = Math.round((Date.now() - new Date(date).getTime()) / 86400000);
-  if (days <= 0) return "Faite aujourd'hui";
-  if (days === 1) return 'Faite hier';
-  return `Faite il y a ${days} j`;
-}
 
 function TemplateCard({ template, lastDone, onPress }) {
   return (
@@ -51,14 +44,14 @@ function TemplateCard({ template, lastDone, onPress }) {
         <Ionicons name={template.icon} size={22} color={Colors.primary} />
       </View>
       <View style={styles.content}>
-        <Text style={styles.title} numberOfLines={1}>{template.name}</Text>
+        <Text style={styles.title} numberOfLines={2}>{template.name}</Text>
         <Text style={styles.muscles} numberOfLines={1}>{template.musclesSummary}</Text>
         <View style={styles.metaRow}>
           <Ionicons name="barbell-outline" size={13} color={Colors.textMuted} />
           <Text style={styles.meta} numberOfLines={1}>{plural(template.buildExercises().length, 'exercice')}</Text>
           <View style={styles.metaDot} />
           <Ionicons name="time-outline" size={13} color={Colors.textMuted} />
-          <Text style={styles.meta} numberOfLines={1}>~{template.estimatedDurationMin} min</Text>
+          <Text style={styles.meta} numberOfLines={1}>~{estimateMinutes(template.buildExercises())} min</Text>
         </View>
         {lastDone ? (
           <View style={styles.recentRow}>
@@ -108,9 +101,8 @@ function SavedWorkoutCard({ saved, onPress, onLongPress }) {
   );
 }
 
-const SKIP_CONFIRM_KEY = '@athly_skip_workout_confirm';
-
 export default function WorkoutListScreen({ navigation, route }) {
+  const { practice, setPractice } = usePractice();
   const { loadWorkout, resumable } = useWorkoutInProgress();
   const { items: savedWorkouts, remove: removeSaved } = useSavedWorkouts();
   const { sessionLogs } = useWorkoutLogs();
@@ -125,8 +117,8 @@ export default function WorkoutListScreen({ navigation, route }) {
     return map;
   }, [sessionLogs]);
 
-  const [confirmItem, setConfirmItem] = useState(null); // { type: 'template'|'saved', data }
-  const [dontAsk, setDontAsk] = useState(false);
+  // Séance ouverte en détail avant lancement : { type: 'template'|'saved', data }
+  const [confirmItem, setConfirmItem] = useState(null);
 
   // ─── Lancement en Multi (Section VII) ────────────────────────────────────
   const [multiLobbyVisible, setMultiLobbyVisible] = useState(false);
@@ -194,41 +186,28 @@ export default function WorkoutListScreen({ navigation, route }) {
     navigation.navigate('Workout', { workout });
   }, [navigation, loadWorkout]);
 
-  const onSelectTemplate = useCallback(async (template) => {
-    try {
-      const skip = await AsyncStorage.getItem(SKIP_CONFIRM_KEY);
-      if (skip === 'true') { launchWorkout('template', template); return; }
-    } catch (_) {}
-    setDontAsk(false);
-    setConfirmItem({ type: 'template', data: template });
-  }, [launchWorkout]);
+  // Toucher une séance ouvre son détail (exercices, séries, durée), d'où on la lance.
+  const onSelectTemplate = useCallback((template) => setConfirmItem({ type: 'template', data: template }), []);
+  const onSelectSaved = useCallback((saved) => setConfirmItem({ type: 'saved', data: saved }), []);
 
-  const onSelectSaved = useCallback(async (saved) => {
-    try {
-      const skip = await AsyncStorage.getItem(SKIP_CONFIRM_KEY);
-      if (skip === 'true') { launchWorkout('saved', saved); return; }
-    } catch (_) {}
-    setDontAsk(false);
-    setConfirmItem({ type: 'saved', data: saved });
-  }, [launchWorkout]);
-
-  const handleConfirm = useCallback(async () => {
+  const handleConfirm = useCallback(() => {
     if (!confirmItem) return;
-    if (dontAsk) {
-      try { await AsyncStorage.setItem(SKIP_CONFIRM_KEY, 'true'); } catch (_) {}
-    }
     launchWorkout(confirmItem.type, confirmItem.data);
     setConfirmItem(null);
-  }, [confirmItem, dontAsk, launchWorkout]);
+  }, [confirmItem, launchWorkout]);
 
   const handleCancelConfirm = useCallback(() => setConfirmItem(null), []);
+
+  // Séances types selon « Ma pratique » (salle, calisthénie ou les deux)
+  const visibleTemplates = practice === 'calisthenie' ? CALI_TEMPLATES
+    : practice === 'mixte' ? [...TEMPLATES, ...CALI_TEMPLATES] : TEMPLATES;
 
   // Séances proposées dans le salon Multi : les miennes puis les modèles.
   const multiOptions = [
     ...(savedWorkouts || []).map((sw) => ({
       key: `s:${sw.id}`, name: sw.name || 'Séance', meta: plural((sw.exercises || []).length, 'exercice'), type: 'saved', data: sw,
     })),
-    ...TEMPLATES.map((t) => ({
+    ...visibleTemplates.map((t) => ({
       key: `t:${t.id}`, name: t.name, meta: t.description || plural(t.buildExercises().length, 'exercice'), type: 'template', data: t,
     })),
   ];
@@ -261,7 +240,7 @@ export default function WorkoutListScreen({ navigation, route }) {
     loadWorkout(workout);
     navigation.navigate('Workout', { workout, lobbyId });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigation, loadWorkout, savedWorkouts]);
+  }, [navigation, loadWorkout, savedWorkouts, practice]);
 
   const onLongPressSaved = useCallback((saved) => setActionSheetTarget(saved), []);
 
@@ -301,13 +280,25 @@ export default function WorkoutListScreen({ navigation, route }) {
   // qui dispatch sur le type pour garder le scroll fluide.
   const sections = [];
   if (resumable) sections.push({ type: 'resume', key: 'resume' });
+  sections.push({ type: 'practice', key: 'practice' });
   sections.push({ type: 'callout', key: 'cta-builder' });
   if (savedWorkouts && savedWorkouts.length > 0) {
     sections.push({ type: 'header', key: 'h-saved', label: 'Mes séances', count: savedWorkouts.length });
     savedWorkouts.forEach((s) => sections.push({ type: 'saved', key: `s-${s.id}`, item: s }));
   }
-  sections.push({ type: 'header', key: 'h-templates', label: 'Séances prêtes à lancer', count: TEMPLATES.length });
-  TEMPLATES.forEach((t) => sections.push({ type: 'template', key: `t-${t.id}`, item: t }));
+  if (practice !== 'salle') sections.push({ type: 'progress', key: 'progress' });
+  if (practice !== 'calisthenie') {
+    sections.push({ type: 'header', key: 'h-templates', label: practice === 'mixte' ? 'Séances salle' : 'Séances prêtes à lancer', count: TEMPLATES.length });
+    TEMPLATES.forEach((t) => sections.push({ type: 'template', key: `t-${t.id}`, item: t }));
+  }
+  if (practice !== 'salle') {
+    CALI_LEVELS.forEach((lv) => {
+      const list = CALI_TEMPLATES.filter((t) => t.level === lv.id);
+      if (!list.length) return;
+      sections.push({ type: 'header', key: `h-cali-${lv.id}`, label: `Calisthénie · ${lv.label}`, count: list.length });
+      list.forEach((t) => sections.push({ type: 'template', key: `t-${t.id}`, item: t }));
+    });
+  }
 
   const renderItem = ({ item }) => {
     if (item.type === 'resume') {
@@ -335,6 +326,49 @@ export default function WorkoutListScreen({ navigation, route }) {
             <Ionicons name="arrow-forward" size={16} color="#fff" />
           </TouchableOpacity>
         </View>
+      );
+    }
+    if (item.type === 'practice') {
+      return (
+        <View style={styles.practiceBlock}>
+          <Text style={styles.practiceLabel}>Ma pratique</Text>
+          <View style={styles.segWrap} accessibilityRole="tablist">
+            {PRACTICES.map((p) => {
+              const on = p.id === practice;
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  style={[styles.segBtn, on && styles.segBtnOn]}
+                  onPress={() => setPractice(p.id)}
+                  activeOpacity={0.8}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: on }}
+                >
+                  <Text style={[styles.segText, on && styles.segTextOn]} numberOfLines={1}>{p.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      );
+    }
+    if (item.type === 'progress') {
+      return (
+        <TouchableOpacity
+          accessibilityRole="button"
+          style={[styles.card, styles.progressCard]}
+          onPress={() => navigation && navigation.navigate('CaliProgress')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.iconBox}>
+            <Ionicons name="stats-chart-outline" size={22} color={Colors.primary} />
+          </View>
+          <View style={styles.content}>
+            <Text style={styles.title}>Mes progressions</Text>
+            <Text style={styles.muscles} numberOfLines={2}>Ton niveau dans chaque échelle, des pompes au front lever.</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={22} color={Colors.chevron} />
+        </TouchableOpacity>
       );
     }
     if (item.type === 'header') {
@@ -431,42 +465,14 @@ export default function WorkoutListScreen({ navigation, route }) {
         <TutorialOverlay navigation={navigation} />
       )}
 
-      {/* ── Confirmation lancement séance ── */}
-      <Modal visible={!!confirmItem} transparent animationType="fade" onRequestClose={handleCancelConfirm}>
-        <View style={styles.confirmOverlay}>
-          <View style={styles.confirmBox}>
-            <Text style={styles.confirmTitle}>Lancer la séance ?</Text>
-            <Text style={styles.confirmName} numberOfLines={2}>
-              {confirmItem ? (confirmItem.data.name || 'Séance') : ''}
-            </Text>
-
-            <TouchableOpacity accessibilityRole="button"
-              style={styles.dontAskRow}
-              onPress={() => setDontAsk((v) => !v)}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.dontAskCheck, dontAsk && styles.dontAskCheckOn]}>
-                {dontAsk && <Ionicons name="checkmark" size={12} color="#fff" />}
-              </View>
-              <Text style={styles.dontAskText}>Ne plus demander</Text>
-            </TouchableOpacity>
-
-            <View style={styles.confirmBtns}>
-              <TouchableOpacity accessibilityRole="button" style={styles.confirmBtnNo} onPress={handleCancelConfirm} activeOpacity={0.8}>
-                <Text style={styles.confirmBtnNoText}>Annuler</Text>
-              </TouchableOpacity>
-              <TouchableOpacity accessibilityRole="button" style={styles.confirmBtnYes} onPress={handleConfirm} activeOpacity={0.8}>
-                <Text style={styles.confirmBtnYesText}>Lancer !</Text>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity accessibilityRole="button" style={styles.multiBtn} onPress={handleLaunchMulti} activeOpacity={0.8}>
-              <Ionicons name="people" size={15} color={Colors.primary} style={{ marginRight: 7 }} />
-              <Text style={styles.multiBtnTxt}>Lancer en Multi</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* ── Détail de la séance avant lancement ── */}
+      <WorkoutPreviewSheet
+        item={confirmItem}
+        lastDone={confirmItem ? lastDoneByName[confirmItem.data.name] : null}
+        onClose={handleCancelConfirm}
+        onLaunch={handleConfirm}
+        onLaunchMulti={handleLaunchMulti}
+      />
 
       <MultiLobbyModal
         visible={multiLobbyVisible}
@@ -603,6 +609,17 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 4,
   },
+  practiceBlock: { marginTop: 2 },
+  practiceLabel: { color: Colors.textSecondary, fontSize: 12.5, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 8 },
+  segWrap: {
+    flexDirection: 'row', padding: 4, borderRadius: 14, gap: 4,
+    backgroundColor: Colors.cardDeep, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+  },
+  segBtn: { flex: 1, minHeight: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  segBtnOn: { backgroundColor: 'rgba(255,255,255,0.1)' },
+  segText: { color: Colors.textSecondary, fontSize: 14.5, fontWeight: '700' },
+  segTextOn: { color: Colors.textPrimary },
+  progressCard: { borderColor: 'rgba(254,116,57,0.25)' },
   sectionTitle: {
     color: Colors.textPrimary,
     fontSize: 17,
@@ -690,102 +707,4 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.textMuted,
     marginHorizontal: 8,
   },
-
-  // ── Confirmation modale ──────────────────────────────────────────────────
-  confirmOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 28,
-  },
-  confirmBox: {
-    width: '100%',
-    backgroundColor: Colors.modalBg,
-    borderRadius: 22,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.09)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.6,
-    shadowRadius: 40,
-    elevation: 20,
-  },
-  confirmTitle: {
-    color: Colors.textPrimary,
-    fontSize: 20,
-    fontWeight: '800',
-    marginBottom: 6,
-  },
-  confirmName: {
-    color: Colors.primary,
-    fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 20,
-  },
-  dontAskRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 22,
-  },
-  dontAskCheck: {
-    width: 20,
-    height: 20,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    borderColor: Colors.borderDim,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dontAskCheckOn: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  dontAskText: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  confirmBtns: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  confirmBtnNo: {
-    flex: 1,
-    paddingVertical: 13,
-    borderRadius: 13,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    alignItems: 'center',
-  },
-  confirmBtnNoText: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  confirmBtnYes: {
-    flex: 2,
-    paddingVertical: 13,
-    borderRadius: 13,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  confirmBtnYesText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  multiBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    height: 42, borderRadius: 12, marginTop: 10,
-    borderWidth: 1, borderColor: `${Colors.primary}40`,
-    backgroundColor: `${Colors.primary}12`,
-  },
-  multiBtnTxt: { color: Colors.primary, fontSize: 13, fontWeight: '700' },
 });
