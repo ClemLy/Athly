@@ -13,6 +13,9 @@ const SetSchema = new mongoose.Schema(
   {
     weight: { type: Number, default: 0 },
     reps: { type: Number, default: 0 },
+    // Tenue chronométrée (gainage, skills) et série d'échauffement
+    seconds: { type: Number, min: 0, max: 3600 },
+    warmup: { type: Boolean },
     completed: { type: Boolean, default: false },
     timestamp: { type: Date },
   },

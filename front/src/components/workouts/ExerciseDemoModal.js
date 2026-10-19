@@ -8,6 +8,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/theme';
 import { primaryMuscleLabel, secondaryMusclesLabels } from '../../constants/exerciseFilters';
 import { getExerciseDemo } from '../../data/exerciseMedia';
+import { catalogEntryFor } from '../../data/exerciseCatalog';
+import ExerciseFigure, { useFigureClock } from '../figure/ExerciseFigure';
 
 // ─── ExerciseDemoModal ────────────────────────────────────────────────────────
 // Démonstration du mouvement DANS l'app : les deux photos de la démo (départ /
@@ -120,6 +122,36 @@ function SideBySideDemo({ frames, onReady, onError, ready }) {
   );
 }
 
+// Mannequin animé : même phrasé que les photos (départ, pause, arrivée).
+function FigureDemo({ spec, reduced, labels }) {
+  const t = useFigureClock(!reduced, spec);
+  const [a, b] = labels || ['Départ', 'Arrivée'];
+  if (reduced) {
+    return (
+      <View style={styles.sideRow}>
+        {[0, 1].map((k) => (
+          <View key={k} style={styles.sideCell}>
+            <ExerciseFigure spec={spec} t={k} style={styles.figureStage} />
+            <Text style={styles.sideLabel}>{k === 0 ? a : b}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  }
+  return (
+    <>
+      <ExerciseFigure spec={spec} t={t} style={styles.figureStage} />
+      <View style={styles.phaseRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <Text style={[styles.phaseLabel, { opacity: 1 - 0.65 * t }]}>{a}</Text>
+        <View style={styles.phaseTrack}>
+          <View style={[styles.phaseFill, { transform: [{ scaleX: t }] }]} />
+        </View>
+        <Text style={[styles.phaseLabel, { opacity: 0.35 + 0.65 * t }]}>{b}</Text>
+      </View>
+    </>
+  );
+}
+
 export default function ExerciseDemoModal({ visible, exercise, onClose }) {
   const reduced = useReducedMotion();
   // Marge basse = zone sûre réelle (barre de navigation Android en bord à
@@ -134,11 +166,13 @@ export default function ExerciseDemoModal({ visible, exercise, onClose }) {
     if (!visible) return;
     setReady(false);
     setFailed(false);
-    demo?.frames.forEach((uri) => { Image.prefetch(uri).catch(() => {}); });
+    demo?.frames?.forEach((uri) => { Image.prefetch(uri).catch(() => {}); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, exercise?.name]);
 
   if (!exercise) return null;
+  const entry = catalogEntryFor(exercise);
+  const cues = (exercise.cues && exercise.cues.length ? exercise.cues : entry?.cues) || (exercise.cue ? [exercise.cue] : []);
   const name = exercise.name || exercise.title || 'Exercice';
   const primary = primaryMuscleLabel(exercise);
   const secondary = secondaryMusclesLabels(exercise);
@@ -178,7 +212,9 @@ export default function ExerciseDemoModal({ visible, exercise, onClose }) {
           </TouchableOpacity>
         </View>
 
-        {demo && !failed ? (
+        {demo?.figure ? (
+          <FigureDemo spec={demo.figure} reduced={reduced} />
+        ) : demo && !failed ? (
           <Demo
             key={`${name}-${reduced}`}
             frames={demo.frames}
@@ -197,6 +233,18 @@ export default function ExerciseDemoModal({ visible, exercise, onClose }) {
             </Text>
           </View>
         )}
+
+        {cues.length > 0 ? (
+          <View style={styles.cues}>
+            <Text style={styles.cuesTitle}>Points clés</Text>
+            {cues.map((cue, i) => (
+              <View key={i} style={styles.cueRow}>
+                <View style={styles.cueDot} />
+                <Text style={styles.cueText}>{cue}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         {videoUrl ? (
           <TouchableOpacity
@@ -243,6 +291,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   frame: { width: '100%', height: '100%' },
+  figureStage: { borderRadius: 18 },
+  cues: { marginTop: 18, gap: 8 },
+  cuesTitle: { color: Colors.textSecondary, fontSize: 12.5, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase' },
+  cueRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  cueDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.primary, marginTop: 7 },
+  cueText: { flex: 1, color: Colors.textPrimary, fontSize: 14.5, lineHeight: 21 },
   placeholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.cardDeep },
 
   phaseRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14, gap: 10 },

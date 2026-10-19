@@ -20,6 +20,21 @@ const MAX_COUNTED_DURATION_SECONDS = 6 * 3600;
 // brouillon. Tout le reste (propriétaire, statut, XP, date…) est fixé par le serveur.
 const DRAFT_FIELDS = ["name", "exercises", "notes", "durationSeconds"];
 
+async function saveExerciseRecords(userId, workout) {
+  const exerciseService = require("./exercise.service");
+  for (const ex of workout.exercises || []) {
+    const series = (ex.sets || [])
+      .filter((st) => st && st.completed && !st.warmup && (Number(st.reps) || 0) > 0)
+      .map((st) => ({ poids: Math.max(0, Number(st.weight) || 0), repetitions: Number(st.reps) || 0 }));
+    if (!series.length || !ex.name) continue;
+    try {
+      await exerciseService.createRecord(userId, { workout: workout._id, exerciceNom: String(ex.name).slice(0, 120), series });
+    } catch (_) {
+      // best-effort : un record raté ne doit jamais bloquer la fin de séance
+    }
+  }
+}
+
 function pick(source, fields) {
   const out = {};
   for (const f of fields) {
@@ -294,6 +309,10 @@ class WorkoutService {
         // ignore
       }
     }
+
+    // Records personnels (profil, classement des records entre amis) : une
+    // entrée par exercice, séries d'échauffement et tenues chronométrées exclues.
+    if (!isShort) await saveExerciseRecords(userId, workout);
 
     return {
       workout,

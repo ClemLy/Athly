@@ -35,6 +35,8 @@ import MultiLootModal from '../../components/workouts/MultiLootModal';
 import { getLobby, finishLobby, leaveLobby } from '../../services';
 import { useMyId } from '../../hooks/useMyId';
 import { computeBonusPercent } from '../../components/workouts/MultiLobbyModal';
+import WarmupCard from '../../components/workouts/WarmupCard';
+import { estimateMinutes } from '../../data/workoutPreview';
 
 const DEFAULT_FILTERS = { muscles: [], levels: [], equipment: [] };
 
@@ -48,10 +50,6 @@ function formatElapsed(seconds) {
   return `${pad(m)}:${pad(s)}`;
 }
 
-function estimateMinutes(count) {
-  if (!count) return 0;
-  return Math.max(5, Math.round((count * 9) / 5) * 5);
-}
 
 export default function WorkoutScreen({ route, navigation }) {
   const {
@@ -598,7 +596,7 @@ export default function WorkoutScreen({ route, navigation }) {
               <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
             </View>
             <Text style={styles.chronoSub}>
-              {doneSets}/{totalSets} séries  ·  {doneExercises}/{exerciseCount} exercices  ·  ~{estimateMinutes(exerciseCount)} min
+              {doneSets}/{totalSets} séries  ·  {doneExercises}/{exerciseCount} exercices  ·  ~{estimateMinutes(totalSets)} min
             </Text>
           </View>
         ) : (
@@ -659,6 +657,14 @@ export default function WorkoutScreen({ route, navigation }) {
             data={displayItems}
             keyExtractor={(item) => item.key}
             renderItem={allInOne ? renderItemAllInOne : renderItem}
+            ListHeaderComponent={(
+              <WarmupCard
+                exercises={sourceExercises}
+                warmup={state.warmup}
+                onChange={actions.setWarmup}
+                hidden={doneSets > 0}
+              />
+            )}
             ListFooterComponent={renderFooter}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}

@@ -13,6 +13,8 @@ import { useWorkoutInProgress } from '../../context/WorkoutInProgressContext';
 import { useSavedWorkouts } from '../../context/SavedWorkoutsContext';
 import { useToast } from '../../context/ToastContext';
 import { generateWorkout, exerciseCountFor } from '../../data/exerciseCatalog';
+import { CALI_EQUIPMENT, CALI_LEVELS } from '../../data/calisthenics';
+import { usePractice } from '../../hooks/usePractice';
 import { PRESETS, activePresetId, groupState, toggleGroup, swapExercise } from '../../data/workoutBuilder';
 import InfoModal from '../../components/common/InfoModal';
 import { getErrorMessage } from '../../utils/errorMessages';
@@ -41,6 +43,12 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
   const editWorkout = route?.params?.editWorkout ?? null;
   const editCriteria = editWorkout?.criteria ?? null;
 
+  // Salle ou calisthénie : en calisthénie, on coche le matériel qu'on A (tout
+  // ce qu'un exercice demande doit être disponible) et le niveau va jusqu'à élite.
+  const { practice } = usePractice();
+  const [discipline, setDiscipline] = useState(editCriteria?.discipline ?? (practice === 'calisthenie' ? 'calisthenie' : 'salle'));
+  const cali = discipline === 'calisthenie';
+  const [gear, setGear] = useState(editCriteria?.available ?? []);
   const [subMuscles, setSubMuscles] = useState(editCriteria?.subMuscles ?? []);
   const [equipment, setEquipment] = useState(editCriteria?.equipment ?? []);
   const [level, setLevel] = useState(editCriteria?.level ?? '');
@@ -48,14 +56,14 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
   const [regenKey, setRegenKey] = useState(0);
   const [name, setName] = useState(editWorkout?.name ?? '');
   const [fineOpen, setFineOpen] = useState(false);
-  const [optionsOpen, setOptionsOpen] = useState(!!(editCriteria?.equipment?.length || editCriteria?.level));
+  const [optionsOpen, setOptionsOpen] = useState(!!(editCriteria?.equipment?.length || editCriteria?.level || editCriteria?.discipline === 'calisthenie' || practice !== 'salle'));
   const [saving, setSaving] = useState(false);
   const [infoModal, setInfoModal] = useState(null);
   const [savedWorkoutId, setSavedWorkoutId] = useState(editWorkout?.id ?? null);
   const [editingId, setEditingId] = useState(editWorkout?.id ?? null);
 
   const presetId = activePresetId(subMuscles);
-  const genKey = [subMuscles.join('|'), equipment.join('|'), level, duration, regenKey].join('#');
+  const genKey = [discipline, gear.join('|'), subMuscles.join('|'), equipment.join('|'), level, duration, regenKey].join('#');
   // Exercices retouchés à la main (retirés / remplacés) : valables tant que les
   // critères ne changent pas. En édition, on repart des exercices enregistrés.
   const [edit, setEdit] = useState(() => (
@@ -64,7 +72,10 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
 
   const generated = useMemo(() => {
     if (subMuscles.length === 0) return null;
-    return generateWorkout({ subMuscles, equipment, level, durationMin: duration, customExercises });
+    return generateWorkout({
+      subMuscles, equipment, level, durationMin: duration, customExercises,
+      discipline, available: cali ? gear : undefined,
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [genKey, customExercises]);
 
@@ -79,8 +90,10 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
       : generated ? generated.name : 'Séance personnalisée';
   const finalName = name.trim() || autoName;
   const criteria = useMemo(
-    () => ({ subMuscles, equipment, level, durationMin: duration }),
-    [subMuscles, equipment, level, duration],
+    () => (cali
+      ? { subMuscles, level, durationMin: duration, discipline, available: gear }
+      : { subMuscles, equipment, level, durationMin: duration, discipline }),
+    [cali, subMuscles, equipment, level, duration, discipline, gear],
   );
 
   const invalidateSaved = useCallback(() => setSavedWorkoutId(null), []);
@@ -148,7 +161,11 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
 
   const summary = (list) => (list.length ? list.join(', ') : null);
   const footerHint = subMuscles.length === 0 ? 'Choisis un groupe musculaire' : 'Aucun exercice à lancer';
-  const optionsSummary = [summary(equipment), level ? LEVELS.find((l) => l.id === level)?.label : null]
+  const levelList = cali ? CALI_LEVELS : LEVELS;
+  const gearSummary = cali
+    ? (gear.length ? CALI_EQUIPMENT.filter((g) => gear.includes(g.id)).map((g) => g.label).join(', ') : 'Poids du corps seul')
+    : summary(equipment);
+  const optionsSummary = [cali ? 'Calisthénie' : null, gearSummary, level ? levelList.find((l) => l.id === level)?.label : null]
     .filter(Boolean).join(' · ') || 'Aucune contrainte';
 
   return (
@@ -270,16 +287,37 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
         </TouchableOpacity>
         {optionsOpen ? (
           <View style={styles.optionsBody}>
-            <Text style={styles.optLabel}>Matériel dispo <Text style={styles.optNote}>(aucun choix = tout)</Text></Text>
+            <Text style={styles.optLabel}>Type de séance</Text>
             <View style={styles.chipsWrap}>
-              {EQUIPMENTS.map((eq) => (
-                <SelectableChip key={eq.id} label={eq.label} selected={equipment.includes(eq.label)}
-                  onPress={() => changeCriteria(() => setEquipment((s) => toggleArr(s, eq.label)))} />
+              {[{ id: 'salle', label: 'Salle' }, { id: 'calisthenie', label: 'Calisthénie' }].map((d) => (
+                <SelectableChip key={d.id} label={d.label} selected={discipline === d.id}
+                  onPress={() => changeCriteria(() => { setDiscipline(d.id); setLevel(''); })} />
               ))}
             </View>
+            {cali ? (
+              <>
+                <Text style={[styles.optLabel, { marginTop: 8 }]}>Ce que tu as <Text style={styles.optNote}>(rien de coché = poids du corps seul)</Text></Text>
+                <View style={styles.chipsWrap}>
+                  {CALI_EQUIPMENT.map((eq) => (
+                    <SelectableChip key={eq.id} label={eq.label} selected={gear.includes(eq.id)}
+                      onPress={() => changeCriteria(() => setGear((s) => toggleArr(s, eq.id)))} />
+                  ))}
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.optLabel, { marginTop: 8 }]}>Matériel dispo <Text style={styles.optNote}>(aucun choix = tout)</Text></Text>
+                <View style={styles.chipsWrap}>
+                  {EQUIPMENTS.map((eq) => (
+                    <SelectableChip key={eq.id} label={eq.label} selected={equipment.includes(eq.label)}
+                      onPress={() => changeCriteria(() => setEquipment((s) => toggleArr(s, eq.label)))} />
+                  ))}
+                </View>
+              </>
+            )}
             <Text style={[styles.optLabel, { marginTop: 8 }]}>Ton niveau <Text style={styles.optNote}>(écarte les exercices trop durs)</Text></Text>
             <View style={styles.chipsWrap}>
-              {LEVELS.map((lv) => (
+              {levelList.map((lv) => (
                 <SelectableChip key={lv.id} label={lv.label} selected={level === lv.id}
                   onPress={() => changeCriteria(() => setLevel(level === lv.id ? '' : lv.id))} />
               ))}

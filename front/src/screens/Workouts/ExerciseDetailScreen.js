@@ -26,6 +26,9 @@ import { haptics } from '../../services';
 import ExerciseDemoCard from '../../components/workouts/ExerciseDemoCard';
 import SetTable from '../../components/workouts/SetTable';
 import RestTimerBar from '../../components/workouts/RestTimerBar';
+import { trackingFor, bodyweightFactorFor, catalogEntryFor } from '../../data/exerciseCatalog';
+import { progressionFor } from '../../data/caliProgress';
+import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 
 // Écran d'un exercice de la séance en cours. Lit l'exo depuis le contexte
 // global via `exerciseIndex` (nav param) ; toutes les actions passent par
@@ -61,6 +64,14 @@ export default function ExerciseDetailScreen({ route, navigation }) {
   const notes = (exercise && exercise.notes) || '';
 
   const log = useSetLogging(exerciseIndex, exercise);
+  const { sessionLogs } = useWorkoutLogs();
+  const entry = catalogEntryFor(exercise);
+  const tracking = trackingFor(exercise);
+  const timed = tracking === 'time';
+  const bodyweight = bodyweightFactorFor(exercise) > 0;
+  const target = entry?.target || null;
+  // Calisthénie : prêt pour le niveau suivant de l'échelle ?
+  const levelUp = useMemo(() => (exercise ? progressionFor(sessionLogs, exercise) : null), [sessionLogs, exercise?.name]);
   const timer = useEffortTimer({ autoStart: true });
   const [notesOpen, setNotesOpen] = useState(!!notes);
 
@@ -127,6 +138,12 @@ export default function ExerciseDetailScreen({ route, navigation }) {
     actions.markExerciseDone(exerciseIndex, false);
   }, [actions, exerciseIndex]);
 
+  const switchToNext = useCallback(() => {
+    if (!levelUp || exerciseIndex < 0) return;
+    haptics.success();
+    actions.replaceExercise(exerciseIndex, { ...levelUp.next, sets: [] });
+  }, [levelUp, exerciseIndex, actions]);
+
   const handleNotes = useCallback((text) => {
     if (exerciseIndex < 0) return;
     actions.updateExerciseNotes(exerciseIndex, text);
@@ -153,7 +170,9 @@ export default function ExerciseDetailScreen({ route, navigation }) {
   // « 35 kg × 10 · 9 · 8 » si la charge est la même partout, sinon « 35×10 · 37,5×8 ».
   const prev = log.previous;
   const sameWeight = prev.length > 0 && prev.every((p) => p.weight === prev[0].weight);
-  const lastSummary = !prev.length ? '' : sameWeight
+  const lastSummary = !prev.length ? '' : timed
+    ? prev.map((p) => `${p.seconds} s`).join(' · ')
+    : sameWeight
     ? (prev[0].weight ? `${fmtKg(prev[0].weight)} kg × ` : '') + prev.map((p) => p.reps).join(' · ') + (prev[0].weight ? '' : ' réps')
     : prev.map((p) => `${fmtKg(p.weight)}×${p.reps}`).join(' · ');
 
@@ -243,9 +262,37 @@ export default function ExerciseDetailScreen({ route, navigation }) {
           ) : (
             <View style={styles.firstTime}>
               <Ionicons name="sparkles-outline" size={16} color={Colors.textSecondary} />
-              <Text style={styles.firstTimeText}>Première fois sur cet exercice : choisis une charge confortable.</Text>
+              <Text style={styles.firstTimeText}>
+                {target
+                  ? (timed
+                    ? `Première fois : vise ${target[0]} à ${target[1]} secondes de tenue propre, en gardant un peu de marge.`
+                    : `Première fois : vise ${target[0]} à ${target[1]} répétitions propres, avec 2 ou 3 en réserve.`)
+                  : 'Première fois sur cet exercice : choisis une charge confortable.'}
+              </Text>
             </View>
           )}
+
+          {levelUp ? (
+            <View style={styles.levelUp}>
+              <View style={styles.levelUpIcon}>
+                <Ionicons name="trending-up" size={18} color={Colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.levelUpTitle}>Prêt pour le niveau suivant</Text>
+                <Text style={styles.levelUpSub}>
+                  Haut de la fourchette atteint deux séances de suite. Prochaine étape : {levelUp.next.name}.
+                </Text>
+              </View>
+              <Pressable
+                onPress={switchToNext}
+                style={({ pressed }) => [styles.goalBtn, pressed && { opacity: 0.8 }]}
+                accessibilityRole="button"
+                accessibilityLabel={`Remplacer par ${levelUp.next.name}`}
+              >
+                <Text style={styles.goalBtnText}>Passer</Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           <SetTable
             sets={log.sets}
@@ -255,6 +302,11 @@ export default function ExerciseDetailScreen({ route, navigation }) {
             onUsePrevious={log.usePrevious}
             onAdd={log.addSet}
             onRemoveLast={log.canRemoveLast ? log.removeLast : null}
+            onToggleWarmup={log.toggleWarmup}
+            tracking={tracking}
+            bodyweight={bodyweight}
+            target={target}
+            showWarmupHint={exerciseIndex === 0 && !log.sets.some((st) => st.warmup)}
           />
 
           {/* ── Notes (repliées par défaut) ── */}
@@ -325,6 +377,17 @@ export default function ExerciseDetailScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
+  levelUp: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    marginHorizontal: 20, marginBottom: 14, padding: 14, borderRadius: 16,
+    backgroundColor: 'rgba(254,116,57,0.08)', borderWidth: 1, borderColor: 'rgba(254,116,57,0.3)',
+  },
+  levelUpIcon: {
+    width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(254,116,57,0.14)',
+  },
+  levelUpTitle: { color: Colors.textPrimary, fontSize: 15, fontWeight: '800' },
+  levelUpSub: { color: Colors.textSecondary, fontSize: 13, lineHeight: 18, marginTop: 2 },
   safe: { flex: 1, backgroundColor: Colors.background },
   flex: { flex: 1 },
   scrollContent: { paddingBottom: 24 },

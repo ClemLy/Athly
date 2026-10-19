@@ -43,7 +43,13 @@ export function logFromServerWorkout(w) {
       targetMuscleGroup: known?.targetMuscleGroup || resolveMuscleGroup(ex.targetMuscle) || null,
       targetMuscle: ex.targetMuscle || known?.targetMuscle || '',
       isCompound: !!known?.isCompound,
-      sets: (ex.sets || []).map((s) => ({ weight: Number(s.weight) || 0, reps: Number(s.reps) || 0, completed: !!s.completed })),
+      ...(known?.bwFactor ? { bwFactor: known.bwFactor } : {}),
+      ...(known?.tracking === 'time' ? { tracking: 'time' } : {}),
+      sets: (ex.sets || []).map((s) => ({
+        weight: Number(s.weight) || 0, reps: Number(s.reps) || 0, completed: !!s.completed,
+        ...(s.seconds ? { seconds: Number(s.seconds) } : {}),
+        ...(s.warmup ? { warmup: true } : {}),
+      })),
     };
   });
   const stats = computeWorkoutStats({ exercises });

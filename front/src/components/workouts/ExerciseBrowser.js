@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, MUSCLE_GROUP_COLORS } from '../../constants/theme';
 import { MUSCLE_GROUPS, EQUIPMENTS, pickExerciseIcon } from '../../constants/exerciseFilters';
 import { getExerciseDemo } from '../../data/exerciseMedia';
+import ExerciseFigure from '../figure/ExerciseFigure';
 import {
   indexExercise, searchExercises, filterIndex, normalizeText, STAPLES,
 } from '../../data/exerciseSearch';
@@ -229,7 +230,9 @@ const ExerciseRow = React.memo(({ ex, selected, accessory, onPress }) => {
       style={({ pressed }) => [styles.row, selected && styles.rowOn, pressed && { opacity: 0.75 }]}
     >
       <View style={styles.thumb}>
-        {demo && !imgFailed ? (
+        {demo?.figure ? (
+          <ExerciseFigure spec={demo.figure} t={0.75} style={styles.thumbFig} />
+        ) : demo && !imgFailed ? (
           <Image source={{ uri: demo.frames[0] }} style={styles.thumbImg} resizeMode="cover" onError={() => setImgFailed(true)} />
         ) : (
           <Ionicons name={pickExerciseIcon(ex)} size={20} color={Colors.primary} />
@@ -284,6 +287,7 @@ const styles = StyleSheet.create({
     width: 48, height: 48, borderRadius: 12, overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
     backgroundColor: Colors.cardInner,
   },
+  thumbFig: { width: '100%', height: '100%', aspectRatio: undefined },
   thumbImg: { width: '100%', height: '100%' },
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   name: { flexShrink: 1, color: Colors.textPrimary, fontSize: 15.5, fontWeight: '700' },

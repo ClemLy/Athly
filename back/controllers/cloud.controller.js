@@ -115,7 +115,7 @@ exports.recovery = async (req, res, next) => {
     const xpFloor = await userService.ensureXpFloor(user);
 
     const workouts = await Workout.find({ user: req.user.id, status: { $in: Workout.FINAL_STATUSES } })
-      .select('name date completedAt updatedAt durationSeconds shortSession exercises.name exercises.targetMuscle exercises.sets.weight exercises.sets.reps exercises.sets.completed')
+      .select('name date completedAt updatedAt durationSeconds shortSession exercises.name exercises.targetMuscle exercises.sets.weight exercises.sets.reps exercises.sets.seconds exercises.sets.warmup exercises.sets.completed')
       .sort({ updatedAt: -1 })
       .limit(5000)
       .lean();
@@ -132,7 +132,11 @@ exports.recovery = async (req, res, next) => {
         exercises: (w.exercises || []).map((e) => ({
           name: e.name,
           targetMuscle: e.targetMuscle || '',
-          sets: (e.sets || []).map((st) => ({ weight: st.weight || 0, reps: st.reps || 0, completed: !!st.completed })),
+          sets: (e.sets || []).map((st) => ({
+            weight: st.weight || 0, reps: st.reps || 0, completed: !!st.completed,
+            ...(st.seconds ? { seconds: st.seconds } : {}),
+            ...(st.warmup ? { warmup: true } : {}),
+          })),
         })),
       })),
     });

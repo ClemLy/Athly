@@ -21,6 +21,8 @@ import { QUEST_XP, BONUS_XP } from '../../services';
 import { useUser } from '../../context/UserContext';
 import { markLevelCelebrated } from '../../services/levelCelebration';
 import LevelUpOverlay from '../profile/LevelUpOverlay';
+import GuidedRoutineModal from './GuidedRoutineModal';
+import { COOLDOWN, routineMinutes } from '../../data/warmups';
 
 // 665 → « 665 kg » ; 6 300 → « 6,3 t »
 function formatVolume(v) {
@@ -41,10 +43,18 @@ function formatDuration(s) {
 //   visible        bool
 //   onClose        () → navigation vers tableau de bord
 //   stats          { totalVolume, setsCompleted, totalSets?, durationSeconds, xpEarned }
-//   newPRs         Array<{ name, oldPR, newPR }>
+//   newPRs         Array<{ name, oldPR, newPR, unit: 'kg' | 'reps' | 's' }>
 //   prevTotalXP    number  — XP cumulé AVANT cette séance
 //   workoutName    string  — nom de la séance (sous-titre)
 // ─────────────────────────────────────────────────────────────────────────────
+// Record affiché avec son unité : charge, répétitions (poids du corps) ou durée
+function prValue(v, unit) {
+  const n = String(v).replace('.', ',');
+  if (unit === 'reps') return `${n} réps`;
+  if (unit === 's') return `${n} s`;
+  return `${n} kg`;
+}
+
 export default function WorkoutRecapModal({
   visible,
   onClose,
@@ -113,6 +123,9 @@ export default function WorkoutRecapModal({
   const totalSets     = Number(safeStats.totalSets) || setsCompleted;
   const duration      = formatDuration(safeStats.durationSeconds);
   const hasPRs        = Array.isArray(newPRs) && newPRs.length > 0;
+  const [cooldownOpen, setCooldownOpen] = useState(false);
+  const [cooldownDone, setCooldownDone] = useState(false);
+  useEffect(() => { if (!visible) { setCooldownOpen(false); setCooldownDone(false); } }, [visible]);
   const hasQuests     = (Array.isArray(completedQuests) && completedQuests.length > 0) || bonusUnlocked;
 
   // ── Détail XP ────────────────────────────────────────────────────────────────
@@ -420,8 +433,8 @@ export default function WorkoutRecapModal({
                   <View key={`pr-${i}`} style={[styles.prRow, i > 0 && styles.rowBorder]}>
                     <Text style={styles.prName} numberOfLines={1}>{pr.name}</Text>
                     <Text style={styles.prValues}>
-                      {pr.oldPR ? <Text style={styles.prOld}>{`${pr.oldPR} kg  →  `}</Text> : null}
-                      <Text style={styles.prNew}>{pr.newPR} kg</Text>
+                      {pr.oldPR ? <Text style={styles.prOld}>{`${prValue(pr.oldPR, pr.unit)}  →  `}</Text> : null}
+                      <Text style={styles.prNew}>{prValue(pr.newPR, pr.unit)}</Text>
                     </Text>
                   </View>
                 ))}
@@ -458,11 +471,35 @@ export default function WorkoutRecapModal({
 
         {/* ── Action principale, toujours visible ── */}
         <View style={[styles.footer, { paddingBottom: 16 + insets.bottom }]}>
+          {/* Retour au calme, optionnel */}
+          {cooldownDone ? (
+            <View style={styles.cooldownDone}>
+              <Ionicons name="checkmark-circle" size={17} color={Colors.valid} />
+              <Text style={styles.cooldownDoneText}>Retour au calme fait</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              accessibilityRole="button"
+              style={styles.cooldownBtn}
+              onPress={() => setCooldownOpen(true)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="leaf-outline" size={17} color={Colors.textPrimary} />
+              <Text style={styles.cooldownText}>Retour au calme · {routineMinutes(COOLDOWN)} min</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity accessibilityRole="button" style={styles.cta} onPress={onClose} activeOpacity={0.85}>
             <Text style={styles.ctaText}>Voir mes statistiques</Text>
             <Ionicons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
         </View>
+
+        <GuidedRoutineModal
+          visible={cooldownOpen}
+          routine={COOLDOWN}
+          onClose={() => setCooldownOpen(false)}
+          onDone={() => { setCooldownOpen(false); setCooldownDone(true); }}
+        />
 
         {/* ── Gain de niveau / nouveau rang, par-dessus le récap ── */}
         {celebrating ? (
@@ -593,6 +630,14 @@ const styles = StyleSheet.create({
 
   // ── Action principale ─────────────────────────────────────────────────────
   footer: { paddingHorizontal: 20, paddingTop: 12 },
+  cooldownBtn: {
+    flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center',
+    width: '100%', maxWidth: 440, alignSelf: 'center', height: 48, borderRadius: 14, marginBottom: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  cooldownText: { color: Colors.textPrimary, fontSize: 15, fontWeight: '700' },
+  cooldownDone: { flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', height: 40, marginBottom: 8 },
+  cooldownDoneText: { color: Colors.textSecondary, fontSize: 14, fontWeight: '700' },
   cta: {
     flexDirection: 'row',
     gap: 8,

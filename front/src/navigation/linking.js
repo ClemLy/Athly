@@ -42,6 +42,7 @@ export const linking = {
               Workout: 'en-cours',
               ExerciseDetail: 'en-cours/exercice',
               ExerciseStats: 'progression-exercice',
+              CaliProgress: 'progressions',
             },
           },
           Stats: 'stats',

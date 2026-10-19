@@ -12,6 +12,7 @@ import ManualWorkoutCreatorScreen from '../screens/Workouts/ManualWorkoutCreator
 import CustomExercisesScreen from '../screens/Workouts/CustomExercisesScreen';
 import EditExerciseScreen from '../screens/Workouts/EditExerciseScreen';
 import ExerciseStatsScreen from '../screens/Workouts/ExerciseStatsScreen';
+import CaliProgressScreen from '../screens/Workouts/CaliProgressScreen';
 
 const Stack = createStackNavigator();
 
@@ -32,6 +33,7 @@ function StackNavigator() {
       <Stack.Screen name="Workout" component={WorkoutScreen} />
       <Stack.Screen name="ExerciseDetail" component={ExerciseDetailScreen} />
       <Stack.Screen name="ExerciseStats" component={ExerciseStatsScreen} />
+      <Stack.Screen name="CaliProgress" component={CaliProgressScreen} />
     </Stack.Navigator>
   );
 }

@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../constants/theme';
 import ExerciseDemoModal from './ExerciseDemoModal';
 import { getExerciseDemo } from '../../data/exerciseMedia';
+import ExerciseFigure from '../figure/ExerciseFigure';
 
 // ─── ExerciseDemoCard ─────────────────────────────────────────────────────────
 // Carte « Voir le mouvement » de l'écran d'exercice : la photo de départ de la
@@ -32,7 +33,9 @@ export default function ExerciseDemoCard({ exercise }) {
         accessibilityLabel={demo ? 'Voir la démonstration du mouvement' : 'Voir une vidéo sur YouTube'}
       >
         <View style={styles.thumb}>
-          {demo ? (
+          {demo?.figure ? (
+            <ExerciseFigure spec={demo.figure} t={0.75} style={styles.thumbFig} />
+          ) : demo ? (
             <Image source={{ uri: demo.frames[0] }} style={styles.thumbImg} resizeMode="cover" />
           ) : (
             <Ionicons name="logo-youtube" size={26} color={Colors.textPrimary} />
@@ -79,6 +82,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   thumbImg: { width: '100%', height: '100%' },
+  thumbFig: { width: '100%', height: '100%', aspectRatio: undefined },
   playBadge: {
     position: 'absolute',
     width: 26,

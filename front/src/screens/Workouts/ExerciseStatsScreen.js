@@ -13,6 +13,7 @@ import { Colors } from '../../constants/theme';
 import { useWorkoutLogs } from '../../context/WorkoutLogsContext';
 import { aggregateExercise, getExerciseSessions } from '../../services';
 import ExerciseStatsChart from '../../components/stats/ExerciseStatsChart';
+import { trackingFor } from '../../data/exerciseCatalog';
 
 // Progression d'un exercice : record, objectif de la prochaine séance, courbe,
 // puis l'historique complet des séances (séries faites, meilleure série).
@@ -56,14 +57,22 @@ export default function ExerciseStatsScreen({ route, navigation }) {
 
   const hasData = sessions.length > 0;
 
-  // Record de charge : sa date et le gain depuis la toute première séance.
+  // Ce qu'on suit : la charge (salle), les répétitions (poids du corps, sans
+  // lest) ou la durée de tenue (gainage, skills).
+  const mode = trackingFor({ name: exerciseName }) === 'time' ? 'time'
+    : stats.prWeight > 0 ? 'weight' : stats.prReps > 0 ? 'reps' : 'weight';
+  const key = mode === 'time' ? 'maxSeconds' : mode === 'reps' ? 'maxReps' : 'maxWeight';
+  const unit = mode === 'time' ? 's' : mode === 'reps' ? 'réps' : 'kg';
+  const chartMetric = mode === 'weight' ? metric : key;
+
+  // Record : sa date et le gain depuis la toute première séance.
   const record = useMemo(() => {
-    const pts = (stats.points || []).filter((p) => p.maxWeight > 0);
+    const pts = (stats.points || []).filter((p) => p[key] > 0);
     if (pts.length === 0) return null;
     let best = pts[0];
-    pts.forEach((p) => { if (p.maxWeight >= best.maxWeight) best = p; });
-    return { weight: best.maxWeight, date: best.date, gain: best.maxWeight - pts[0].maxWeight };
-  }, [stats.points]);
+    pts.forEach((p) => { if (p[key] >= best[key]) best = p; });
+    return { weight: best[key], date: best.date, gain: best[key] - pts[0][key] };
+  }, [stats.points, key]);
 
   const firstDate = sessions.length ? sessions[sessions.length - 1].date : null;
   const suggestion = stats.suggestedNext;
@@ -116,25 +125,31 @@ export default function ExerciseStatsScreen({ route, navigation }) {
                 <View style={styles.recordMain}>
                   <View style={styles.labelRow}>
                     <Ionicons name="trophy" size={15} color={Colors.gold} />
-                    <Text style={styles.label}>Record de charge</Text>
+                    <Text style={styles.label}>{mode === 'time' ? 'Meilleure tenue' : mode === 'reps' ? 'Record de répétitions' : 'Record de charge'}</Text>
                   </View>
                   <Text style={styles.recordValue}>
                     {record ? fmt(record.weight) : '–'}
-                    <Text style={styles.recordUnit}> kg</Text>
+                    <Text style={styles.recordUnit}> {unit}</Text>
                   </Text>
                   {record ? <Text style={styles.recordMeta}>le {shortDate(record.date)}</Text> : null}
                   {record && record.gain > 0 ? (
                     <View style={styles.gainRow}>
                       <Ionicons name="arrow-up" size={13} color={Colors.valid} />
-                      <Text style={styles.gain}>+{fmt(record.gain)} kg depuis le début</Text>
+                      <Text style={styles.gain}>+{fmt(record.gain)} {unit} depuis le début</Text>
                     </View>
                   ) : null}
                 </View>
-                <View style={styles.recordSide}>
-                  <MiniStat label="1RM estimé" value={stats.prEstimate1RM ? `${fmt(stats.prEstimate1RM)} kg` : '–'} />
-                  <View style={styles.sideDivider} />
-                  <MiniStat label="Meilleur volume" value={stats.prVolume ? `${fmtInt(stats.prVolume)} kg` : '–'} />
-                </View>
+                {mode === 'weight' ? (
+                  <View style={styles.recordSide}>
+                    <MiniStat label="1RM estimé" value={stats.prEstimate1RM ? `${fmt(stats.prEstimate1RM)} kg` : '–'} />
+                    <View style={styles.sideDivider} />
+                    <MiniStat label="Meilleur volume" value={stats.prVolume ? `${fmtInt(stats.prVolume)} kg` : '–'} />
+                  </View>
+                ) : (
+                  <View style={styles.recordSide}>
+                    <MiniStat label="Séances" value={String(sessions.length)} />
+                  </View>
+                )}
               </View>
             </View>
 
@@ -163,7 +178,7 @@ export default function ExerciseStatsScreen({ route, navigation }) {
             <View style={styles.card}>
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>Progression</Text>
-                <View style={styles.segmented} accessibilityRole="tablist">
+                {mode === 'weight' ? <View style={styles.segmented} accessibilityRole="tablist">
                   {METRICS.map((m) => {
                     const active = m.id === metric;
                     return (
@@ -179,12 +194,14 @@ export default function ExerciseStatsScreen({ route, navigation }) {
                       </TouchableOpacity>
                     );
                   })}
-                </View>
+                </View> : null}
               </View>
               <Text style={styles.chartHint}>
-                {metric === 'volume' ? 'Poids × répétitions, toutes séries confondues (kg)' : 'Charge la plus lourde soulevée à chaque séance'}
+                {mode === 'time' ? 'Tenue la plus longue à chaque séance (secondes)'
+                  : mode === 'reps' ? 'Meilleure série de chaque séance (répétitions)'
+                    : metric === 'volume' ? 'Poids × répétitions, toutes séries confondues (kg)' : 'Charge la plus lourde soulevée à chaque séance'}
               </Text>
-              <ExerciseStatsChart points={stats.points} metric={metric} />
+              <ExerciseStatsChart points={stats.points} metric={chartMetric} />
             </View>
 
             {/* ── Historique ── */}
@@ -230,7 +247,10 @@ function MiniStat({ label, value }) {
 // Une séance passée : date, puis ses séries. Même charge partout → une ligne
 // « 35 kg × 10 · 9 · 8 · 8 » ; charges différentes → une pastille par série.
 function SessionRow({ session, isFirst, isRecord }) {
-  const done = session.sets.filter((x) => x && x.completed);
+  const done = session.sets.filter((x) => x && x.completed && !x.warmup);
+  if (done.length && done.every((x) => Number(x.seconds) > 0 && !Number(x.reps))) {
+    return <TimedSessionRow session={session} done={done} isFirst={isFirst} isRecord={isRecord} />;
+  }
   const weights = done.map((x) => Number(x.weight) || 0);
   const sameWeight = weights.every((w) => w === weights[0]);
   const d = new Date(session.date);
@@ -276,6 +296,32 @@ function SessionRow({ session, isFirst, isRecord }) {
             <Text style={styles.noteText}>{session.notes}</Text>
           </View>
         ) : null}
+      </View>
+    </View>
+  );
+}
+
+// Séance de tenues : « 45 s · 40 s · 38 s »
+function TimedSessionRow({ session, done, isFirst, isRecord }) {
+  const d = new Date(session.date);
+  const valid = !Number.isNaN(d.getTime());
+  return (
+    <View style={[styles.sessionRow, !isFirst && styles.sessionRowBorder]}>
+      <View style={styles.dateTile}>
+        <Text style={styles.dateDay}>{valid ? d.getDate() : '–'}</Text>
+        <Text style={styles.dateMonth}>{valid ? d.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '') : ''}</Text>
+      </View>
+      <View style={styles.sessionBody}>
+        <View style={styles.sessionHead}>
+          <Text style={styles.sessionCount}>{done.length} série{done.length > 1 ? 's' : ''}</Text>
+          {isRecord ? (
+            <View style={styles.recordBadge}>
+              <Ionicons name="trophy" size={11} color={Colors.gold} />
+              <Text style={styles.recordBadgeText}>Record</Text>
+            </View>
+          ) : null}
+        </View>
+        <Text style={styles.sessionSummary}>{done.map((x) => `${x.seconds} s`).join(' · ')}</Text>
       </View>
     </View>
   );
