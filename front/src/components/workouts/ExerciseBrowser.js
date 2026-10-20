@@ -27,12 +27,13 @@ import {
 //   onPick         (exercise) => void
 //   selectedName   string — exercice déjà choisi (coché)
 //   accessory      'add' | 'check' — icône à droite des lignes
+//   addedCounts    { [nom normalisé]: n } — exercices déjà ajoutés (le « + » devient une coche verte)
 //   placeholder    string
 
 const ROW_GROUPS = [{ id: null, label: 'Tous' }, ...MUSCLE_GROUPS.map((g) => ({ id: g.id, label: g.label }))];
 
 export default function ExerciseBrowser({
-  catalog = [], recentNames = [], onPick, selectedName = null, accessory = 'add',
+  catalog = [], recentNames = [], onPick, selectedName = null, accessory = 'add', addedCounts = null,
   placeholder = 'Exercice, muscle ou matériel…',
 }) {
   const [query, setQuery] = useState('');
@@ -102,6 +103,7 @@ export default function ExerciseBrowser({
         ex={item.ex}
         selected={!!selectedName && normalizeText(selectedName) === normalizeText(item.ex.name)}
         accessory={accessory}
+        added={addedCounts ? addedCounts[normalizeText(item.ex.name)] || 0 : 0}
         onPress={() => onPick && onPick(item.ex)}
       />
     );
@@ -179,6 +181,7 @@ export default function ExerciseBrowser({
         data={rows}
         keyExtractor={(r) => r.key}
         renderItem={renderItem}
+        extraData={addedCounts}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         initialNumToRender={14}
@@ -217,7 +220,7 @@ function Chip({ label, active, onPress, dot, icon, small }) {
   );
 }
 
-const ExerciseRow = React.memo(({ ex, selected, accessory, onPress }) => {
+const ExerciseRow = React.memo(({ ex, selected, accessory, added = 0, onPress }) => {
   const demo = getExerciseDemo(ex);
   const [imgFailed, setImgFailed] = useState(false);
   const meta = [ex.targetMuscle, Array.isArray(ex.equipment) ? ex.equipment[0] : ex.equipment].filter(Boolean).join(' · ');
@@ -225,9 +228,9 @@ const ExerciseRow = React.memo(({ ex, selected, accessory, onPress }) => {
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected }}
-      accessibilityLabel={`${ex.name}${meta ? `, ${meta}` : ''}`}
+      accessibilityLabel={`${ex.name}${meta ? `, ${meta}` : ''}${added ? `, déjà ajouté${added > 1 ? ` ${added} fois` : ''}` : ''}`}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, selected && styles.rowOn, pressed && { opacity: 0.75 }]}
+      style={({ pressed }) => [styles.row, (selected || added > 0) && styles.rowOn, pressed && { opacity: 0.75 }]}
     >
       <View style={styles.thumb}>
         {demo?.figure ? (
@@ -247,7 +250,14 @@ const ExerciseRow = React.memo(({ ex, selected, accessory, onPress }) => {
       </View>
       {accessory === 'check'
         ? (selected ? <Ionicons name="checkmark-circle" size={22} color={Colors.primary} /> : null)
-        : <Ionicons name="add-circle" size={26} color={Colors.primary} />}
+        : added > 0
+          ? (
+            <View style={styles.addedBadge}>
+              <Ionicons name="checkmark-circle" size={26} color={Colors.valid} />
+              {added > 1 ? <Text style={styles.addedCount}>{`x${added}`}</Text> : null}
+            </View>
+          )
+          : <Ionicons name="add-circle" size={26} color={Colors.primary} />}
     </Pressable>
   );
 });
@@ -282,6 +292,8 @@ const styles = StyleSheet.create({
   headerHint: { color: Colors.textMuted, fontSize: 13, marginTop: 2 },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 12 },
+  addedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  addedCount: { color: Colors.valid, fontSize: 13, fontWeight: '800' },
   rowOn: { backgroundColor: 'rgba(254,116,57,0.08)' },
   thumb: {
     width: 48, height: 48, borderRadius: 12, overflow: 'hidden', alignItems: 'center', justifyContent: 'center',

@@ -121,6 +121,7 @@ export function WorkoutInProgressProvider({ children }) {
         notes: workout.notes || '',
         status: workout.status || 'in_progress',
         durationSeconds: workout.durationSeconds || 0,
+        warmupPlan: Array.isArray(workout.warmupPlan) && workout.warmupPlan.length ? workout.warmupPlan : null,
       },
     });
   }, [bundle.dispatch]);

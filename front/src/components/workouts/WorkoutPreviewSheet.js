@@ -9,6 +9,7 @@ import { CALI_LEVELS } from '../../data/calisthenics';
 import { buildPreview, lastDoneLabel } from '../../data/workoutPreview';
 import { instantiateSavedWorkout } from '../../services/savedWorkouts.service';
 import { plural } from '../../utils/format';
+import { routineFromPlan, routineMinutes } from '../../data/warmups';
 import ExerciseFigure from '../figure/ExerciseFigure';
 import ExerciseDemoModal from './ExerciseDemoModal';
 
@@ -87,6 +88,7 @@ export default function WorkoutPreviewSheet({ item, lastDone, onClose, onLaunch,
   }, [item]);
 
   const data = item?.data;
+  const ownWarmup = item?.type === 'saved' ? routineFromPlan(data?.warmup) : null;
   const subtitle = data?.description || data?.musclesSummary || '';
   const done = lastDoneLabel(lastDone);
 
@@ -127,6 +129,14 @@ export default function WorkoutPreviewSheet({ item, lastDone, onClose, onLaunch,
                 <Ionicons name="construct-outline" size={15} color={Colors.textSecondary} />
                 <Text style={styles.gearText}>
                   {preview.gear.length ? `Matériel : ${preview.gear.join(', ')}` : 'Sans matériel'}
+                </Text>
+              </View>
+            ) : null}
+            {ownWarmup ? (
+              <View style={styles.gear}>
+                <Ionicons name="flame-outline" size={15} color={Colors.textSecondary} />
+                <Text style={styles.gearText}>
+                  {`Échauffement prévu : ${plural(ownWarmup.drills.length, 'mouvement')}, environ ${routineMinutes(ownWarmup)} min`}
                 </Text>
               </View>
             ) : null}

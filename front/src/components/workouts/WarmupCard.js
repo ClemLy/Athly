@@ -5,21 +5,26 @@ import { Colors } from '../../constants/theme';
 import { haptics } from '../../services';
 import ActionSheetModal from '../common/ActionSheetModal';
 import GuidedRoutineModal from './GuidedRoutineModal';
-import { suggestRoutine, routineMinutes, WARMUP_ROUTINES } from '../../data/warmups';
+import { suggestRoutine, routineMinutes, routineFromPlan, WARMUP_ROUTINES } from '../../data/warmups';
 
 // ─── Échauffement optionnel, en tête de séance ────────────────────────────────
 // Routine proposée selon les exercices prévus (salle, haut du corps, bas du
 // corps…), modifiable. Lancer ouvre le guide pas à pas ; « Passer » le masque.
 // Une fois fait, il reste une ligne discrète avec sa durée.
 //
-// Props : exercises, warmup (état de la séance), onChange(warmup), hidden
+// Si la séance porte son propre échauffement (plan : liste de mouvements choisie
+// à la création), c'est lui qui est proposé en premier.
+//
+// Props : exercises, warmup (état de la séance), plan (ids ou null), onChange(warmup), hidden
 
-export default function WarmupCard({ exercises, warmup, onChange, hidden }) {
-  const suggested = useMemo(() => suggestRoutine(exercises), [exercises]);
+export default function WarmupCard({ exercises, warmup, plan, onChange, hidden }) {
+  const own = useMemo(() => routineFromPlan(plan), [plan]);
+  const suggested = useMemo(() => own || suggestRoutine(exercises), [own, exercises]);
   const [routineId, setRoutineId] = useState(null);
   const [open, setOpen] = useState(false);
   const [picker, setPicker] = useState(false);
-  const routine = WARMUP_ROUTINES.find((r) => r.id === routineId) || suggested;
+  const routine = (routineId && WARMUP_ROUTINES.find((r) => r.id === routineId)) || suggested;
+  const choices = own ? [own, ...WARMUP_ROUTINES] : WARMUP_ROUTINES;
 
   if (warmup && warmup.durationSeconds) {
     const min = Math.max(1, Math.round(warmup.durationSeconds / 60));
@@ -87,9 +92,9 @@ export default function WarmupCard({ exercises, warmup, onChange, hidden }) {
         visible={picker}
         title="Choisir l'échauffement"
         onClose={() => setPicker(false)}
-        options={WARMUP_ROUTINES.map((r) => ({
-          label: `${r.title} · ${routineMinutes(r)} min${r.id === suggested.id ? ' · conseillé' : ''}${r.id === routine.id ? ' · choisi' : ''}`,
-          onPress: () => setRoutineId(r.id),
+        options={choices.map((r) => ({
+          label: `${r.title} · ${routineMinutes(r)} min${r.id === suggested.id ? (own ? ' · prévu' : ' · conseillé') : ''}${r.id === routine.id ? ' · choisi' : ''}`,
+          onPress: () => setRoutineId(r.id === own?.id ? null : r.id),
         }))}
       />
     </>

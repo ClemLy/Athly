@@ -23,6 +23,9 @@ import AddExerciseSheet from '../../components/workouts/AddExerciseSheet';
 import { useSavedWorkouts } from '../../context/SavedWorkoutsContext';
 import InfoModal from '../../components/common/InfoModal';
 import { getErrorMessage } from '../../utils/errorMessages';
+import WarmupPlanner from '../../components/workouts/WarmupPlanner';
+import { groupsOfExercises } from '../../data/warmups';
+import { catalogEntryFor, isCalisthenics } from '../../data/exerciseCatalog';
 
 // Construction manuelle d'une séance.
 // L'utilisateur :
@@ -121,6 +124,7 @@ export default function ManualWorkoutCreatorScreen({ navigation, route }) {
 
   const [name, setName] = useState(editWorkout?.name ?? '');
   const [exercises, setExercises] = useState(editWorkout?.exercises ?? []);
+  const [warmupPlan, setWarmupPlan] = useState(editWorkout?.warmup ?? null);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [infoModal, setInfoModal] = useState(null); // { title, body, onCloseNav? }
@@ -183,7 +187,7 @@ export default function ManualWorkoutCreatorScreen({ navigation, route }) {
     setSaving(true);
     try {
       if (editWorkout?.id) {
-        await updateSavedWorkout(editWorkout.id, { name: trimmed, description: '', exercises });
+        await updateSavedWorkout(editWorkout.id, { name: trimmed, description: '', exercises, warmup: warmupPlan });
         setInfoModal({
           title: 'Séance mise à jour',
           body: `"${trimmed}" a été modifiée.`,
@@ -194,6 +198,7 @@ export default function ManualWorkoutCreatorScreen({ navigation, route }) {
           name: trimmed,
           description: '',
           exercises,
+          warmup: warmupPlan,
           isManual: true,
         });
         setInfoModal({
@@ -207,7 +212,7 @@ export default function ManualWorkoutCreatorScreen({ navigation, route }) {
     } finally {
       setSaving(false);
     }
-  }, [name, exercises, editWorkout, createSavedWorkout, updateSavedWorkout, navigation]);
+  }, [name, exercises, warmupPlan, editWorkout, createSavedWorkout, updateSavedWorkout, navigation]);
 
   const closeInfoModal = useCallback(() => {
     const shouldGoBack = infoModal?.onCloseNav;
@@ -287,6 +292,15 @@ export default function ManualWorkoutCreatorScreen({ navigation, route }) {
               <Ionicons name="add" size={18} color={Colors.primary} />
               <Text style={styles.addBtnText}>Ajouter un exercice</Text>
             </TouchableOpacity>
+          </View>
+
+          <View style={styles.field}>
+            <WarmupPlanner
+              plan={warmupPlan}
+              onChange={setWarmupPlan}
+              groups={groupsOfExercises(exercises)}
+              cali={exercises.length > 0 && exercises.every((ex) => isCalisthenics(catalogEntryFor(ex) || ex))}
+            />
           </View>
 
           <View style={styles.footerSpacer} />
