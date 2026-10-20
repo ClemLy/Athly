@@ -23,7 +23,8 @@ import { useTutorial, useTutorialTarget } from '../../context/TutorialContext';
 import MultiLobbyModal from '../../components/workouts/MultiLobbyModal';
 import ConfirmModal from '../../components/common/ConfirmModal';
 import InfoModal from '../../components/common/InfoModal';
-import ActionSheetModal from '../../components/common/ActionSheetModal';
+import SavedWorkoutMenu from '../../components/workouts/SavedWorkoutMenu';
+import { useToast } from '../../context/ToastContext';
 import WorkoutPreviewSheet from '../../components/workouts/WorkoutPreviewSheet';
 import { estimateMinutes, lastDoneLabel } from '../../data/workoutPreview';
 import { getErrorMessage } from '../../utils/errorMessages';
@@ -65,13 +66,13 @@ function TemplateCard({ template, lastDone, onPress }) {
   );
 }
 
-function SavedWorkoutCard({ saved, onPress, onLongPress }) {
+function SavedWorkoutCard({ saved, onPress, onMenu }) {
   const count = Array.isArray(saved.exercises) ? saved.exercises.length : 0;
   return (
     <TouchableOpacity accessibilityRole="button"
       style={styles.card}
       onPress={onPress}
-      onLongPress={onLongPress}
+      onLongPress={onMenu}
       activeOpacity={0.85}
     >
       <View style={styles.iconBox}>
@@ -96,7 +97,16 @@ function SavedWorkoutCard({ saved, onPress, onLongPress }) {
           <Text style={styles.meta} numberOfLines={1}>{new Date(saved.createdAt).toLocaleDateString('fr-FR')}</Text>
         </View>
       </View>
-      <Ionicons name="chevron-forward" size={22} color={Colors.chevron} />
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel={`Options de la séance ${saved.name} : modifier, dupliquer, supprimer`}
+        onPress={onMenu}
+        style={styles.menuBtn}
+        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+        activeOpacity={0.6}
+      >
+        <Ionicons name="ellipsis-horizontal" size={20} color={Colors.textSecondary} />
+      </TouchableOpacity>
     </TouchableOpacity>
   );
 }
@@ -104,7 +114,8 @@ function SavedWorkoutCard({ saved, onPress, onLongPress }) {
 export default function WorkoutListScreen({ navigation, route }) {
   const { practice, setPractice } = usePractice();
   const { loadWorkout, resumable } = useWorkoutInProgress();
-  const { items: savedWorkouts, remove: removeSaved } = useSavedWorkouts();
+  const { items: savedWorkouts, remove: removeSaved, create: createSaved } = useSavedWorkouts();
+  const { showToast } = useToast();
   const { sessionLogs } = useWorkoutLogs();
 
   // Dernière réalisation de chaque séance (par nom) — repère « Faite il y a 3 j ».
@@ -256,6 +267,22 @@ export default function WorkoutListScreen({ navigation, route }) {
     navigation.navigate(target, { editWorkout: saved });
   }, [navigation]);
 
+  const onDuplicateSaved = useCallback(async (saved) => {
+    try {
+      await createSaved({
+        name: `${saved.name} (copie)`.slice(0, 60),
+        description: saved.description,
+        exercises: saved.exercises,
+        criteria: saved.criteria,
+        warmup: saved.warmup,
+        isManual: saved.isManual,
+      });
+      showToast('Copie créée dans « Mes séances ».', 'success');
+    } catch (e) {
+      setErrorInfo(getErrorMessage(e, 'La copie n\'a pas pu être créée. Réessaie dans un instant.'));
+    }
+  }, [createSaved, showToast]);
+
   const confirmDeleteSaved = useCallback(async () => {
     const saved = deleteSavedTarget;
     setDeleteSavedTarget(null);
@@ -391,7 +418,7 @@ export default function WorkoutListScreen({ navigation, route }) {
         <SavedWorkoutCard
           saved={item.item}
           onPress={() => onSelectSaved(item.item)}
-          onLongPress={() => onLongPressSaved(item.item)}
+          onMenu={() => onLongPressSaved(item.item)}
         />
       );
     }
@@ -483,21 +510,20 @@ export default function WorkoutListScreen({ navigation, route }) {
         onReady={handleMultiReady}
       />
 
-      <ActionSheetModal
-        visible={!!actionSheetTarget}
-        title={actionSheetTarget?.name}
-        options={[
-          { label: 'Modifier', onPress: () => onEditSaved(actionSheetTarget) },
-          { label: 'Supprimer', destructive: true, onPress: () => setDeleteSavedTarget(actionSheetTarget) },
-        ]}
+      <SavedWorkoutMenu
+        saved={actionSheetTarget}
         onClose={() => setActionSheetTarget(null)}
+        onLaunch={onSelectSaved}
+        onEdit={onEditSaved}
+        onDuplicate={onDuplicateSaved}
+        onDelete={setDeleteSavedTarget}
       />
 
       <ConfirmModal
         visible={!!deleteSavedTarget}
         icon="trash-outline"
-        title={deleteSavedTarget?.name ?? 'Supprimer'}
-        body="Que faire avec cette séance ? La supprimer est irréversible."
+        title="Supprimer cette séance ?"
+        body={`« ${deleteSavedTarget?.name ?? ''} » sera supprimée définitivement. Ton historique de séances déjà faites n\'est pas touché.`}
         confirmLabel="Supprimer"
         destructive
         onConfirm={confirmDeleteSaved}
@@ -638,6 +664,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 14,
     paddingHorizontal: 14,
+  },
+  menuBtn: {
+    width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)', marginLeft: 4,
   },
   iconBox: {
     width: 56,

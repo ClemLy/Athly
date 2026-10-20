@@ -17,6 +17,8 @@ import { CALI_EQUIPMENT, CALI_LEVELS } from '../../data/calisthenics';
 import { usePractice } from '../../hooks/usePractice';
 import { PRESETS, activePresetId, groupState, toggleGroup, swapExercise } from '../../data/workoutBuilder';
 import InfoModal from '../../components/common/InfoModal';
+import WarmupPlanner from '../../components/workouts/WarmupPlanner';
+import { groupsOfSubMuscles } from '../../data/warmups';
 import { getErrorMessage } from '../../utils/errorMessages';
 import { plural } from '../../utils/format';
 
@@ -59,6 +61,7 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
   const [optionsOpen, setOptionsOpen] = useState(!!(editCriteria?.equipment?.length || editCriteria?.level || editCriteria?.discipline === 'calisthenie' || practice !== 'salle'));
   const [saving, setSaving] = useState(false);
   const [infoModal, setInfoModal] = useState(null);
+  const [warmupPlan, setWarmupPlan] = useState(editWorkout?.warmup ?? null);
   const [savedWorkoutId, setSavedWorkoutId] = useState(editWorkout?.id ?? null);
   const [editingId, setEditingId] = useState(editWorkout?.id ?? null);
 
@@ -119,6 +122,7 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
     name: finalName,
     description: generated ? generated.description : '',
     exercises,
+    warmupPlan,
     notes: '',
     status: 'in_progress',
     durationSeconds: 0,
@@ -133,7 +137,7 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
 
   const persist = async () => {
     const workout = buildWorkout();
-    const payload = { name: finalName, description: workout.description, exercises, criteria };
+    const payload = { name: finalName, description: workout.description, exercises, criteria, warmup: warmupPlan };
     return editingId ? updateSavedWorkout(editingId, payload) : createSavedWorkout(payload);
   };
 
@@ -377,6 +381,15 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
                   </View>
                 ))}
 
+                <View style={styles.warmupWrap}>
+                  <WarmupPlanner
+                    plan={warmupPlan}
+                    onChange={(v) => { setWarmupPlan(v); invalidateSaved(); }}
+                    groups={groupsOfSubMuscles(subMuscles)}
+                    cali={cali}
+                  />
+                </View>
+
                 <TouchableOpacity
                   accessibilityRole="button"
                   style={[styles.saveRow, savedWorkoutId && styles.saveRowOn, saving && { opacity: 0.6 }]}
@@ -433,6 +446,7 @@ export default function WorkoutBuilderScreen({ navigation, route }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
+  warmupWrap: { marginTop: 14 },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 2, paddingBottom: 6 },
   backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { flex: 1, textAlign: 'center', color: Colors.textPrimary, fontSize: 18, fontWeight: '800' },

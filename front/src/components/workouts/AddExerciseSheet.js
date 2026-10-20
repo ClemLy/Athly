@@ -7,6 +7,8 @@ import { getCombinedCatalog } from '../../data/exerciseCatalog';
 import { useCustomExercises } from '../../context/CustomExercisesContext';
 import { useRecentExerciseNames } from '../../hooks/useRecentExerciseNames';
 import ExerciseBrowser from './ExerciseBrowser';
+import { haptics } from '../../services';
+import { normalizeText } from '../../data/exerciseSearch';
 
 // Feuille pour ajouter / remplacer un exercice dans une séance.
 // Recherche intelligente + exploration (voir ExerciseBrowser).
@@ -30,9 +32,16 @@ export default function AddExerciseSheet({ visible, mode = 'add', onClose, onSel
 
   const handlePick = useCallback((exercise) => {
     if (onSelect) onSelect(exercise);
+    if (mode !== 'replace') haptics.success?.();
     if (mode === 'replace') { if (onClose) onClose(); return; }
     setAdded((list) => [...list, exercise.name]);
   }, [onSelect, onClose, mode]);
+
+  const addedCounts = useMemo(() => {
+    const out = {};
+    added.forEach((n) => { const k = normalizeText(n); out[k] = (out[k] || 0) + 1; });
+    return out;
+  }, [added]);
 
   const last = added[added.length - 1];
 
@@ -51,7 +60,7 @@ export default function AddExerciseSheet({ visible, mode = 'add', onClose, onSel
           </View>
 
           <View style={{ flex: 1, paddingHorizontal: 16 }}>
-            <ExerciseBrowser catalog={catalog} recentNames={recentNames} onPick={handlePick} accessory="add" />
+            <ExerciseBrowser catalog={catalog} recentNames={recentNames} onPick={handlePick} accessory="add" addedCounts={mode === 'add' ? addedCounts : null} />
           </View>
 
           {mode === 'add' && added.length > 0 ? (

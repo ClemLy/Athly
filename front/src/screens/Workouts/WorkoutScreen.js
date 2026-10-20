@@ -661,6 +661,7 @@ export default function WorkoutScreen({ route, navigation }) {
               <WarmupCard
                 exercises={sourceExercises}
                 warmup={state.warmup}
+                plan={state.warmupPlan}
                 onChange={actions.setWarmup}
                 hidden={doneSets > 0}
               />

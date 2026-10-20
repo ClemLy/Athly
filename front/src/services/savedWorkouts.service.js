@@ -1,9 +1,12 @@
 import { createCloudCollection } from './cloudCollection';
 import * as bigStorage from '../utils/bigStorage';
+import { cleanPlan } from '../data/warmups';
 
 // CRUD des séances sauvegardées (favorites / réutilisables).
 // Schéma :
-//   { id, name, description, exercises[], criteria, createdAt, updatedAt }
+//   { id, name, description, exercises[], criteria, warmup, createdAt, updatedAt }
+// warmup (optionnel) : liste d'ids de mouvements d'échauffement préparée avec la
+// séance (voir data/warmups.js), ou null pour garder l'échauffement conseillé.
 // criteria (optionnel) : { subMuscles, equipment, level, durationMin } — critères
 // de génération d'origine (WorkoutBuilderScreen), utilisés pour ré-ouvrir
 // l'écran de création pré-rempli lors d'une modification. Absent pour les
@@ -63,6 +66,7 @@ export async function saveWorkout(input) {
       exercises: sanitizeExercises(input.exercises),
       isManual: !!input.isManual,
       criteria: input.criteria || null,
+      warmup: cleanPlan(input.warmup).length ? cleanPlan(input.warmup) : null,
       createdAt: now,
       updatedAt: now,
     };
@@ -84,6 +88,7 @@ export async function updateSavedWorkout(id, patch) {
       name: patch.name !== undefined ? String(patch.name).trim() : all[idx].name,
       description: patch.description !== undefined ? String(patch.description).trim() : all[idx].description,
       exercises: patch.exercises !== undefined ? sanitizeExercises(patch.exercises) : all[idx].exercises,
+      warmup: patch.warmup !== undefined ? (cleanPlan(patch.warmup).length ? cleanPlan(patch.warmup) : null) : (all[idx].warmup || null),
       updatedAt: Date.now(),
     };
     const next = [...all];
@@ -112,6 +117,7 @@ export function instantiateSavedWorkout(saved) {
     name: saved.name,
     description: saved.description || '',
     exercises: sanitizeExercises(saved.exercises),
+    warmupPlan: cleanPlan(saved.warmup),
     notes: '',
     status: 'in_progress',
     durationSeconds: 0,
